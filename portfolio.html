@@ -47,8 +47,11 @@
   tbody td{padding:10px 8px;border-bottom:1px solid var(--line);font-size:13px;}
   tbody tr.position-row td{padding:6px 8px;}
   tbody tr.section-row{cursor:pointer;user-select:none;}
-  tbody tr.section-row td{font-family:'IBM Plex Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);padding:20px 8px 6px;font-weight:600;}
-  tbody tr.section-row td.price, tbody tr.section-row td.chg{font-family:'IBM Plex Mono',monospace;text-transform:none;letter-spacing:0;color:var(--text);}
+  tbody tr.section-row td{font-family:'IBM Plex Mono',monospace;letter-spacing:.04em;padding:14px 8px 6px;}
+  tbody tr.section-row.level-1 td.name{color:var(--text);font-weight:700;text-transform:uppercase;}
+  tbody tr.section-row.level-2 td.name{color:var(--text);font-weight:600;}
+  tbody tr.section-row.level-3 td.name{color:var(--muted);font-weight:500;}
+  tbody tr.section-row td.price, tbody tr.section-row td.chg{font-family:'IBM Plex Mono',monospace;text-transform:none;letter-spacing:0;color:var(--text);font-weight:400;}
   tbody tr.grand-total-row td{font-family:'IBM Plex Mono',monospace;text-transform:none;letter-spacing:0;color:var(--text);font-weight:700;padding:14px 8px;border-top:2px solid var(--accent);border-bottom:2px solid var(--accent);background:var(--panel);}
   tbody tr.grand-total-row td.chg{font-weight:700;}
   tbody tr.position-row td.name{padding-left:26px;}
@@ -402,12 +405,13 @@ function renderPerformers(positions){
   `;
 }
 
-function positionRow(r, total, ancestors){
+function positionRow(r, total, ancestors, depth){
   const pctPf = (r.valChf!==null && total) ? (r.valChf/total)*100 : null;
   const dDay=deltaOf1(r,'valDayChf'), dWtd=deltaOf1(r,'valWtdChf'), dTen=deltaOf1(r,'valTenChf'),
         dMtd=deltaOf1(r,'valMtdChf'), dNinety=deltaOf1(r,'valNinetyChf'), d360=deltaOf1(r,'val360Chf');
+  const indent = 8 + (depth||0)*18;
   return `<tr class="position-row" data-ancestors="${ancestors}">
-    <td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>
+    <td class="name" style="padding-left:${indent}px"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>
     <td class="price">${fmtDecimal(r.qty,4)}</td>
     <td class="price">${fmtDecimal(r.last ? r.last.Price : null, 2)}<span class="ccy">${r.currency||''}</span></td>
     <td class="price">${pctPf!==null?pctPf.toFixed(1)+'%':'—'}</td>
@@ -417,13 +421,15 @@ function positionRow(r, total, ancestors){
   </tr>`;
 }
 function sumChf(positions){ return positions.reduce((s,p)=>s+(p.valChf||0),0); }
-function groupRow(label, positions, total, key, ancestors){
+function groupRow(label, positions, total, key, ancestors, depth){
   const sum = sumChf(positions);
   const pctPf = total ? (sum/total)*100 : null;
   const dDay=deltaFromPaired(positions,'valDayChf'), dWtd=deltaFromPaired(positions,'valWtdChf'), dTen=deltaFromPaired(positions,'valTenChf'),
         dMtd=deltaFromPaired(positions,'valMtdChf'), dNinety=deltaFromPaired(positions,'valNinetyChf'), d360=deltaFromPaired(positions,'val360Chf');
-  return `<tr class="section-row" data-key="${key}" data-ancestors="${ancestors||''}">
-    <td class="name"><span class="chevron">▾</span>${label}</td><td></td><td></td>
+  const levelClass = `level-${Math.min(depth+1, 3)}`;
+  const indent = 8 + depth*18;
+  return `<tr class="section-row ${levelClass}" data-key="${key}" data-ancestors="${ancestors||''}">
+    <td class="name" style="padding-left:${indent}px"><span class="chevron">▾</span>${label}</td><td></td><td></td>
     <td class="price">${pctPf!==null?pctPf.toFixed(1)+'%':'—'}</td>
     <td class="price">${fmtChf(sum)}</td>
     ${deltaCell(dDay.delta,dDay.pct)}${deltaCell(dWtd.delta,dWtd.pct)}${deltaCell(dTen.delta,dTen.pct)}
@@ -487,21 +493,21 @@ function renderBoard(positions, total){
   let html = '';
   let keyCounter = 0;
 
-  function renderNode(node, label, ancestors){
+  function renderNode(node, label, ancestors, depth){
     const key = `grp-${keyCounter++}`;
     const nodePositions = collectPositions(node);
-    html += groupRow(label, nodePositions, total, key, ancestors);
+    html += groupRow(label, nodePositions, total, key, ancestors, depth);
     const childKeys = Object.keys(node.children).sort((a,b) => node.children[a].order - node.children[b].order);
     if(childKeys.length){
-      for(const childKey of childKeys) renderNode(node.children[childKey], childKey, `${ancestors} ${key}`.trim());
+      for(const childKey of childKeys) renderNode(node.children[childKey], childKey, `${ancestors} ${key}`.trim(), depth+1);
     } else {
       const sorted = [...node.positions].sort((a,b) => (b.valChf||0)-(a.valChf||0));
-      for(const r of sorted) html += positionRow(r, total, `${ancestors} ${key}`.trim());
+      for(const r of sorted) html += positionRow(r, total, `${ancestors} ${key}`.trim(), depth+1);
     }
   }
 
   const topKeys = Object.keys(tree).sort((a,b) => tree[a].order - tree[b].order);
-  for(const topKey of topKeys) renderNode(tree[topKey], topKey, '');
+  for(const topKey of topKeys) renderNode(tree[topKey], topKey, '', 0);
 
   html += totalRow(positions, total);
   body.innerHTML = html;
