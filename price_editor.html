@@ -144,7 +144,7 @@ async function load() {
       tursoQuery('SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices'),
       tursoQuery('SELECT SecurityID, SecurityName FROM security_master ORDER BY SecurityName ASC'),
     ]);
-    rows = priceRows.map(r => ({ ...r, _dirty:false, _new:false }));
+    rows = priceRows.map(r => ({ ...r, PriceDate: toSwissDateTime(parseSwissDateTime(r.PriceDate)) || r.PriceDate, _dirty:false, _new:false }));
     masterRows = master;
     deleteQueue = [];
 
