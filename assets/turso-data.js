@@ -37,9 +37,43 @@ function fromTursoCell(cell) {
   return cell.value;
 }
 
+// ============ Session cache (sessionStorage) for read-heavy queries ============
+// Opt-in per call via tursoQuery(sql, args, ttlMs). Any non-SELECT statement in
+// a batch clears the entire cache, so edits never risk serving stale data.
+const TURSO_CACHE_PREFIX = 'TURSO_CACHE_';
+function tursoCacheKey(sql, args) { return TURSO_CACHE_PREFIX + JSON.stringify({ sql, args }); }
+function tursoCacheGet(key, ttlMs) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const { ts, rows } = JSON.parse(raw);
+    if (Date.now() - ts > ttlMs) return null;
+    return rows;
+  } catch (e) { return null; }
+}
+function tursoCacheSet(key, rows) {
+  try { sessionStorage.setItem(key, JSON.stringify({ ts: Date.now(), rows })); } catch (e) {}
+}
+function tursoClearCache() {
+  try {
+    const keys = [];
+    for (let i = 0; i < sessionStorage.length; i++) { const k = sessionStorage.key(i); if (k && k.startsWith(TURSO_CACHE_PREFIX)) keys.push(k); }
+    keys.forEach(k => sessionStorage.removeItem(k));
+  } catch (e) {}
+}
+function tursoCacheCount() {
+  try {
+    let n = 0;
+    for (let i = 0; i < sessionStorage.length; i++) { const k = sessionStorage.key(i); if (k && k.startsWith(TURSO_CACHE_PREFIX)) n++; }
+    return n;
+  } catch (e) { return 0; }
+}
+
 // ============ Core exec — pass several {sql, args} statements, executed in one round trip ============
 async function tursoBatch(statements) {
   if (!tursoConfigured()) throw new Error('Turso Datenbank-URL/Token nicht konfiguriert (⚙ Repo/Token).');
+  const hasWrite = statements.some(s => !/^\s*select/i.test(s.sql));
+  if (hasWrite) tursoClearCache();
   const requests = statements.map(s => ({
     type: 'execute',
     stmt: { sql: s.sql, args: (s.args || []).map(toTursoArg) }
@@ -71,7 +105,19 @@ async function tursoBatch(statements) {
   }
   return out;
 }
-async function tursoQuery(sql, args = []) {
+// ttlMs > 0: cache SELECT results in sessionStorage for that many ms (per exact sql+args).
+// Cache is auto-cleared on any write anywhere in the app, so this never serves stale data after an edit.
+async function tursoQuery(sql, args = [], ttlMs = 0) {
+  const isSelect = /^\s*select/i.test(sql);
+  if (isSelect && ttlMs > 0) {
+    const key = tursoCacheKey(sql, args);
+    const cached = tursoCacheGet(key, ttlMs);
+    if (cached) return cached;
+    const [result] = await tursoBatch([{ sql, args }]);
+    const rows = result ? result.rows : [];
+    tursoCacheSet(key, rows);
+    return rows;
+  }
   const [result] = await tursoBatch([{ sql, args }]);
   return result ? result.rows : [];
 }
@@ -81,10 +127,12 @@ async function tursoRun(sql, args = []) {
 }
 
 // ============ security_parameter lookups (generic FK-lookup pattern) ============
-async function tursoParameterOptions(paraTable, paraField) {
+// Cached for 5 min by default — dropdown option lists (Collector, DashboardGrouping,
+// Instrument, PortfolioGrouping, TrxArt) change rarely.
+async function tursoParameterOptions(paraTable, paraField, ttlMs = 3600000) {
   return tursoQuery(
     'SELECT ParameterID, ParameterName FROM security_parameter WHERE ParaTable = ? AND ParaField = ? ORDER BY ParameterID ASC',
-    [paraTable, paraField]
+    [paraTable, paraField], ttlMs
   );
 }
 
