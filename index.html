@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>securitydashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:60px 16px;display:flex;flex-direction:column;align-items:center;}
+  .wrap{width:100%;max-width:720px;}
+  h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;text-transform:uppercase;letter-spacing:.02em;border-bottom:2px solid var(--accent);padding-bottom:16px;margin-bottom:24px;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  a.card{display:block;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:20px;text-decoration:none;color:var(--text);transition:border-color .15s ease;}
+  a.card:hover{border-color:var(--accent);}
+  .card h2{font-family:'Space Grotesk',sans-serif;font-size:16px;margin:0 0 6px;}
+  .card p{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin:0;}
+  @media (max-width:560px){ .grid{grid-template-columns:1fr;} }
+  .topnav{display:flex;gap:4px;flex-wrap:wrap;align-items:center;max-width:960px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
+  .topnav a:hover{color:var(--text);border-color:var(--line);}
+  .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <a href="index.html" class="active">🏠 Home</a>
+  <a href="dashboard.html">📊 Dashboard</a>
+  <a href="master_editor.html">🗂 Stammdaten</a>
+  <a href="price_editor.html">✏️ Kurse</a>
+  <a href="distribution_editor.html">💰 Ausschüttungen</a>
+</nav>
+<div class="wrap">
+  <h1>securitydashboard</h1>
+  <div class="grid">
+    <a class="card" href="dashboard.html">
+      <h2>📊 Dashboard</h2>
+      <p>Kursveränderungen nach DashboardGrouping</p>
+    </a>
+    <a class="card" href="master_editor.html">
+      <h2>🗂 Stammdaten</h2>
+      <p>security_master (Turso)</p>
+    </a>
+    <a class="card" href="price_editor.html">
+      <h2>✏️ Kurse</h2>
+      <p>security_prices (Turso)</p>
+    </a>
+    <a class="card" href="distribution_editor.html">
+      <h2>💰 Ausschüttungen</h2>
+      <p>security_distributions (Turso)</p>
+    </a>
+  </div>
+</div>
+</body>
+</html>

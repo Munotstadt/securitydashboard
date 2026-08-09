@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Securities Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613;--gain:#1F8A6E;--loss:#C0293D; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:40px 16px 80px;display:flex;flex-direction:column;align-items:center;}
+  .board{width:100%;max-width:960px;}
+  .eyebrow{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:2px solid var(--accent);}
+  .brand h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:.02em;margin:0;}
+  .brand span{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+  .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+  .search-input{width:100%;padding:10px 12px;margin:16px 0 4px;font-family:'Inter',sans-serif;font-size:14px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);}
+  table{width:100%;border-collapse:collapse;margin-top:4px;}
+  thead th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:12px 8px 8px;border-bottom:1px solid var(--line);}
+  thead th.num{text-align:right;}
+  tbody td{padding:12px 8px;border-bottom:1px solid var(--line);font-size:14px;}
+  tbody tr.section-row td{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);padding:20px 8px 6px;font-weight:600;border-bottom:1px solid var(--line);}
+  .name{font-weight:500;border-left:3px solid transparent;padding-left:10px !important;}
+  tr.up .name{border-left-color:var(--gain);}
+  tr.down .name{border-left-color:var(--loss);}
+  .price,.time{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
+  .time{color:var(--muted);font-size:12px;}
+  .chg{font-family:'IBM Plex Mono',monospace;text-align:right;font-size:13px;white-space:nowrap;}
+  .chg.up{color:var(--gain);} .chg.down{color:var(--loss);} .chg.flat{color:var(--muted);}
+  .ccy{color:var(--muted);font-size:11px;margin-left:4px;}
+  .empty,.error{padding:40px 10px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  .error{color:var(--loss);}
+  .footer{margin-top:20px;display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+  .footer button{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;}
+  .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:16px 0;display:none;gap:8px;}
+  .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
+  .settings label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
+  .settings input{font-family:'Inter',sans-serif;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;width:100%;}
+  .settings button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
+  .definitions{margin-top:28px;padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:4px;}
+  .definitions summary{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);cursor:pointer;}
+  .definitions dl{margin:12px 0 0;font-size:12.5px;}
+  .definitions dt{font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text);margin-top:8px;}
+  .definitions dd{margin:2px 0 0;color:var(--muted);}
+  @media (max-width:700px){ #boardTable thead th:nth-child(4), #boardTable tbody td:nth-child(4){display:none;} }
+  .topnav{display:flex;gap:4px;flex-wrap:wrap;align-items:center;max-width:960px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
+  .topnav a:hover{color:var(--text);border-color:var(--line);}
+  .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <a href="index.html">🏠 Home</a>
+  <a href="dashboard.html" class="active">📊 Dashboard</a>
+  <a href="master_editor.html">🗂 Stammdaten</a>
+  <a href="price_editor.html">✏️ Kurse</a>
+  <a href="distribution_editor.html">💰 Ausschüttungen</a>
+</nav>
+<div class="board">
+  <div class="eyebrow">
+    <div class="brand"><h1>Securities Dashboard</h1><span>munotstadtsecuritydb</span></div>
+    <div class="status" id="statusText">lädt…</div>
+  </div>
+  <input type="text" id="search" class="search-input" placeholder="Wertschrift suchen…">
+
+  <div class="settings" id="settingsPanel">
+    <div><label>Turso Database URL</label><input type="text" id="cfgUrl" placeholder="https://munotstadtsecuritydb-munotstadt.turso.io"></div>
+    <div><label>Auth Token</label><input type="text" id="cfgToken" placeholder="eyJ…"></div>
+    <div style="align-self:end;"><button id="cfgSave">Apply</button></div>
+  </div>
+
+  <table id="boardTable">
+    <thead><tr>
+      <th>Security</th><th class="num">Last</th><th class="num">Δ Day</th>
+      <th class="num">WTD</th><th class="num">MTD</th><th class="num">YTD</th><th class="num">Zeit</th>
+    </tr></thead>
+    <tbody id="boardBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+  </table>
+  <div class="footer">
+    <span id="lastSynced">—</span>
+    <span>
+      <button id="settingsBtn">⚙ Repo/Token</button>
+      <button id="refreshBtn">Refresh</button>
+    </span>
+  </div>
+
+  <details class="definitions">
+    <summary>Period Definitions</summary>
+    <dl>
+      <dt>Δ Day</dt><dd>vs. dem letzten verfügbaren Kurs eines früheren Handelstages.</dd>
+      <dt>WTD (Week-to-Date)</dt><dd>vs. dem letzten verfügbaren Kurs am/vor Sonntag der Vorwoche.</dd>
+      <dt>MTD (Month-to-Date)</dt><dd>vs. dem letzten verfügbaren Kurs des Vormonats (kalendarisch).</dd>
+      <dt>YTD (Year-to-Date)</dt><dd>vs. dem letzten verfügbaren Kurs des Vorjahres (31.12.).</dd>
+    </dl>
+  </details>
+</div>
+
+<script src="assets/turso-data.js"></script>
+<script>
+const REFRESH_MS = 5 * 60 * 1000;
+
+function pctChange(now, ref){ return (ref===0||ref==null||now==null) ? null : ((now-ref)/ref)*100; }
+function fmtPct(v){
+  if (v===null||v===undefined||isNaN(v)) return {text:'—',dir:'flat'};
+  const r = Math.round(v*100)/100;
+  const dir = r>0?'up':(r<0?'down':'flat');
+  return {text:`${r>0?'+':''}${r.toFixed(2)}%`, dir};
+}
+
+let currentGroups = {};
+
+async function load(){
+  if (!tursoConfigured()) {
+    document.getElementById('boardBody').innerHTML = `<tr><td colspan="7" class="error">Bitte zuerst ⚙ Repo/Token setzen.</td></tr>`;
+    document.getElementById('settingsPanel').classList.add('show');
+    document.getElementById('statusText').textContent = 'nicht konfiguriert';
+    return;
+  }
+  try{
+    const [masterRes, priceRes] = await tursoBatch([
+      { sql: `SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sp.ParameterName AS GroupName
+              FROM security_master sm
+              LEFT JOIN security_parameter sp ON sp.ParameterID = sm.DashboardGrouping
+              ORDER BY (sp.ParameterID IS NULL), sp.ParameterID ASC, sm.SecurityName ASC` },
+      { sql: `SELECT SecurityID, Price, PriceDate, Source FROM security_prices` }
+    ]);
+
+    const pricesBySecurity = new Map();
+    for (const r of priceRes.rows) {
+      if (!pricesBySecurity.has(r.SecurityID)) pricesBySecurity.set(r.SecurityID, []);
+      pricesBySecurity.get(r.SecurityID).push(r);
+    }
+
+    const today = new Date();
+    const groups = {};
+    for (const m of masterRes.rows) {
+      const secRows = pricesBySecurity.get(m.SecurityID) || [];
+      const ref = periodReferences(secRows, today);
+      const groupName = m.GroupName || 'Ohne Gruppe';
+      (groups[groupName] = groups[groupName] || []).push({
+        name: m.SecurityName, currency: m.Currency, secId: m.SecurityID, groupName,
+        last: ref.last, prev: ref.day, wtd: ref.wtd, mtd: ref.mtd, ytd: ref.ytd,
+      });
+    }
+
+    renderBoard(groups);
+    document.getElementById('statusText').textContent = 'live';
+    document.getElementById('lastSynced').textContent = `Geladen: ${nowZurichString()}`;
+  }catch(e){
+    document.getElementById('boardBody').innerHTML = `<tr><td colspan="7" class="error">Fehler: ${e.message}</td></tr>`;
+    document.getElementById('statusText').textContent = 'Fehler';
+  }
+}
+
+function renderBoard(groups){
+  currentGroups = groups;
+  const filter = document.getElementById('search').value.toLowerCase();
+  const body = document.getElementById('boardBody');
+  let html = '';
+  const groupNames = Object.keys(groups); // bereits in DashboardGrouping-Reihenfolge (ParameterID) aus SQL
+  let any = false;
+
+  for(const groupName of groupNames){
+    const rows = groups[groupName].filter(r => !filter || r.name.toLowerCase().includes(filter));
+    if(!rows.length) continue;
+    any = true;
+    html += `<tr class="section-row"><td colspan="7">${groupName}</td></tr>`;
+    for(const r of rows){
+      const lastAmt = r.last ? r.last.Price : null;
+      const dDay = fmtPct(pctChange(lastAmt, r.prev ? r.prev.Price : null));
+      const dWtd = fmtPct(pctChange(lastAmt, r.wtd ? r.wtd.Price : null));
+      const dMtd = fmtPct(pctChange(lastAmt, r.mtd ? r.mtd.Price : null));
+      const dYtd = fmtPct(pctChange(lastAmt, r.ytd ? r.ytd.Price : null));
+      const dirClass = dDay.dir;
+      const decimals = r.groupName === 'Currency' ? 4 : 2;
+      const timeStr = r.last ? fmtShortDateTime(r.last.dt) : '—';
+      html += `<tr class="${dirClass}">
+        <td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>
+        <td class="price">${lastAmt!==null ? fmtDecimal(lastAmt, decimals) : '—'}<span class="ccy">${r.currency||''}</span></td>
+        <td class="chg ${dDay.dir}">${dDay.text}</td>
+        <td class="chg ${dWtd.dir}">${dWtd.text}</td>
+        <td class="chg ${dMtd.dir}">${dMtd.text}</td>
+        <td class="chg ${dYtd.dir}">${dYtd.text}</td>
+        <td class="time">${timeStr}</td>
+      </tr>`;
+    }
+  }
+  body.innerHTML = any ? html : '<tr><td colspan="7" class="empty">Keine Treffer.</td></tr>';
+}
+
+document.getElementById('search').addEventListener('input', () => renderBoard(currentGroups));
+document.getElementById('refreshBtn').addEventListener('click', load);
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  document.getElementById('cfgUrl').value = TURSO.url;
+  document.getElementById('cfgToken').value = TURSO.token;
+  document.getElementById('settingsPanel').classList.toggle('show');
+});
+document.getElementById('cfgSave').addEventListener('click', () => {
+  tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
+  document.getElementById('settingsPanel').classList.remove('show');
+  load();
+});
+
+load();
+setInterval(load, REFRESH_MS);
+</script>
+</body>
+</html>
