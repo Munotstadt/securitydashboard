@@ -21,6 +21,9 @@
   button:hover{border-color:var(--text);}
   table{width:100%;min-width:1000px;border-collapse:collapse;font-size:12.5px;}
   th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;white-space:nowrap;}
+  th[data-sort]{cursor:pointer;user-select:none;}
+  th[data-sort]:hover{color:var(--text);}
+  th .arrow{color:var(--accent);margin-left:2px;}
   td{padding:3px 4px;border-bottom:1px solid var(--line);vertical-align:middle;}
   td input, td select{width:100%;min-width:80px;}
   td.name-col input{min-width:200px;}
@@ -67,9 +70,12 @@
   </div>
   <div class="table-wrap">
   <table>
-    <thead><tr>
-      <th></th><th>Name</th><th>Currency</th><th>Ticker</th><th>ISIN</th><th>Valor</th>
-      <th>Collector</th><th>DashboardGrouping</th><th>Instrument</th><th>PortfolioGrouping</th><th>SecurityID</th><th></th>
+    <thead><tr id="headerRow">
+      <th></th><th data-sort="SecurityName">Name</th><th data-sort="Currency">Currency</th><th data-sort="Ticker">Ticker</th>
+      <th data-sort="ID_ISIN">ISIN</th><th data-sort="ID_Valor">Valor</th>
+      <th data-sort="Collector">Collector</th><th data-sort="DashboardGrouping">DashboardGrouping</th>
+      <th data-sort="Instrument">Instrument</th><th data-sort="PortfolioGrouping">PortfolioGrouping</th>
+      <th data-sort="SecurityID">SecurityID</th><th></th>
     </tr></thead>
     <tbody id="body"><tr><td colspan="12">Loading…</td></tr></tbody>
   </table>
@@ -88,6 +94,32 @@ let groupingOpts = [];
 let instrumentOpts = [];
 let portfolioGroupingOpts = [];
 let deleteQueue = [];
+let sortField = null;
+let sortDir = 'asc';
+
+function paramName(opts, id) {
+  if (!id) return '';
+  const o = opts.find(x => String(x.ParameterID) === String(id));
+  return o ? o.ParameterName : '';
+}
+function compareRows(a, b, field) {
+  let av, bv;
+  switch (field) {
+    case 'Collector': av = paramName(collectorOpts, a.Collector); bv = paramName(collectorOpts, b.Collector); break;
+    case 'DashboardGrouping': av = paramName(groupingOpts, a.DashboardGrouping); bv = paramName(groupingOpts, b.DashboardGrouping); break;
+    case 'Instrument': av = paramName(instrumentOpts, a.Instrument); bv = paramName(instrumentOpts, b.Instrument); break;
+    case 'PortfolioGrouping': av = paramName(portfolioGroupingOpts, a.PortfolioGrouping); bv = paramName(portfolioGroupingOpts, b.PortfolioGrouping); break;
+    case 'ID_Valor': case 'SecurityID': return (Number(a[field]) || 0) - (Number(b[field]) || 0);
+    default: av = a[field] || ''; bv = b[field] || '';
+  }
+  return String(av).toLowerCase().localeCompare(String(bv).toLowerCase());
+}
+function updateSortIndicators() {
+  document.querySelectorAll('#headerRow th[data-sort]').forEach(th => {
+    th.innerHTML = th.textContent.replace(/\s*[▲▼]$/, '');
+    if (th.dataset.sort === sortField) th.innerHTML += ` <span class="arrow">${sortDir === 'asc' ? '▲' : '▼'}</span>`;
+  });
+}
 
 function optionList(opts, current, allowBlank) {
   let html = allowBlank ? `<option value="" ${!current?'selected':''}>—</option>` : '';
@@ -120,10 +152,18 @@ function renderRow(row, idx) {
 function renderAll(filter='') {
   const body = document.getElementById('body');
   const f = filter.toLowerCase();
-  const filtered = rows.map((r,i)=>({r,i})).filter(({r}) => !f ||
+  let filtered = rows.map((r,i)=>({r,i})).filter(({r}) => !f ||
     (r.SecurityName||'').toLowerCase().includes(f) ||
     (r.ID_ISIN||'').toLowerCase().includes(f) ||
     (r.Ticker||'').toLowerCase().includes(f));
+
+  if (sortField) {
+    filtered = [...filtered].sort((a,b) => {
+      const cmp = compareRows(a.r, b.r, sortField);
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }
+  updateSortIndicators();
 
   body.innerHTML = filtered.length ? filtered.map(({r,i}) => renderRow(r,i)).join('') : '<tr><td colspan="10">No matches.</td></tr>';
 
@@ -180,9 +220,19 @@ function setStatus(msg, cls) {
 
 document.getElementById('search').addEventListener('input', (e) => renderAll(e.target.value));
 
+document.querySelectorAll('#headerRow th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const field = th.dataset.sort;
+    if (sortField === field) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
+    else { sortField = field; sortDir = 'asc'; }
+    renderAll(document.getElementById('search').value);
+  });
+});
+
 document.getElementById('addBtn').addEventListener('click', () => {
   rows.push({SecurityID:null, SecurityName:'', Currency:'CHF', Ticker:'', ID_ISIN:'', ID_Valor:'', Collector:null, DashboardGrouping:null, Instrument:null, PortfolioGrouping:null, _dirty:true, _new:true});
   document.getElementById('search').value = '';
+  sortField = null;
   renderAll('');
   const lastRow = document.querySelector('#body tr:last-child');
   if (lastRow) { lastRow.scrollIntoView({behavior:'smooth', block:'center'}); lastRow.querySelector('input')?.focus(); }
