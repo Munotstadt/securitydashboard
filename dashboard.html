@@ -122,23 +122,23 @@ async function load(){
     return;
   }
   try{
-    const [masterRes, priceRes] = await tursoBatch([
-      { sql: `SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sp.ParameterName AS GroupName
+    const [masterRows, priceRows] = await Promise.all([
+      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sp.ParameterName AS GroupName
               FROM security_master sm
               LEFT JOIN security_parameter sp ON sp.ParameterID = sm.DashboardGrouping
-              ORDER BY (sp.ParameterID IS NULL), sp.ParameterID ASC, sm.SecurityName ASC` },
-      { sql: `SELECT SecurityID, Price, PriceDate, Source FROM security_prices` }
+              ORDER BY (sp.ParameterID IS NULL), sp.ParameterID ASC, sm.SecurityName ASC`, [], 3600000),
+      tursoQuery(`SELECT SecurityID, Price, PriceDate, Source FROM security_prices`, [], 3600000),
     ]);
 
     const pricesBySecurity = new Map();
-    for (const r of priceRes.rows) {
+    for (const r of priceRows) {
       if (!pricesBySecurity.has(r.SecurityID)) pricesBySecurity.set(r.SecurityID, []);
       pricesBySecurity.get(r.SecurityID).push(r);
     }
 
     const today = new Date();
     const groups = {};
-    for (const m of masterRes.rows) {
+    for (const m of masterRows) {
       const secRows = pricesBySecurity.get(m.SecurityID) || [];
       const ref = periodReferences(secRows, today);
       const groupName = m.GroupName || 'Ohne Gruppe';
@@ -194,7 +194,7 @@ function renderBoard(groups){
 }
 
 document.getElementById('search').addEventListener('input', () => renderBoard(currentGroups));
-document.getElementById('refreshBtn').addEventListener('click', load);
+document.getElementById('refreshBtn').addEventListener('click', () => { tursoClearCache(); load(); });
 document.getElementById('settingsBtn').addEventListener('click', () => {
   document.getElementById('cfgUrl').value = TURSO.url;
   document.getElementById('cfgToken').value = TURSO.token;

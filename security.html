@@ -525,13 +525,18 @@ async function loadSecurity(secId){
   document.getElementById('thPriceLc').textContent = `Price Return ${master.Currency||''}`;
   document.getElementById('thTotalLc').textContent = `Total Return ${master.Currency||''}`;
 
-  // FX securities ("XXX/CHF") price history, daily-collapsed, ascending
+  // FX securities ("XXX/CHF") price history, daily-collapsed, ascending.
+  // Batched into a single query instead of one per currency (this runs on every security switch).
   const fxCloses = {};
-  for(const m of masterAll){
-    const match = (m.SecurityName||'').trim().match(/^([A-Za-z]{3})\/CHF$/i);
-    if(!match) continue;
-    const fxPrices = await tursoQuery('SELECT Price, PriceDate FROM security_prices WHERE SecurityID = ?', [m.SecurityID]);
-    fxCloses[match[1].toUpperCase()] = dailyCloses(fxPrices);
+  const fxMatches = masterAll
+    .map(m => ({ id: m.SecurityID, ccy: (m.SecurityName||'').trim().match(/^([A-Za-z]{3})\/CHF$/i) }))
+    .filter(x => x.ccy);
+  if (fxMatches.length) {
+    const placeholders = fxMatches.map(() => '?').join(',');
+    const fxPricesAll = await tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices WHERE SecurityID IN (${placeholders})`, fxMatches.map(x => x.id));
+    const fxPricesBySecId = new Map();
+    for (const p of fxPricesAll) { if (!fxPricesBySecId.has(p.SecurityID)) fxPricesBySecId.set(p.SecurityID, []); fxPricesBySecId.get(p.SecurityID).push(p); }
+    for (const x of fxMatches) fxCloses[x.ccy[1].toUpperCase()] = dailyCloses(fxPricesBySecId.get(x.id) || []);
   }
   function currencyFx(cutoff){
     if(!master.Currency || master.Currency.toUpperCase()==='CHF') return { rate:1, approx:false };
@@ -668,7 +673,7 @@ async function load(){
                          gp.ParameterName AS GroupName
                   FROM security_master sm
                   LEFT JOIN security_parameter gp ON gp.ParameterID = sm.DashboardGrouping
-                  ORDER BY sm.SecurityName ASC`),
+                  ORDER BY sm.SecurityName ASC`, [], 3600000),
       tursoParameterOptions('security_master','Collector'),
       tursoParameterOptions('security_master','DashboardGrouping'),
       tursoParameterOptions('security_master','Instrument'),

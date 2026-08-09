@@ -76,6 +76,7 @@
   </div>
 
   <div class="footer">
+    <button id="clearCacheBtn">🗑 Clear Cache</button>
     <button id="settingsBtn">⚙ Repo/Token</button>
     <button id="refreshBtn">Refresh</button>
   </div>
@@ -152,6 +153,7 @@ async function load(){
       <div class="summary-box"><div class="summary-label">Price Rows</div><div class="summary-value">${priceCount[0].n}</div></div>
       <div class="summary-box"><div class="summary-label">Distribution Rows</div><div class="summary-value">${distCount[0].n}</div></div>
       <div class="summary-box"><div class="summary-label">Transaction Rows</div><div class="summary-value">${txnCount[0].n}</div></div>
+      <div class="summary-box"><div class="summary-label">Cached Queries (this tab)</div><div class="summary-value">${tursoCacheCount()}</div></div>
     `;
 
     const now = new Date();
@@ -184,7 +186,11 @@ async function load(){
   }
 }
 
-document.getElementById('refreshBtn').addEventListener('click', load);
+document.getElementById('refreshBtn').addEventListener('click', () => { tursoClearCache(); load(); });
+document.getElementById('clearCacheBtn').addEventListener('click', () => {
+  tursoClearCache();
+  document.getElementById('statusText').textContent = 'Cache geleert ✓ ' + nowZurichString();
+});
 document.getElementById('settingsBtn').addEventListener('click', () => {
   document.getElementById('cfgUrl').value = TURSO.url;
   document.getElementById('cfgToken').value = TURSO.token;

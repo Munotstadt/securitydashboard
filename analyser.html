@@ -162,11 +162,11 @@ async function load(){
     const [master, txns, prices, distRows] = await Promise.all([
       tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.PortfolioGrouping, pg.ParameterName AS PortfolioGroupingName
                   FROM security_master sm
-                  LEFT JOIN security_parameter pg ON pg.ParameterID = sm.PortfolioGrouping`),
+                  LEFT JOIN security_parameter pg ON pg.ParameterID = sm.PortfolioGrouping`, [], 3600000),
       tursoQuery(`SELECT t.SecurityID, t.Quantity, ta.ParameterName AS TrxArtName
                   FROM security_transactions t LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt`),
-      tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices`),
-      tursoQuery(`SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions`),
+      tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices`, [], 3600000),
+      tursoQuery(`SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions`, [], 3600000),
     ]);
 
     const pricesBySecId = new Map();
@@ -230,7 +230,7 @@ async function load(){
       });
     }
 
-    window.__lastByCurrency = byCurrency; window.__lastTotalChf = totalChf; window.__lastFxSecurityId = fxSecurityId;
+    window.__lastByCurrency = byCurrency; window.__lastTotalChf = totalChf; window.__lastFxSecurityId = fxSecurityId; window.__lastPricesBySecId = pricesBySecId;
 
     renderFxTable(byCurrency, totalChf, fxByCurrency, positions, fxSecurityId);
     renderMarketGroupsFor('marketGroupSectionsCH', swissCandidates.filter(c=>c.country==='Switzerland'), distBySecId, fxByCurrency);
@@ -243,8 +243,8 @@ async function load(){
   }
 
   try{
-    const byCurrencyForRisks = window.__lastByCurrency, totalForRisks = window.__lastTotalChf, fxIdsForRisks = window.__lastFxSecurityId;
-    if (byCurrencyForRisks) await loadFxRisks(byCurrencyForRisks, totalForRisks, fxIdsForRisks);
+    const byCurrencyForRisks = window.__lastByCurrency, totalForRisks = window.__lastTotalChf, fxIdsForRisks = window.__lastFxSecurityId, pricesForRisks = window.__lastPricesBySecId;
+    if (byCurrencyForRisks) await loadFxRisks(byCurrencyForRisks, totalForRisks, fxIdsForRisks, pricesForRisks);
     else document.getElementById('riskGrid').innerHTML = '<div class="empty">FX data not available (see error above).</div>';
   } catch(e) {
     document.getElementById('riskGrid').innerHTML = `<div class="error">Error: ${e.message}</div>`;
@@ -373,7 +373,7 @@ function drawMiniChart(container, title, points, maPoints, opts={}){
   container.innerHTML = `<div class="fx-chart-title"><span>${title} · 360 days</span><span class="fx-chart-legend"><span class="sw" style="background:var(--fxline)"></span>${chartLabel} (${fmtDecimal(last,yDecimals)}${unit})${maLegend}</span></div>${svg}`;
 }
 
-async function loadFxRisks(byCurrency, totalChf, fxSecurityId){
+async function loadFxRisks(byCurrency, totalChf, fxSecurityId, pricesBySecId){
   const grid = document.getElementById('riskGrid');
   const ids = Object.values(fxSecurityId).filter(Boolean);
   if(!ids.length){ grid.innerHTML = '<div class="empty">No FX securities found (no security named "USD/CHF" or "EUR/CHF" with price data).</div>'; return; }
@@ -388,7 +388,8 @@ async function loadFxRisks(byCurrency, totalChf, fxSecurityId){
     const secId = fxSecurityId[ccy];
     if(!secId){ cardsHtml += `<div class="risk-card"><div class="risk-card-title">${ccy}/CHF</div><div class="empty" style="padding:10px 0;">No "${ccy}/CHF" security with price data found.</div></div>`; continue; }
     try {
-      const rawRows = await tursoQuery('SELECT Price, PriceDate FROM security_prices WHERE SecurityID = ?', [secId]);
+      // Reuse the price rows already fetched by the main load() call — no extra network round trip.
+      const rawRows = (pricesBySecId && pricesBySecId.get(secId)) || [];
       const dailyAll = dailyCloses(rawRows).filter(p => p.dt >= cutoffExtended);
       const daily360 = dailyAll.filter(p => p.dt >= cutoff360);
       const daily180 = dailyAll.filter(p => p.dt >= daysAgo(now, VOL_WINDOW_DAYS));
@@ -490,7 +491,7 @@ function renderMarketGroupsFor(containerId, candidates, distBySecId, fxByCurrenc
   document.getElementById(containerId).innerHTML = html || '<div class="empty">No securities with a PortfolioGrouping under this region.</div>';
 }
 
-document.getElementById('refreshBtn').addEventListener('click', load);
+document.getElementById('refreshBtn').addEventListener('click', () => { tursoClearCache(); load(); });
 document.getElementById('settingsBtn').addEventListener('click', () => {
   document.getElementById('cfgUrl').value = TURSO.url;
   document.getElementById('cfgToken').value = TURSO.token;

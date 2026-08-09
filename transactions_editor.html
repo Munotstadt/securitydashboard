@@ -152,7 +152,7 @@ async function load() {
   try {
     const [txnRows, master, trxArts] = await Promise.all([
       tursoQuery('SELECT id, SecurityID, DateTrx, DateValuta, TrxArt, Quantity, AmtCHF, AmtLC, ExpenseCHF, ExpenseLC, Source, Comments, TrxReference FROM security_transactions'),
-      tursoQuery('SELECT SecurityID, SecurityName FROM security_master ORDER BY SecurityName ASC'),
+      tursoQuery('SELECT SecurityID, SecurityName FROM security_master ORDER BY SecurityName ASC', [], 3600000),
       tursoParameterOptions('security_transactions','TrxArt'),
     ]);
     rows = txnRows.map(r => ({ ...r, _dirty:false, _new:false }));
