@@ -230,17 +230,25 @@ async function load(){
       });
     }
 
+    window.__lastByCurrency = byCurrency; window.__lastTotalChf = totalChf; window.__lastFxSecurityId = fxSecurityId;
+
     renderFxTable(byCurrency, totalChf, fxByCurrency, positions, fxSecurityId);
     renderMarketGroupsFor('marketGroupSectionsCH', swissCandidates.filter(c=>c.country==='Switzerland'), distBySecId, fxByCurrency);
     renderMarketGroupsFor('marketGroupSectionsUSA', swissCandidates.filter(c=>c.country==='USA'), distBySecId, fxByCurrency);
     document.getElementById('statusText').textContent = 'live · ' + nowZurichString();
-
-    loadFxRisks(byCurrency, totalChf, fxSecurityId).catch(e => {
-      document.getElementById('riskGrid').innerHTML = `<div class="error">Error: ${e.message}</div>`;
-    });
   }catch(e){
     document.getElementById('fxBody').innerHTML = `<tr><td colspan="8" class="error">Error: ${e.message}</td></tr>`;
     document.getElementById('statusText').textContent = 'Error';
+    console.error('Analyser load() failed:', e);
+  }
+
+  try{
+    const byCurrencyForRisks = window.__lastByCurrency, totalForRisks = window.__lastTotalChf, fxIdsForRisks = window.__lastFxSecurityId;
+    if (byCurrencyForRisks) await loadFxRisks(byCurrencyForRisks, totalForRisks, fxIdsForRisks);
+    else document.getElementById('riskGrid').innerHTML = '<div class="empty">FX data not available (see error above).</div>';
+  } catch(e) {
+    document.getElementById('riskGrid').innerHTML = `<div class="error">Error: ${e.message}</div>`;
+    console.error('FX Risks failed:', e);
   }
 }
 
@@ -367,8 +375,8 @@ function drawMiniChart(container, title, points, maPoints, opts={}){
 
 async function loadFxRisks(byCurrency, totalChf, fxSecurityId){
   const grid = document.getElementById('riskGrid');
-  const ids = Object.values(fxSecurityId);
-  if(!ids.length){ grid.innerHTML = '<div class="empty">No FX securities found.</div>'; return; }
+  const ids = Object.values(fxSecurityId).filter(Boolean);
+  if(!ids.length){ grid.innerHTML = '<div class="empty">No FX securities found (no security named "USD/CHF" or "EUR/CHF" with price data).</div>'; return; }
 
   const now = new Date();
   const cutoff360 = daysAgo(now, 360);
@@ -378,30 +386,41 @@ async function loadFxRisks(byCurrency, totalChf, fxSecurityId){
   const perCcyData = {};
   for(const ccy of ['USD','EUR']){
     const secId = fxSecurityId[ccy];
-    if(!secId){ continue; }
-    const rawRows = await tursoQuery('SELECT Price, PriceDate FROM security_prices WHERE SecurityID = ?', [secId]);
-    const raw = rawRows.map(r => ({ Price: r.Price, dt: parseSwissDateTime(r.PriceDate) })).filter(r=>r.dt).sort((a,b)=>a.dt-b.dt);
-    const dailyAll = dailyCloses(raw).filter(p => p.dt >= cutoffExtended);
-    const daily360 = dailyAll.filter(p => p.dt >= cutoff360);
-    const daily180 = dailyAll.filter(p => p.dt >= daysAgo(now, VOL_WINDOW_DAYS));
-    const sdAnnual = annualize(stdDev(dailyReturns(daily180)));
-    const lastRate = daily360.length ? daily360[daily360.length-1].Price : null;
-    cardsHtml += riskCard(ccy, secId, byCurrency[ccy]||0, totalChf, sdAnnual, lastRate);
-    perCcyData[ccy] = { dailyAll, daily360 };
+    if(!secId){ cardsHtml += `<div class="risk-card"><div class="risk-card-title">${ccy}/CHF</div><div class="empty" style="padding:10px 0;">No "${ccy}/CHF" security with price data found.</div></div>`; continue; }
+    try {
+      const rawRows = await tursoQuery('SELECT Price, PriceDate FROM security_prices WHERE SecurityID = ?', [secId]);
+      const raw = rawRows.map(r => ({ Price: r.Price, dt: parseSwissDateTime(r.PriceDate) })).filter(r=>r.dt).sort((a,b)=>a.dt-b.dt);
+      const dailyAll = dailyCloses(raw).filter(p => p.dt >= cutoffExtended);
+      const daily360 = dailyAll.filter(p => p.dt >= cutoff360);
+      const daily180 = dailyAll.filter(p => p.dt >= daysAgo(now, VOL_WINDOW_DAYS));
+      const sdAnnual = annualize(stdDev(dailyReturns(daily180)));
+      const lastRate = daily360.length ? daily360[daily360.length-1].Price : null;
+      cardsHtml += riskCard(ccy, secId, byCurrency[ccy]||0, totalChf, sdAnnual, lastRate);
+      perCcyData[ccy] = { dailyAll, daily360 };
+    } catch(e) {
+      console.error(`FX Risks (${ccy}) failed:`, e);
+      cardsHtml += `<div class="risk-card"><div class="risk-card-title">${ccy}/CHF</div><div class="error" style="padding:10px 0;">Error: ${e.message}</div></div>`;
+    }
   }
   grid.innerHTML = cardsHtml;
 
   for(const ccy of ['USD','EUR']){
     if(!perCcyData[ccy]) continue;
-    const { dailyAll, daily360 } = perCcyData[ccy];
-    const maPoints = movingAverage(daily360, 30);
-    const priceEl = document.getElementById(`priceChart-${ccy}`);
-    if(priceEl) drawMiniChart(priceEl, `${ccy}/CHF`, daily360, maPoints, { showMA:true, yDecimals:4, chartLabel:'Rate' });
-    const MIN_VOL_WINDOW = 20;
-    const effectiveWindow = dailyAll.length > VOL_WINDOW_DAYS ? VOL_WINDOW_DAYS : Math.max(MIN_VOL_WINDOW, Math.floor(dailyAll.length/2));
-    const rollingVol = dailyAll.length > effectiveWindow ? rollingVolatility(dailyAll, effectiveWindow).filter(p => p.dt >= cutoff360) : [];
-    const volEl = document.getElementById(`volChart-${ccy}`);
-    if(volEl) drawMiniChart(volEl, `${ccy}/CHF Volatility (${effectiveWindow}d, ann.)`, rollingVol, [], { showMA:false, yDecimals:2, unit:'%', chartLabel:'Vol' });
+    try {
+      const { dailyAll, daily360 } = perCcyData[ccy];
+      const maPoints = movingAverage(daily360, 30);
+      const priceEl = document.getElementById(`priceChart-${ccy}`);
+      if(priceEl) drawMiniChart(priceEl, `${ccy}/CHF`, daily360, maPoints, { showMA:true, yDecimals:4, chartLabel:'Rate' });
+      const MIN_VOL_WINDOW = 20;
+      const effectiveWindow = dailyAll.length > VOL_WINDOW_DAYS ? VOL_WINDOW_DAYS : Math.max(MIN_VOL_WINDOW, Math.floor(dailyAll.length/2));
+      const rollingVol = dailyAll.length > effectiveWindow ? rollingVolatility(dailyAll, effectiveWindow).filter(p => p.dt >= cutoff360) : [];
+      const volEl = document.getElementById(`volChart-${ccy}`);
+      if(volEl) drawMiniChart(volEl, `${ccy}/CHF Volatility (${effectiveWindow}d, ann.)`, rollingVol, [], { showMA:false, yDecimals:2, unit:'%', chartLabel:'Vol' });
+    } catch(e) {
+      console.error(`FX Risks chart (${ccy}) failed:`, e);
+      const priceEl = document.getElementById(`priceChart-${ccy}`);
+      if(priceEl) priceEl.innerHTML = `<div class="error">Chart error: ${e.message}</div>`;
+    }
   }
 }
 
