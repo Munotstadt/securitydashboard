@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analyser</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613;--gain:#1F8A6E;--loss:#C0293D;--fxline:#1F6FA8; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:32px 16px 80px;display:flex;flex-direction:column;align-items:center;}
+  .topnav{display:flex;gap:4px;flex-wrap:wrap;align-items:center;max-width:1080px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
+  .topnav a:hover{color:var(--text);border-color:var(--line);}
+  .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
+  .board{width:100%;max-width:1080px;}
+  .eyebrow{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:2px solid var(--accent);}
+  .brand h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:.02em;margin:0;}
+  .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+  .section-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;margin:28px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  table{width:100%;border-collapse:collapse;margin-top:4px;}
+  thead th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:12px 8px 8px;border-bottom:1px solid var(--line);}
+  thead th.num{text-align:right;}
+  tbody td{padding:10px 8px;border-bottom:1px solid var(--line);font-size:13px;}
+  tbody tr.total-row td{font-weight:600;background:var(--panel);border-top:1px solid var(--line);}
+  .name{font-weight:500;}
+  .name a{color:var(--text);text-decoration:none;border-bottom:1px dotted var(--muted);}
+  .name a:hover{color:var(--accent);border-bottom-color:var(--accent);}
+  .price,.time{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
+  .price .sub{display:block;font-size:10px;color:var(--muted);font-weight:400;}
+  .chg{font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;white-space:nowrap;}
+  .chg .abs{display:block;font-size:10px;color:var(--muted);}
+  .chg.up{color:var(--gain);} .chg.down{color:var(--loss);} .chg.flat{color:var(--muted);}
+  .empty,.error{padding:40px 10px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  .error{color:var(--loss);}
+  .note{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:10px;}
+  .table-wrap{overflow-x:auto;}
+  #fxTable{min-width:960px;}
+  .risk-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:10px;}
+  @media (max-width:760px){ .risk-grid{grid-template-columns:1fr;} }
+  .risk-card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;}
+  .risk-card-title{font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;margin-bottom:10px;}
+  .risk-card-title a{color:var(--text);text-decoration:none;border-bottom:1px dotted var(--muted);}
+  .risk-info{width:100%;border-collapse:collapse;margin:0 0 14px;}
+  .risk-info td{padding:5px 0;border-bottom:1px solid var(--line);font-size:12.5px;}
+  .risk-info td:first-child{color:var(--muted);}
+  .risk-info td:last-child{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;font-size:13px;font-weight:400;}
+  .risk-info td .sub2{display:block;font-size:10px;font-weight:400;color:var(--muted);margin-top:2px;}
+  .risk-info tr:last-child td{border-bottom:none;}
+  .fx-chart-box{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:12px;margin-bottom:12px;}
+  .fx-chart-title{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;}
+  .fx-chart-legend{font-size:10px;color:var(--muted);}
+  .fx-chart-legend .sw{display:inline-block;width:10px;height:2px;vertical-align:middle;margin-right:4px;}
+  .mg-block{margin-bottom:28px;}
+  .mg-title{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:16px 0 4px;}
+  .mg-table{min-width:760px;table-layout:fixed;}
+  .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:16px 0;display:none;gap:8px;}
+  .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
+  .settings label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
+  .settings input{font-family:'Inter',sans-serif;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;width:100%;}
+  .settings button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
+  .footer{margin-top:14px;display:flex;justify-content:flex-end;}
+  .footer button{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;margin-left:8px;}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <a href="index.html">🏠 Home</a>
+  <a href="dashboard.html">📊 Dashboard</a>
+  <a href="portfolio.html">💼 Portfolio</a>
+  <a href="analyser.html" class="active">🔬 Analyser</a>
+  <a href="master_editor.html">🗂 Master Data</a>
+  <a href="price_editor.html">✏️ Prices</a>
+  <a href="transactions_editor.html">📋 Transactions</a>
+  <a href="distribution_editor.html">💰 Distributions</a>
+  <a href="admin.html">⚙️ Admin</a>
+</nav>
+<div class="board">
+  <div class="eyebrow">
+    <div class="brand"><h1>Analyser</h1></div>
+    <div class="status" id="statusText">loading…</div>
+  </div>
+
+  <div class="settings" id="settingsPanel">
+    <div><label>Turso Database URL</label><input type="text" id="cfgUrl" placeholder="https://…turso.io"></div>
+    <div><label>Auth Token</label><input type="text" id="cfgToken" placeholder="eyJ…"></div>
+    <div style="align-self:end;"><button id="cfgSave">Apply</button></div>
+  </div>
+
+  <div class="section-title">FX</div>
+  <div class="table-wrap">
+  <table id="fxTable">
+    <thead><tr>
+      <th>Currency</th><th class="num">Value CHF</th><th class="num">PF %</th>
+      <th class="num">Δ Day</th><th class="num">10D</th><th class="num">30D</th>
+      <th class="num">90D</th><th class="num">360D</th>
+    </tr></thead>
+    <tbody id="fxBody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+  </table>
+  </div>
+  <p class="note">Value CHF / PF % entsprechen der Währungsaufteilung aus dem Portfolio-Dashboard. FX-Performance je Periode ist die reine Wechselkursbewegung, CHF-Impact = Value CHF × FX-%. CHF/OTH haben keine eindeutige FX-Bewegung. FX Result = Summe des USD/EUR-FX-Impacts. Total = tatsächliches Portfolio-Ergebnis. LC Result = Total − FX Result.</p>
+
+  <div class="section-title">FX Risks</div>
+  <div class="risk-grid" id="riskGrid"><div class="empty">Loading…</div></div>
+  <p class="note">Volatilität = Standardabweichung der täglichen FX-Kursänderungen über die letzten 180 Tage, annualisiert mit √252. Impact-Zeilen zeigen Anteil am Portfoliowert plus CHF-Betrag. Oberer Chart: FX-Kurs 360 Tage + MA30. Unterer Chart: rollierende annualisierte Volatilität.</p>
+
+  <div class="section-title">Switzerland</div>
+  <div id="marketGroupSectionsCH"></div>
+
+  <div class="section-title">USA</div>
+  <div id="marketGroupSectionsUSA"></div>
+  <p class="note">Gruppierung nach dem dritten Segment von PortfolioGrouping (z.B. "Shares - Switzerland - Core" → Tabelle "Core") - unabhängig von der gehaltenen Quantity. "Yield" = Dividend Yield der letzten 12 Monate. Die Total-Zeile je Gruppe ist der arithmetische Durchschnitt (nicht wertgewichtet).</p>
+
+  <div class="footer">
+    <button id="settingsBtn">⚙ Repo/Token</button>
+    <button id="refreshBtn">Refresh</button>
+  </div>
+</div>
+
+<script src="assets/turso-data.js"></script>
+<script>
+function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); return d; }
+function fmtChf(v){ return v===null||v===undefined||isNaN(v) ? '—' : v.toLocaleString('de-CH',{maximumFractionDigits:0}); }
+function fmtPct(v){ if(v===null||v===undefined||isNaN(v)) return {text:'—',dir:'flat'}; const r=Math.round(v*100)/100; const dir=r>0?'up':(r<0?'down':'flat'); return {text:`${r>0?'+':''}${r.toFixed(2)}%`, dir}; }
+function fmtChfSigned(v){ if(v===null||v===undefined||isNaN(v)) return {text:'—',dir:'flat'}; const r=Math.round(v); const dir=r>0?'up':(r<0?'down':'flat'); return {text:`${r>0?'+':''}${fmtChf(r)}`, dir}; }
+
+const PERIODS = [
+  { key:'day', label:'Δ Day' }, { key:'ten', label:'10D' }, { key:'thirty', label:'30D' },
+  { key:'ninety', label:'90D' }, { key:'threeSixty', label:'360D' },
+];
+
+function computeAnalyserPeriods(rowsForSecurity, today){
+  const closes = dailyCloses(rowsForSecurity);
+  if(!closes.length) return {last:null, day:null, ten:null, thirty:null, ninety:null, threeSixty:null};
+  const last = closes[closes.length-1];
+  const day = closes.length>1 ? closes[closes.length-2] : null;
+  return {
+    last, day,
+    ten: latestOnOrBefore(closes, daysAgo(today,10)),
+    thirty: latestOnOrBefore(closes, daysAgo(today,30)),
+    ninety: latestOnOrBefore(closes, daysAgo(today,90)),
+    threeSixty: latestOnOrBefore(closes, daysAgo(today,360)),
+  };
+}
+function pairedDelta(positions, refKey){
+  let curSum=0, refSum=0, n=0;
+  for(const p of positions){ if(p.valChf!==null && p[refKey]!==null){ curSum+=p.valChf; refSum+=p[refKey]; n++; } }
+  return n===0 ? null : curSum-refSum;
+}
+function netQuantity(secId, txnRows){
+  return txnRows.filter(t => t.SecurityID === secId && (t.TrxArtName === 'Buy' || t.TrxArtName === 'Sell'))
+    .reduce((s,t) => s + (Number(t.Quantity)||0), 0);
+}
+
+async function load(){
+  if (!tursoConfigured()) {
+    document.getElementById('fxBody').innerHTML = `<tr><td colspan="8" class="error">Please set Repo/Token first.</td></tr>`;
+    document.getElementById('settingsPanel').classList.add('show');
+    return;
+  }
+  try{
+    const [master, txns, prices, distRows] = await Promise.all([
+      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.PortfolioGrouping, pg.ParameterName AS PortfolioGroupingName
+                  FROM security_master sm
+                  LEFT JOIN security_parameter pg ON pg.ParameterID = sm.PortfolioGrouping`),
+      tursoQuery(`SELECT t.SecurityID, t.Quantity, ta.ParameterName AS TrxArtName
+                  FROM security_transactions t LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt`),
+      tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices`),
+      tursoQuery(`SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions`),
+    ]);
+
+    const pricesBySecId = new Map();
+    for(const p of prices){ if(!pricesBySecId.has(p.SecurityID)) pricesBySecId.set(p.SecurityID, []); pricesBySecId.get(p.SecurityID).push(p); }
+    const distBySecId = {};
+    for(const d of distRows){
+      const amount = parseFloat(d.DistributionAmount), exDate = parseSwissDate(d.ExDate);
+      if(isNaN(amount) || !exDate) continue;
+      (distBySecId[d.SecurityID] = distBySecId[d.SecurityID] || []).push({ amount, exDate });
+    }
+
+    const today = new Date();
+    const periodsBySecId = new Map();
+    for(const m of master) periodsBySecId.set(m.SecurityID, computeAnalyserPeriods(pricesBySecId.get(m.SecurityID) || [], today));
+
+    const fxByCurrency = {};
+    const fxSecurityId = {};
+    for(const m of master){
+      const match = (m.SecurityName||'').trim().match(/^([A-Za-z]{3})\/CHF$/i);
+      if(!match) continue;
+      const periods = periodsBySecId.get(m.SecurityID);
+      if(periods && periods.last){ fxByCurrency[match[1].toUpperCase()] = periods; fxSecurityId[match[1].toUpperCase()] = m.SecurityID; }
+    }
+    function fxRate(currency, periodKey){
+      if(!currency || currency.toUpperCase()==='CHF') return 1;
+      const fx = fxByCurrency[currency.toUpperCase()];
+      return (fx && fx[periodKey]) ? fx[periodKey].Price : null;
+    }
+    function valueAt(qty, periods, periodKey, currency){
+      if(!periods || !periods[periodKey]) return null;
+      const rate = fxRate(currency, periodKey);
+      return rate!==null ? qty*periods[periodKey].Price*rate : null;
+    }
+
+    const byCurrency = {};
+    const positions = [];
+    const swissCandidates = [];
+    let totalChf = 0;
+    for(const m of master){
+      const qty = netQuantity(m.SecurityID, txns);
+      const periods = periodsBySecId.get(m.SecurityID);
+      const parts = (m.PortfolioGroupingName || '').split(' - ').map(s=>s.trim());
+
+      if(parts.length >= 2 && (parts[1] === 'Switzerland' || parts[1] === 'USA')){
+        swissCandidates.push({ name:m.SecurityName, secId:m.SecurityID, currency:m.Currency, country:parts[1], subGroup: parts[2] || 'Other', periods });
+      }
+
+      if(Math.abs(qty) < 1e-9 || !periods || !periods.last) continue;
+      const valChf = valueAt(qty, periods, 'last', m.Currency);
+      if(valChf===null) continue;
+      totalChf += valChf;
+      const ccy = (m.Currency||'').toUpperCase();
+      const bucket = ['CHF','USD','EUR'].includes(ccy) ? ccy : 'OTH';
+      byCurrency[bucket] = (byCurrency[bucket]||0) + valChf;
+
+      positions.push({
+        valChf,
+        day: valueAt(qty, periods, 'day', m.Currency), ten: valueAt(qty, periods, 'ten', m.Currency),
+        thirty: valueAt(qty, periods, 'thirty', m.Currency), ninety: valueAt(qty, periods, 'ninety', m.Currency),
+        threeSixty: valueAt(qty, periods, 'threeSixty', m.Currency),
+      });
+    }
+
+    renderFxTable(byCurrency, totalChf, fxByCurrency, positions, fxSecurityId);
+    renderMarketGroupsFor('marketGroupSectionsCH', swissCandidates.filter(c=>c.country==='Switzerland'), distBySecId, fxByCurrency);
+    renderMarketGroupsFor('marketGroupSectionsUSA', swissCandidates.filter(c=>c.country==='USA'), distBySecId, fxByCurrency);
+    document.getElementById('statusText').textContent = 'live · ' + nowZurichString();
+
+    loadFxRisks(byCurrency, totalChf, fxSecurityId).catch(e => {
+      document.getElementById('riskGrid').innerHTML = `<div class="error">Error: ${e.message}</div>`;
+    });
+  }catch(e){
+    document.getElementById('fxBody').innerHTML = `<tr><td colspan="8" class="error">Error: ${e.message}</td></tr>`;
+    document.getElementById('statusText').textContent = 'Error';
+  }
+}
+
+function fxPctChange(fx, periodKey){
+  const nowRate = fx && fx.last ? fx.last.Price : null;
+  const refRate = fx && fx[periodKey] ? fx[periodKey].Price : null;
+  if(nowRate===null || refRate===null || !refRate) return null;
+  return (nowRate-refRate)/refRate;
+}
+function emptyCell(){ return `<td class="chg flat">—</td>`; }
+function fxPeriodCell(currency, valueChf, fxByCurrency, periodKey){
+  const fx = fxByCurrency[currency];
+  const pct = fxPctChange(fx, periodKey);
+  if(pct===null) return `<td class="chg flat">—<span class="abs">n/a</span></td>`;
+  const impact = valueChf * pct;
+  const f = fmtPct(pct*100), imp = fmtChfSigned(impact);
+  const refRate = fx[periodKey].Price;
+  return `<td class="chg ${f.dir}">${f.text}<span class="abs">${imp.text} CHF</span><span class="abs">@ ${fmtDecimal(refRate,4)}</span></td>`;
+}
+function resultRow(label, valuesByPeriod, totalChf, valueChfDisplay){
+  const cells = PERIODS.map(p => {
+    const v = valuesByPeriod[p.key];
+    if(v===null || v===undefined) return `<td class="chg flat">—<span class="abs">n/a</span></td>`;
+    const pctOfTotal = totalChf ? (v/totalChf)*100 : null;
+    const f = fmtPct(pctOfTotal), imp = fmtChfSigned(v);
+    return `<td class="chg ${imp.dir}">${f.text}<span class="abs">${imp.text} CHF</span></td>`;
+  }).join('');
+  const valCell = valueChfDisplay!==undefined ? `<td class="price">${fmtChf(valueChfDisplay)}</td>` : `<td></td>`;
+  return `<tr class="total-row"><td class="name">${label}</td>${valCell}<td></td>${cells}</tr>`;
+}
+function renderFxTable(byCurrency, totalChf, fxByCurrency, positions, fxSecurityId){
+  const body = document.getElementById('fxBody');
+  if(!totalChf){ body.innerHTML = '<tr><td colspan="8" class="empty">No data.</td></tr>'; return; }
+  const order = ['USD','EUR','CHF','OTH'];
+  let html = '';
+  for(const ccy of order){
+    const valueChf = byCurrency[ccy] || 0;
+    const pctPf = totalChf ? (valueChf/totalChf)*100 : null;
+    const isFx = (ccy==='USD' || ccy==='EUR');
+    const periodCells = isFx ? PERIODS.map(p => fxPeriodCell(ccy, valueChf, fxByCurrency, p.key)).join('') : PERIODS.map(()=>emptyCell()).join('');
+    const currentRate = (isFx && fxByCurrency[ccy] && fxByCurrency[ccy].last) ? fxByCurrency[ccy].last.Price : null;
+    const rateSub = currentRate!==null ? `<span class="sub">@ ${fmtDecimal(currentRate,4)}</span>` : '';
+    const secId = fxSecurityId && fxSecurityId[ccy];
+    const nameLabel = (isFx && secId) ? `<a href="security.html?id=${encodeURIComponent(secId)}">${ccy}</a>` : `${ccy}${ccy==='OTH'?' (Residual)':''}`;
+    html += `<tr><td class="name">${nameLabel}</td><td class="price">${fmtChf(valueChf)}${rateSub}</td>
+      <td class="price">${pctPf!==null?pctPf.toFixed(1)+'%':'—'}</td>${periodCells}</tr>`;
+  }
+  const fxResultByPeriod = {};
+  for(const p of PERIODS){
+    let sum=0, any=false;
+    for(const ccy of ['USD','EUR']){ const pct = fxPctChange(fxByCurrency[ccy], p.key); if(pct===null) continue; sum += (byCurrency[ccy]||0)*pct; any=true; }
+    fxResultByPeriod[p.key] = any ? sum : null;
+  }
+  const totalResultByPeriod = {};
+  for(const p of PERIODS) totalResultByPeriod[p.key] = pairedDelta(positions, p.key);
+  const lcResultByPeriod = {};
+  for(const p of PERIODS){ const t=totalResultByPeriod[p.key], f=fxResultByPeriod[p.key]; lcResultByPeriod[p.key] = (t===null||f===null) ? null : t-f; }
+  html += resultRow('FX Result', fxResultByPeriod, totalChf);
+  html += resultRow('LC Result', lcResultByPeriod, totalChf);
+  html += resultRow('Total', totalResultByPeriod, totalChf, totalChf);
+  body.innerHTML = html;
+}
+
+function dailyReturns(dailyPoints){ const rets=[]; for(let i=1;i<dailyPoints.length;i++){ const prev=dailyPoints[i-1].Price, cur=dailyPoints[i].Price; if(prev) rets.push((cur-prev)/prev); } return rets; }
+function stdDev(values){ const n=values.length; if(n<2) return null; const mean=values.reduce((s,v)=>s+v,0)/n; const variance=values.reduce((s,v)=>s+(v-mean)*(v-mean),0)/(n-1); return Math.sqrt(variance); }
+const TRADING_DAYS_PER_YEAR = 252;
+function annualize(sd){ return sd===null ? null : sd*Math.sqrt(TRADING_DAYS_PER_YEAR); }
+const VOL_WINDOW_DAYS = 180;
+function movingAverage(points, window){ const out=[]; for(let i=0;i<points.length;i++){ if(i+1<window){ out.push(null); continue; } let sum=0; for(let j=i-window+1;j<=i;j++) sum+=points[j].Price; out.push(sum/window); } return out; }
+function rollingVolatility(dailyAll, window){ const out=[]; for(let i=window;i<dailyAll.length;i++){ const slice=dailyAll.slice(i-window,i+1); const sd=annualize(stdDev(dailyReturns(slice))); out.push({dt:slice[slice.length-1].dt, Price: sd===null?null:sd*100}); } return out.filter(p=>p.Price!==null); }
+
+function riskCard(ccy, secId, valueChf, totalChf, sdAnnual, lastRate){
+  const link = secId ? `<a href="security.html?id=${encodeURIComponent(secId)}">${ccy}/CHF</a>` : `${ccy}/CHF`;
+  if(sdAnnual===null || lastRate===null) return `<div class="risk-card"><div class="risk-card-title">${link}</div><div class="empty" style="padding:10px 0;">Not enough data.</div></div>`;
+  const range1 = [lastRate*0.99, lastRate*1.01], range5 = [lastRate*0.95, lastRate*1.05];
+  const rangeText = ([lo,hi]) => `${fmtDecimal(lo,4)} – ${fmtDecimal(hi,4)}`;
+  function impactLine(pctMove){
+    const impact = valueChf*pctMove;
+    const pctOfPf = totalChf ? (Math.abs(impact)/totalChf)*100 : null;
+    return `${pctOfPf!==null ? `± ${pctOfPf.toFixed(2)}%` : '± —'} (CHF ${fmtChf(Math.abs(impact))})`;
+  }
+  return `<div class="risk-card">
+    <div class="risk-card-title">${link}</div>
+    <table class="risk-info">
+      <tr><td>Volatility (ann., 180d)</td><td>${(sdAnnual*100).toFixed(2)}%</td></tr>
+      <tr><td>Impact ± 1 Std.Dev.</td><td>${impactLine(sdAnnual)}</td></tr>
+      <tr><td>Impact ± 1%</td><td>${impactLine(0.01)}<span class="sub2">${rangeText(range1)}</span></td></tr>
+      <tr><td>Impact ± 5%</td><td>${impactLine(0.05)}<span class="sub2">${rangeText(range5)}</span></td></tr>
+    </table>
+    <div class="fx-chart-box" id="priceChart-${ccy}"></div>
+    <div class="fx-chart-box" id="volChart-${ccy}"></div>
+  </div>`;
+}
+function fmtDateMY(d){ return `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getFullYear()).slice(-2)}`; }
+function drawMiniChart(container, title, points, maPoints, opts={}){
+  const { showMA=false, yDecimals=4, unit='', chartLabel='Value' } = opts;
+  const width=400, height=150, pad={top:10,right:8,bottom:20,left:44};
+  const innerW=width-pad.left-pad.right, innerH=height-pad.top-pad.bottom;
+  if(points.length<2){ container.innerHTML = `<div class="fx-chart-title">${title}</div><div class="empty" style="padding:20px 0;">Not enough data.</div>`; return; }
+  const allVals = points.map(p=>p.Price).concat(showMA ? maPoints.filter(v=>v!==null) : []);
+  const minY=Math.min(...allVals), maxY=Math.max(...allVals);
+  const yPad = (maxY-minY)*0.1 || maxY*0.01 || 0.01;
+  const yMin=minY-yPad, yMax=maxY+yPad;
+  const minX=points[0].dt.getTime(), maxX=points[points.length-1].dt.getTime();
+  const xSpan=(maxX-minX)||1;
+  const xScale = t => pad.left + ((t-minX)/xSpan)*innerW;
+  const yScale = v => pad.top + innerH - ((v-yMin)/(yMax-yMin))*innerH;
+  let grid='';
+  for(let i=0;i<=3;i++){ const v=yMin+(i/3)*(yMax-yMin), y=yScale(v);
+    grid += `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${width-pad.right}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-width="1"/>`;
+    grid += `<text x="${pad.left-6}" y="${(y+3).toFixed(1)}" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="9" fill="var(--muted)">${fmtDecimal(v,yDecimals)}${unit}</text>`; }
+  const fracs=[0,1/3,2/3,1];
+  const xLabels = fracs.map((f,i) => { const idx=Math.round(f*(points.length-1)); const p=points[idx]; const anchor=i===0?'start':(i===fracs.length-1?'end':'middle'); const x=xScale(p.dt.getTime());
+    return `<text x="${x.toFixed(1)}" y="${height-6}" text-anchor="${anchor}" font-family="IBM Plex Mono, monospace" font-size="9" fill="var(--muted)">${fmtDateMY(p.dt)}</text>`; }).join('');
+  let rawPath=''; points.forEach((p,i)=>{ const x=xScale(p.dt.getTime()), y=yScale(p.Price); rawPath += (i===0?'M':'L')+x.toFixed(1)+','+y.toFixed(1)+' '; });
+  let maPath=''; if(showMA){ let started=false; points.forEach((p,i)=>{ const v=maPoints[i]; if(v===null){ started=false; return; } const x=xScale(p.dt.getTime()), y=yScale(v); maPath += (!started?'M':'L')+x.toFixed(1)+','+y.toFixed(1)+' '; started=true; }); }
+  const last = points[points.length-1].Price;
+  const svg = `<svg width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">${grid}${xLabels}
+    <path d="${rawPath}" fill="none" stroke="var(--fxline)" stroke-width="1.5"/>
+    ${showMA ? `<path d="${maPath}" fill="none" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="3,2"/>` : ''}</svg>`;
+  const maLegend = showMA ? `&nbsp;&nbsp;<span class="sw" style="background:var(--muted);border-top:1px dashed var(--muted)"></span>MA 30d` : '';
+  container.innerHTML = `<div class="fx-chart-title"><span>${title} · 360 days</span><span class="fx-chart-legend"><span class="sw" style="background:var(--fxline)"></span>${chartLabel} (${fmtDecimal(last,yDecimals)}${unit})${maLegend}</span></div>${svg}`;
+}
+
+async function loadFxRisks(byCurrency, totalChf, fxSecurityId){
+  const grid = document.getElementById('riskGrid');
+  const ids = Object.values(fxSecurityId);
+  if(!ids.length){ grid.innerHTML = '<div class="empty">No FX securities found.</div>'; return; }
+
+  const now = new Date();
+  const cutoff360 = daysAgo(now, 360);
+  const cutoffExtended = daysAgo(now, 360+VOL_WINDOW_DAYS+10);
+
+  let cardsHtml = '';
+  const perCcyData = {};
+  for(const ccy of ['USD','EUR']){
+    const secId = fxSecurityId[ccy];
+    if(!secId){ continue; }
+    const rawRows = await tursoQuery('SELECT Price, PriceDate FROM security_prices WHERE SecurityID = ?', [secId]);
+    const raw = rawRows.map(r => ({ Price: r.Price, dt: parseSwissDateTime(r.PriceDate) })).filter(r=>r.dt).sort((a,b)=>a.dt-b.dt);
+    const dailyAll = dailyCloses(raw).filter(p => p.dt >= cutoffExtended);
+    const daily360 = dailyAll.filter(p => p.dt >= cutoff360);
+    const daily180 = dailyAll.filter(p => p.dt >= daysAgo(now, VOL_WINDOW_DAYS));
+    const sdAnnual = annualize(stdDev(dailyReturns(daily180)));
+    const lastRate = daily360.length ? daily360[daily360.length-1].Price : null;
+    cardsHtml += riskCard(ccy, secId, byCurrency[ccy]||0, totalChf, sdAnnual, lastRate);
+    perCcyData[ccy] = { dailyAll, daily360 };
+  }
+  grid.innerHTML = cardsHtml;
+
+  for(const ccy of ['USD','EUR']){
+    if(!perCcyData[ccy]) continue;
+    const { dailyAll, daily360 } = perCcyData[ccy];
+    const maPoints = movingAverage(daily360, 30);
+    const priceEl = document.getElementById(`priceChart-${ccy}`);
+    if(priceEl) drawMiniChart(priceEl, `${ccy}/CHF`, daily360, maPoints, { showMA:true, yDecimals:4, chartLabel:'Rate' });
+    const MIN_VOL_WINDOW = 20;
+    const effectiveWindow = dailyAll.length > VOL_WINDOW_DAYS ? VOL_WINDOW_DAYS : Math.max(MIN_VOL_WINDOW, Math.floor(dailyAll.length/2));
+    const rollingVol = dailyAll.length > effectiveWindow ? rollingVolatility(dailyAll, effectiveWindow).filter(p => p.dt >= cutoff360) : [];
+    const volEl = document.getElementById(`volChart-${ccy}`);
+    if(volEl) drawMiniChart(volEl, `${ccy}/CHF Volatility (${effectiveWindow}d, ann.)`, rollingVol, [], { showMA:false, yDecimals:2, unit:'%', chartLabel:'Vol' });
+  }
+}
+
+function securityPct(periods, currency, periodKey, fxByCurrency){
+  if(!periods || !periods.last || !periods[periodKey]) return null;
+  const rateNow = currency && currency.toUpperCase()!=='CHF' ? (fxByCurrency[currency.toUpperCase()] && fxByCurrency[currency.toUpperCase()].last ? fxByCurrency[currency.toUpperCase()].last.Price : null) : 1;
+  const rateRef = currency && currency.toUpperCase()!=='CHF' ? (fxByCurrency[currency.toUpperCase()] && fxByCurrency[currency.toUpperCase()][periodKey] ? fxByCurrency[currency.toUpperCase()][periodKey].Price : null) : 1;
+  if(rateNow===null || rateRef===null) return null;
+  const nowChf = periods.last.Price*rateNow, refChf = periods[periodKey].Price*rateRef;
+  return refChf ? ((nowChf-refChf)/refChf)*100 : null;
+}
+function mgCell(pct){ const f = fmtPct(pct); return `<td class="chg ${f.dir}">${f.text}</td>`; }
+function yieldPct12M(secId, periods, distBySecId){
+  if(!periods || !periods.last) return null;
+  const dists = distBySecId[secId];
+  if(!dists || !dists.length) return null;
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-365);
+  const sum = dists.filter(d => d.exDate >= cutoff).reduce((s,d)=>s+d.amount,0);
+  if(!sum) return null;
+  return (sum / periods.last.Price) * 100;
+}
+function yieldCell(pct){ return `<td class="price">${pct!==null ? pct.toFixed(2)+'%' : '-'}</td>`; }
+const MG_COLGROUP = `<colgroup><col style="width:34%"><col style="width:10%"><col style="width:11.2%"><col style="width:11.2%"><col style="width:11.2%"><col style="width:11.2%"><col style="width:11.2%"></colgroup>`;
+
+function renderMarketGroupTable(groupLabel, candidates, distBySecId, fxByCurrency){
+  const rows = candidates.filter(c => c.subGroup === groupLabel);
+  let html = `<div class="mg-block">`;
+  if(!rows.length){ html += `<div class="mg-title">${groupLabel.toUpperCase()}</div><div class="empty" style="padding:16px 0;">No securities found.</div></div>`; return html; }
+  html += `<div class="table-wrap"><table class="mg-table">${MG_COLGROUP}<thead><tr><th>Security</th><th class="num">Yield</th>${PERIODS.map(p=>`<th class="num">${p.label}</th>`).join('')}</tr></thead><tbody>`;
+  const rowData = rows.map(c => ({ ...c, yieldPct: yieldPct12M(c.secId, c.periods, distBySecId), pcts: PERIODS.map(pr => securityPct(c.periods, c.currency, pr.key, fxByCurrency)) }));
+  for(const r of rowData){
+    html += `<tr><td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>${yieldCell(r.yieldPct)}${r.pcts.map(mgCell).join('')}</tr>`;
+  }
+  const avgYield = (() => { const vals = rowData.map(r=>r.yieldPct).filter(v=>v!==null); return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null; })();
+  const avgCells = PERIODS.map((pr,i) => { const vals = rowData.map(r=>r.pcts[i]).filter(v=>v!==null); const avg = vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null; return mgCell(avg); }).join('');
+  html += `<tr class="total-row"><td class="name">${groupLabel.toUpperCase()} - Average</td>${yieldCell(avgYield)}${avgCells}</tr>`;
+  html += `</tbody></table></div></div>`;
+  return html;
+}
+function renderMarketGroupsFor(containerId, candidates, distBySecId, fxByCurrency){
+  const groupNames = [...new Set(candidates.map(c => c.subGroup))].sort();
+  const html = groupNames.length ? groupNames.map(g => renderMarketGroupTable(g, candidates, distBySecId, fxByCurrency)).join('') : '<div class="empty">No securities with a PortfolioGrouping under this region.</div>';
+  document.getElementById(containerId).innerHTML = html;
+}
+
+document.getElementById('refreshBtn').addEventListener('click', load);
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  document.getElementById('cfgUrl').value = TURSO.url;
+  document.getElementById('cfgToken').value = TURSO.token;
+  document.getElementById('settingsPanel').classList.toggle('show');
+});
+document.getElementById('cfgSave').addEventListener('click', () => {
+  tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
+  document.getElementById('settingsPanel').classList.remove('show');
+  load();
+});
+
+load();
+</script>
+</body>
+</html>

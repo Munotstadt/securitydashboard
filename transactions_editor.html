@@ -1,19 +1,15 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Security Distributions - Editor</title>
+<title>Security Transactions - Editor</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613; }
   *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:32px 16px 80px;display:flex;flex-direction:column;align-items:center;}
-  .topnav{display:flex;gap:4px;flex-wrap:wrap;align-items:center;max-width:960px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;}
-  .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
-  .topnav a:hover{color:var(--text);border-color:var(--line);}
-  .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
-  .wrap{max-width:1100px;width:100%;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:32px 16px 80px;}
+  .wrap{max-width:1200px;margin:0 auto;}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;text-transform:uppercase;letter-spacing:.02em;border-bottom:2px solid var(--accent);padding-bottom:14px;}
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 8px;}
   input[type=text], select, input[type=number]{font-family:'Inter',sans-serif;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);outline:none;}
@@ -33,6 +29,10 @@
   .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
   .settings label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
   .table-wrap{overflow-x:auto;max-height:60vh;overflow-y:auto;}
+  .topnav{display:flex;gap:4px;flex-wrap:wrap;align-items:center;max-width:960px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
+  .topnav a:hover{color:var(--text);border-color:var(--line);}
+  .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
 </style>
 </head>
 <body>
@@ -43,18 +43,17 @@
   <a href="analyser.html">🔬 Analyser</a>
   <a href="master_editor.html">🗂 Master Data</a>
   <a href="price_editor.html">✏️ Prices</a>
-  <a href="transactions_editor.html">📋 Transactions</a>
-  <a href="distribution_editor.html" class="active">💰 Distributions</a>
+  <a href="transactions_editor.html" class="active">📋 Transactions</a>
+  <a href="distribution_editor.html">💰 Distributions</a>
   <a href="admin.html">⚙️ Admin</a>
 </nav>
 <div class="wrap">
-  <h1>Security Distributions · Editor</h1>
+  <h1>Security Transactions · Editor</h1>
   <div class="toolbar">
     <select id="filterSecurity"><option value="">All securities…</option></select>
     <a id="linkSecurityForm" class="disabled"><button disabled id="btnSecurityForm">📈 View Security</button></a>
-    <a id="linkPrices" class="disabled"><button disabled id="btnPrices">✏️ View Prices</button></a>
     <button id="settingsBtn">⚙ Repo/Token</button>
-    <button id="addBtn">+ New Distribution</button>
+    <button id="addBtn">+ New Transaction</button>
     <button id="saveBtn" class="primary">Save</button>
   </div>
   <div class="count-line" id="countLine">Loading…</div>
@@ -65,8 +64,11 @@
   </div>
   <div class="table-wrap">
   <table>
-    <thead><tr><th>Security</th><th>Amount</th><th>Currency</th><th>ExDate</th><th>PayDate</th><th>Source</th><th></th></tr></thead>
-    <tbody id="body"><tr><td colspan="7">Loading…</td></tr></tbody>
+    <thead><tr>
+      <th>Security</th><th>Art</th><th>DateTrx</th><th>DateValuta</th><th>Quantity</th>
+      <th>AmtCHF</th><th>AmtLC</th><th>ExpCHF</th><th>ExpLC</th><th>Source</th><th>Comment</th><th>Reference</th><th></th>
+    </tr></thead>
+    <tbody id="body"><tr><td colspan="13">Loading…</td></tr></tbody>
   </table>
   </div>
   <div class="status" id="status"></div>
@@ -76,64 +78,64 @@
 <script>
 let rows = [];
 let masterRows = [];
+let trxArtOpts = [];
 let deleteQueue = [];
 
 function secOptions(selected) {
   return masterRows.map(m => `<option value="${m.SecurityID}" ${String(m.SecurityID)===String(selected)?'selected':''}>${m.SecurityName} · ${m.SecurityID}</option>`).join('');
 }
+function trxArtOptions(selected) {
+  return trxArtOpts.map(o => `<option value="${o.ParameterID}" ${String(o.ParameterID)===String(selected)?'selected':''}>${o.ParameterName}</option>`).join('');
+}
 function renderRow(row, idx) {
   return `<tr data-idx="${idx}">
     <td><select data-field="SecurityID">${secOptions(row.SecurityID)}</select></td>
-    <td><input type="number" step="any" data-field="DistributionAmount" value="${row.DistributionAmount??''}" style="width:100px"></td>
-    <td><input type="text" data-field="Currency" value="${row.Currency||''}" style="width:60px"></td>
-    <td><input type="text" data-field="ExDate" value="${row.ExDate||''}" placeholder="dd.mm.yyyy" style="width:110px"></td>
-    <td><input type="text" data-field="PayDate" value="${row.PayDate||''}" placeholder="dd.mm.yyyy" style="width:110px"></td>
-    <td><input type="text" data-field="Source" value="${row.Source||''}"></td>
+    <td><select data-field="TrxArt">${trxArtOptions(row.TrxArt)}</select></td>
+    <td><input type="text" data-field="DateTrx" value="${row.DateTrx||''}" placeholder="dd.mm.yyyy" style="width:100px"></td>
+    <td><input type="text" data-field="DateValuta" value="${row.DateValuta||''}" placeholder="dd.mm.yyyy" style="width:100px"></td>
+    <td><input type="number" step="any" data-field="Quantity" value="${row.Quantity??''}" style="width:90px"></td>
+    <td><input type="number" step="any" data-field="AmtCHF" value="${row.AmtCHF??''}" style="width:90px"></td>
+    <td><input type="number" step="any" data-field="AmtLC" value="${row.AmtLC??''}" style="width:90px"></td>
+    <td><input type="number" step="any" data-field="ExpenseCHF" value="${row.ExpenseCHF??''}" style="width:80px"></td>
+    <td><input type="number" step="any" data-field="ExpenseLC" value="${row.ExpenseLC??''}" style="width:80px"></td>
+    <td><input type="text" data-field="Source" value="${row.Source||''}" style="width:90px"></td>
+    <td><input type="text" data-field="Comments" value="${row.Comments||''}"></td>
+    <td><input type="text" data-field="TrxReference" value="${row.TrxReference||''}" style="width:90px"></td>
     <td><button data-del="${idx}">✕</button></td>
   </tr>`;
 }
 function updateSelectionLinks(secId) {
   const linkSecurityForm = document.getElementById('linkSecurityForm');
-  const linkPrices = document.getElementById('linkPrices');
   const btnSecurityForm = document.getElementById('btnSecurityForm');
-  const btnPrices = document.getElementById('btnPrices');
   if (secId) {
     linkSecurityForm.href = `security.html?id=${encodeURIComponent(secId)}`;
-    linkPrices.href = `price_editor.html?id=${encodeURIComponent(secId)}`;
-    linkSecurityForm.classList.remove('disabled'); linkPrices.classList.remove('disabled');
-    btnSecurityForm.disabled = false; btnPrices.disabled = false;
+    linkSecurityForm.classList.remove('disabled'); btnSecurityForm.disabled = false;
   } else {
-    linkSecurityForm.removeAttribute('href'); linkPrices.removeAttribute('href');
-    linkSecurityForm.classList.add('disabled'); linkPrices.classList.add('disabled');
-    btnSecurityForm.disabled = true; btnPrices.disabled = true;
+    linkSecurityForm.removeAttribute('href'); linkSecurityForm.classList.add('disabled'); btnSecurityForm.disabled = true;
   }
 }
 function renderAll(filterSecId='') {
   const body = document.getElementById('body');
   const filtered = rows.map((r,i)=>({r,i}))
     .filter(({r}) => !filterSecId || String(r.SecurityID) === String(filterSecId))
-    .sort((a,b) => (parseSwissDate(b.r.ExDate)||0) - (parseSwissDate(a.r.ExDate)||0));
+    .sort((a,b) => (parseSwissDate(b.r.DateTrx)||0) - (parseSwissDate(a.r.DateTrx)||0));
 
-  document.getElementById('countLine').textContent = `Total ${rows.length} · ${filtered.length} ausgewählt`;
+  document.getElementById('countLine').textContent = `Total ${rows.length} · ${filtered.length} selected`;
   updateSelectionLinks(filterSecId);
 
-  body.innerHTML = filtered.length ? filtered.map(({r,i}) => renderRow(r,i)).join('') : '<tr><td colspan="7">No entries.</td></tr>';
+  body.innerHTML = filtered.length ? filtered.slice(0,300).map(({r,i}) => renderRow(r,i)).join('') : '<tr><td colspan="13">No entries.</td></tr>';
 
   body.querySelectorAll('input, select').forEach(el => {
     el.addEventListener('change', () => {
       const idx = Number(el.closest('tr').dataset.idx);
       rows[idx][el.dataset.field] = el.value;
       rows[idx]._dirty = true;
-      if (el.dataset.field === 'ExDate' || el.dataset.field === 'PayDate') {
-        const val = el.value.trim();
-        el.style.borderColor = (val && !parseSwissDate(val)) ? '#C0293D' : '';
-      }
     });
   });
   body.querySelectorAll('[data-del]').forEach(btn => {
     btn.addEventListener('click', () => {
       const idx = Number(btn.dataset.del);
-      if (!confirm('Delete this distribution entry?')) return;
+      if (!confirm('Delete this transaction?')) return;
       if (!rows[idx]._new) deleteQueue.push(rows[idx].id);
       rows.splice(idx,1);
       renderAll(document.getElementById('filterSecurity').value);
@@ -143,17 +145,19 @@ function renderAll(filterSecId='') {
 
 async function load() {
   if (!tursoConfigured()) {
-    document.getElementById('body').innerHTML = `<tr><td colspan="7">Bitte ⚙ Repo/Token setzen.</td></tr>`;
+    document.getElementById('body').innerHTML = `<tr><td colspan="13">Please set Repo/Token first.</td></tr>`;
     document.getElementById('settingsPanel').classList.add('show');
     return;
   }
   try {
-    const [distRows, master] = await Promise.all([
-      tursoQuery('SELECT id, SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source FROM security_distributions'),
-      tursoQuery('SELECT SecurityID, SecurityName, Currency FROM security_master ORDER BY SecurityName ASC'),
+    const [txnRows, master, trxArts] = await Promise.all([
+      tursoQuery('SELECT id, SecurityID, DateTrx, DateValuta, TrxArt, Quantity, AmtCHF, AmtLC, ExpenseCHF, ExpenseLC, Source, Comments, TrxReference FROM security_transactions'),
+      tursoQuery('SELECT SecurityID, SecurityName FROM security_master ORDER BY SecurityName ASC'),
+      tursoParameterOptions('security_transactions','TrxArt'),
     ]);
-    rows = distRows.map(r => ({ ...r, _dirty:false, _new:false }));
+    rows = txnRows.map(r => ({ ...r, _dirty:false, _new:false }));
     masterRows = master;
+    trxArtOpts = trxArts;
     deleteQueue = [];
 
     const sel = document.getElementById('filterSecurity');
@@ -162,9 +166,9 @@ async function load() {
     const urlId = new URLSearchParams(location.search).get('id');
     if (urlId && masterRows.some(m => String(m.SecurityID) === urlId)) { sel.value = urlId; renderAll(urlId); }
     else renderAll();
-    setStatus(`${rows.length} distribution entries geladen.`, 'ok');
+    setStatus(`${rows.length} transactions loaded.`, 'ok');
   } catch (e) {
-    document.getElementById('body').innerHTML = `<tr><td colspan="7">Error: ${e.message}</td></tr>`;
+    document.getElementById('body').innerHTML = `<tr><td colspan="13">Error: ${e.message}</td></tr>`;
   }
 }
 function setStatus(msg, cls) { const s = document.getElementById('status'); s.textContent = msg; s.className = 'status ' + (cls||''); }
@@ -173,34 +177,35 @@ document.getElementById('filterSecurity').addEventListener('change', (e) => rend
 
 document.getElementById('addBtn').addEventListener('click', () => {
   const secId = document.getElementById('filterSecurity').value || (masterRows[0] && masterRows[0].SecurityID) || '';
-  const master = masterRows.find(m => String(m.SecurityID) === String(secId));
-  rows.push({ id:null, SecurityID: secId, DistributionAmount:'', Currency: master ? master.Currency : '', ExDate: nowZurichDateString(), PayDate:'', Source:'manual', _dirty:true, _new:true });
+  const buyArt = trxArtOpts.find(o => o.ParameterName === 'Buy');
+  rows.push({ id:null, SecurityID: secId, TrxArt: buyArt ? buyArt.ParameterID : '', DateTrx: nowZurichDateString(), DateValuta: nowZurichDateString(),
+    Quantity:'', AmtCHF:'', AmtLC:'', ExpenseCHF:'', ExpenseLC:'', Source:'manual', Comments:'', TrxReference:'', _dirty:true, _new:true });
   renderAll(document.getElementById('filterSecurity').value);
 });
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
-  if (!tursoConfigured()) { setStatus('Bitte ⚙ Repo/Token setzen.', 'error'); document.getElementById('settingsPanel').classList.add('show'); return; }
+  if (!tursoConfigured()) { setStatus('Please set Repo/Token first.', 'error'); document.getElementById('settingsPanel').classList.add('show'); return; }
   for (const r of rows) {
-    if (r.ExDate && !parseSwissDate(r.ExDate)) { setStatus(`Ungültiges Ex-Date "${r.ExDate}" - erwartet dd.mm.yyyy.`, 'error'); return; }
-    if (r.PayDate && !parseSwissDate(r.PayDate)) { setStatus(`Ungültiges Pay-Date "${r.PayDate}" - erwartet dd.mm.yyyy.`, 'error'); return; }
+    if (r.DateTrx && !parseSwissDate(r.DateTrx)) { setStatus(`Invalid DateTrx "${r.DateTrx}" - expected dd.mm.yyyy.`, 'error'); return; }
+    if (r.DateValuta && !parseSwissDate(r.DateValuta)) { setStatus(`Invalid DateValuta "${r.DateValuta}" - expected dd.mm.yyyy.`, 'error'); return; }
   }
   const stmts = []; const newRowIdxs = [];
   rows.forEach((r,i) => {
     if (!r._dirty) return;
     if (r._new) {
-      stmts.push({ sql:`INSERT INTO security_distributions (SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source, created_at) VALUES (?,?,?,?,?,?,?)`,
-        args:[r.SecurityID, r.DistributionAmount||null, r.Currency, r.ExDate, r.PayDate||null, r.Source, nowZurichString()] });
+      stmts.push({ sql:`INSERT INTO security_transactions (SecurityID, DateTrx, DateValuta, TrxArt, Quantity, AmtCHF, AmtLC, ExpenseCHF, ExpenseLC, Source, Comments, TrxReference, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        args:[r.SecurityID, r.DateTrx, r.DateValuta, r.TrxArt||null, r.Quantity||null, r.AmtCHF||null, r.AmtLC||null, r.ExpenseCHF||null, r.ExpenseLC||null, r.Source, r.Comments, r.TrxReference, nowZurichString()] });
       newRowIdxs.push(i);
     } else {
-      stmts.push({ sql:`UPDATE security_distributions SET SecurityID=?, DistributionAmount=?, Currency=?, ExDate=?, PayDate=?, Source=? WHERE id=?`,
-        args:[r.SecurityID, r.DistributionAmount||null, r.Currency, r.ExDate, r.PayDate||null, r.Source, r.id] });
+      stmts.push({ sql:`UPDATE security_transactions SET SecurityID=?, DateTrx=?, DateValuta=?, TrxArt=?, Quantity=?, AmtCHF=?, AmtLC=?, ExpenseCHF=?, ExpenseLC=?, Source=?, Comments=?, TrxReference=? WHERE id=?`,
+        args:[r.SecurityID, r.DateTrx, r.DateValuta, r.TrxArt||null, r.Quantity||null, r.AmtCHF||null, r.AmtLC||null, r.ExpenseCHF||null, r.ExpenseLC||null, r.Source, r.Comments, r.TrxReference, r.id] });
     }
   });
-  for (const id of deleteQueue) stmts.push({ sql:`DELETE FROM security_distributions WHERE id=?`, args:[id] });
+  for (const id of deleteQueue) stmts.push({ sql:`DELETE FROM security_transactions WHERE id=?`, args:[id] });
 
-  if (!stmts.length) { setStatus('Keine Änderungen.', 'ok'); return; }
+  if (!stmts.length) { setStatus('No changes.', 'ok'); return; }
   try {
-    setStatus('Speichere…');
+    setStatus('Saving…');
     const results = await tursoBatch(stmts);
     let seen = 0;
     for (let ri=0; ri<stmts.length; ri++) {
@@ -209,8 +214,8 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     rows.forEach(r => r._dirty=false);
     deleteQueue = [];
     renderAll(document.getElementById('filterSecurity').value);
-    setStatus('Gespeichert ✓ ' + nowZurichString(), 'ok');
-  } catch (e) { setStatus('Fehler beim Speichern: ' + e.message, 'error'); }
+    setStatus('Saved ✓ ' + nowZurichString(), 'ok');
+  } catch (e) { setStatus('Error while saving: ' + e.message, 'error'); }
 });
 
 document.getElementById('settingsBtn').addEventListener('click', () => {
