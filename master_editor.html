@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Security Master - Editor</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:32px 16px 80px;}
+  .wrap{max-width:1100px;margin:0 auto;}
+  h1{font-family:'Space Grotesk',sans-serif;font-size:20px;text-transform:uppercase;letter-spacing:.02em;border-bottom:2px solid var(--accent);padding-bottom:14px;}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0;}
+  input[type=text], select, input[type=number]{font-family:'Inter',sans-serif;font-size:13px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:6px 8px;outline:none;}
+  input[type=text]:focus, select:focus{border-color:var(--accent);}
+  input:disabled{background:#EFF1F4;color:var(--muted);}
+  #search{flex:1;min-width:220px;font-size:14px;padding:9px 10px;}
+  button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--line);background:none;cursor:pointer;color:var(--text);}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
+  button:hover{border-color:var(--text);}
+  table{width:100%;min-width:1000px;border-collapse:collapse;font-size:12.5px;}
+  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;white-space:nowrap;}
+  td{padding:3px 4px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  td input, td select{width:100%;min-width:80px;}
+  td.name-col input{min-width:200px;}
+  td.view-col{text-align:center;width:32px;}
+  .view-link{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:3px;border:1px solid var(--line);color:var(--muted);text-decoration:none;font-size:12px;}
+  .view-link:hover{border-color:var(--accent);color:var(--accent);}
+  .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;}
+  .status.error{color:#C0293D;} .status.ok{color:#1F8A6E;}
+  .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin-bottom:16px;display:none;gap:8px;}
+  .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
+  .settings label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
+  .table-wrap{overflow-x:auto;}
+  .dirty{outline:1px solid #E9A23B !important;}
+  .topnav{display:flex;gap:4px;flex-wrap:wrap;align-items:center;max-width:960px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
+  .topnav a:hover{color:var(--text);border-color:var(--line);}
+  .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <a href="index.html">🏠 Home</a>
+  <a href="dashboard.html">📊 Dashboard</a>
+  <a href="master_editor.html" class="active">🗂 Stammdaten</a>
+  <a href="price_editor.html">✏️ Kurse</a>
+  <a href="distribution_editor.html">💰 Ausschüttungen</a>
+</nav>
+<div class="wrap">
+  <h1>Security Master · Editor</h1>
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="Suche (Name, ISIN, Ticker)…">
+    <button id="settingsBtn">⚙ Repo/Token</button>
+    <button id="addBtn">+ New Row</button>
+    <button id="saveBtn" class="primary">Save</button>
+  </div>
+  <div class="settings" id="settingsPanel">
+    <div><label>Turso Database URL</label><input type="text" id="cfgUrl" placeholder="https://…turso.io"></div>
+    <div><label>Auth Token</label><input type="text" id="cfgToken" placeholder="eyJ…"></div>
+    <div style="align-self:end;"><button id="cfgSave" class="primary">Apply</button></div>
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th></th><th>Name</th><th>Currency</th><th>Ticker</th><th>ISIN</th><th>Valor</th>
+      <th>Collector</th><th>DashboardGrouping</th><th>SecurityID</th><th></th>
+    </tr></thead>
+    <tbody id="body"><tr><td colspan="10">Loading…</td></tr></tbody>
+  </table>
+  </div>
+  <div class="status" id="status"></div>
+</div>
+
+<script src="assets/turso-data.js"></script>
+<script>
+const CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY'];
+const EYE_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>`;
+
+let rows = [];          // {SecurityID, SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, DashboardGrouping, _dirty, _new}
+let collectorOpts = []; // [{ParameterID, ParameterName}]
+let groupingOpts = [];
+let deleteQueue = [];
+
+function optionList(opts, current, allowBlank) {
+  let html = allowBlank ? `<option value="" ${!current?'selected':''}>—</option>` : '';
+  html += opts.map(o => `<option value="${o.ParameterID}" ${String(current)===String(o.ParameterID)?'selected':''}>${o.ParameterName}</option>`).join('');
+  return html;
+}
+function currencySelect(value) {
+  const opts = CURRENCY_OPTS.map(o => `<option value="${o}" ${o===value?'selected':''}>${o}</option>`).join('');
+  return `<select data-field="Currency">${opts}</select>`;
+}
+
+function renderRow(row, idx) {
+  const viewLink = row.SecurityID ? `<a class="view-link" href="security.html?id=${row.SecurityID}" title="View">${EYE_SVG}</a>` : '';
+  return `<tr data-idx="${idx}" class="${row._dirty?'dirty-row':''}">
+    <td class="view-col">${viewLink}</td>
+    <td class="name-col"><input type="text" data-field="SecurityName" value="${row.SecurityName||''}"></td>
+    <td>${currencySelect(row.Currency)}</td>
+    <td><input type="text" data-field="Ticker" value="${row.Ticker||''}"></td>
+    <td><input type="text" data-field="ID_ISIN" value="${row.ID_ISIN||''}"></td>
+    <td><input type="number" data-field="ID_Valor" value="${row.ID_Valor||''}"></td>
+    <td><select data-field="Collector">${optionList(collectorOpts, row.Collector, true)}</select></td>
+    <td><select data-field="DashboardGrouping">${optionList(groupingOpts, row.DashboardGrouping, true)}</select></td>
+    <td><input type="text" value="${row.SecurityID||'(neu)'}" disabled style="width:60px"></td>
+    <td><button data-del="${idx}">✕</button></td>
+  </tr>`;
+}
+
+function renderAll(filter='') {
+  const body = document.getElementById('body');
+  const f = filter.toLowerCase();
+  const filtered = rows.map((r,i)=>({r,i})).filter(({r}) => !f ||
+    (r.SecurityName||'').toLowerCase().includes(f) ||
+    (r.ID_ISIN||'').toLowerCase().includes(f) ||
+    (r.Ticker||'').toLowerCase().includes(f));
+
+  body.innerHTML = filtered.length ? filtered.map(({r,i}) => renderRow(r,i)).join('') : '<tr><td colspan="10">No matches.</td></tr>';
+
+  body.querySelectorAll('input:not(:disabled), select').forEach(el => {
+    el.addEventListener('change', () => {
+      const idx = Number(el.closest('tr').dataset.idx);
+      rows[idx][el.dataset.field] = el.value === '' ? null : el.value;
+      rows[idx]._dirty = true;
+      el.classList.add('dirty');
+    });
+  });
+  body.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.del);
+      if (!confirm('Delete this row?')) return;
+      if (!rows[idx]._new) deleteQueue.push(rows[idx].SecurityID);
+      rows.splice(idx,1);
+      renderAll(document.getElementById('search').value);
+    });
+  });
+}
+
+async function load() {
+  if (!tursoConfigured()) {
+    document.getElementById('body').innerHTML = `<tr><td colspan="10">Bitte ⚙ Repo/Token setzen.</td></tr>`;
+    document.getElementById('settingsPanel').classList.add('show');
+    return;
+  }
+  try {
+    const [masterRows, collectors, groupings] = await Promise.all([
+      tursoQuery('SELECT SecurityID, SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, DashboardGrouping FROM security_master ORDER BY SecurityName ASC'),
+      tursoParameterOptions('security_master','Collector'),
+      tursoParameterOptions('security_master','DashboardGrouping'),
+    ]);
+    collectorOpts = collectors;
+    groupingOpts = groupings;
+    rows = masterRows.map(r => ({ ...r, _dirty:false, _new:false }));
+    deleteQueue = [];
+    renderAll();
+    setStatus(`${rows.length} securities geladen.`, 'ok');
+  } catch (e) {
+    document.getElementById('body').innerHTML = `<tr><td colspan="10">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function setStatus(msg, cls) {
+  const s = document.getElementById('status');
+  s.textContent = msg; s.className = 'status ' + (cls||'');
+}
+
+document.getElementById('search').addEventListener('input', (e) => renderAll(e.target.value));
+
+document.getElementById('addBtn').addEventListener('click', () => {
+  rows.push({SecurityID:null, SecurityName:'', Currency:'CHF', Ticker:'', ID_ISIN:'', ID_Valor:'', Collector:null, DashboardGrouping:null, _dirty:true, _new:true});
+  document.getElementById('search').value = '';
+  renderAll('');
+  const lastRow = document.querySelector('#body tr:last-child');
+  if (lastRow) { lastRow.scrollIntoView({behavior:'smooth', block:'center'}); lastRow.querySelector('input')?.focus(); }
+});
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  if (!tursoConfigured()) { setStatus('Bitte ⚙ Repo/Token setzen.', 'error'); document.getElementById('settingsPanel').classList.add('show'); return; }
+  const stmts = [];
+  const newRowIdxs = [];
+  rows.forEach((r, i) => {
+    if (!r._dirty) return;
+    if (r._new) {
+      stmts.push({ sql: `INSERT INTO security_master (SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, DashboardGrouping) VALUES (?,?,?,?,?,?,?)`,
+        args: [r.SecurityName, r.Currency, r.Ticker, r.ID_ISIN, r.ID_Valor||null, r.Collector||null, r.DashboardGrouping||null] });
+      newRowIdxs.push(i);
+    } else {
+      stmts.push({ sql: `UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, DashboardGrouping=? WHERE SecurityID=?`,
+        args: [r.SecurityName, r.Currency, r.Ticker, r.ID_ISIN, r.ID_Valor||null, r.Collector||null, r.DashboardGrouping||null, r.SecurityID] });
+    }
+  });
+  for (const id of deleteQueue) stmts.push({ sql: `DELETE FROM security_master WHERE SecurityID=?`, args: [id] });
+
+  if (!stmts.length) { setStatus('Keine Änderungen.', 'ok'); return; }
+  try {
+    setStatus('Speichere…');
+    const results = await tursoBatch(stmts);
+    let newRowsSeen = 0;
+    for (let ri = 0; ri < stmts.length; ri++) {
+      if (stmts[ri].sql.startsWith('INSERT')) {
+        const rowIdx = newRowIdxs[newRowsSeen++];
+        rows[rowIdx].SecurityID = results[ri].lastInsertRowid;
+        rows[rowIdx]._new = false;
+      }
+    }
+    rows.forEach(r => r._dirty = false);
+    deleteQueue = [];
+    renderAll(document.getElementById('search').value);
+    setStatus('Gespeichert ✓ ' + nowZurichString(), 'ok');
+  } catch (e) {
+    setStatus('Fehler beim Speichern: ' + e.message, 'error');
+  }
+});
+
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  document.getElementById('cfgUrl').value = TURSO.url;
+  document.getElementById('cfgToken').value = TURSO.token;
+  document.getElementById('settingsPanel').classList.toggle('show');
+});
+document.getElementById('cfgSave').addEventListener('click', () => {
+  tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
+  document.getElementById('settingsPanel').classList.remove('show');
+  load();
+});
+
+load();
+</script>
+</body>
+</html>
