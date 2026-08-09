@@ -198,6 +198,8 @@ let priceRows = [];
 let distRows = [];
 let collectorOpts = [];
 let groupingOpts = [];
+let instrumentOpts = [];
+let portfolioGroupingOpts = [];
 let currentPriceRange = '90D';
 let currentDistRange = '24M';
 
@@ -404,6 +406,8 @@ function renderMasterForm(master){
     <div class="field"><label>Valor</label><input type="number" id="mfValor" value="${master.ID_Valor||''}"></div>
     <div class="field"><label>Collector</label><select id="mfCollector">${optionList(collectorOpts, master.Collector, true)}</select></div>
     <div class="field"><label>DashboardGrouping</label><select id="mfGrouping">${optionList(groupingOpts, master.DashboardGrouping, true)}</select></div>
+    <div class="field"><label>Instrument</label><select id="mfInstrument">${optionList(instrumentOpts, master.Instrument, true)}</select></div>
+    <div class="field"><label>PortfolioGrouping</label><select id="mfPortfolioGrouping">${optionList(portfolioGroupingOpts, master.PortfolioGrouping, true)}</select></div>
   `;
 }
 
@@ -614,10 +618,12 @@ document.getElementById('masterSave').addEventListener('click', async () => {
   const valor = document.getElementById('mfValor').value || null;
   const collector = document.getElementById('mfCollector').value || null;
   const grouping = document.getElementById('mfGrouping').value || null;
+  const instrument = document.getElementById('mfInstrument').value || null;
+  const portfolioGrouping = document.getElementById('mfPortfolioGrouping').value || null;
   try{
     setQuickStatus('masterStatus','Speichere…','');
-    await tursoRun('UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, DashboardGrouping=? WHERE SecurityID=?',
-      [name, currency, ticker, isin, valor, collector, grouping, curSecId]);
+    await tursoRun('UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, DashboardGrouping=?, Instrument=?, PortfolioGrouping=? WHERE SecurityID=?',
+      [name, currency, ticker, isin, valor, collector, grouping, instrument, portfolioGrouping, curSecId]);
     setQuickStatus('masterStatus','Gespeichert ✓','ok');
     await load();
   }catch(e){ setQuickStatus('masterStatus','Fehler: '+e.message,'err'); }
@@ -630,18 +636,22 @@ async function load(){
     return;
   }
   try {
-    const [master, collectors, groupings] = await Promise.all([
-      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.Ticker, sm.ID_ISIN, sm.ID_Valor, sm.Collector, sm.DashboardGrouping,
+    const [master, collectors, groupings, instruments, portfolioGroupings] = await Promise.all([
+      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.Ticker, sm.ID_ISIN, sm.ID_Valor, sm.Collector, sm.DashboardGrouping, sm.Instrument, sm.PortfolioGrouping,
                          gp.ParameterName AS GroupName
                   FROM security_master sm
                   LEFT JOIN security_parameter gp ON gp.ParameterID = sm.DashboardGrouping
                   ORDER BY sm.SecurityName ASC`),
       tursoParameterOptions('security_master','Collector'),
       tursoParameterOptions('security_master','DashboardGrouping'),
+      tursoParameterOptions('security_master','Instrument'),
+      tursoParameterOptions('security_master','PortfolioGrouping'),
     ]);
     masterAll = master;
     collectorOpts = collectors;
     groupingOpts = groupings;
+    instrumentOpts = instruments;
+    portfolioGroupingOpts = portfolioGroupings;
 
     const sel = document.getElementById('securitySwitcher');
     const keepSel = sel.value;

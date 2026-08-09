@@ -115,7 +115,7 @@
       <div class="ccy-chart-wrap" id="ccyChart"></div>
     </div>
     <div class="pie-block">
-      <div class="pie-block-title">By Grouping</div>
+      <div class="pie-block-title">By Portfolio Group</div>
       <div class="ccy-chart-wrap" id="groupChart"></div>
     </div>
   </div>
@@ -162,8 +162,7 @@ function fmtChf(v){ return v===null||v===undefined||isNaN(v) ? '—' : v.toLocal
 function fmtChfDelta(v){ if(v===null||v===undefined||isNaN(v)) return {text:'—',dir:'flat'}; const r=Math.round(v); const dir=r>0?'up':(r<0?'down':'flat'); return {text:`${r>0?'+':''}${fmtChf(r)}`, dir}; }
 
 const GROUP_COLORS = {
-  'Currency':'#767E8A','Crypto':'#D98E04','Index':'#5B4B8A','ETF/Funds':'#2E9E76',
-  'Shares CH':'#1F6FA8','Shares USA':'#1F8A6E','Commodities':'#B08D57','Others':'#A3A9B0','Ohne Gruppe':'#A3A9B0',
+  'Shares':'#1F6FA8','Bonds':'#8A5B4B','Alternative':'#2E9E76','Ohne Gruppe':'#A3A9B0',
 };
 const CCY_COLORS = { CHF:'#E30613', USD:'#1F8A6E', EUR:'#1F6FA8', OTH:'#E8A33D' };
 
@@ -225,7 +224,7 @@ async function load(){
     const [master, txns, prices] = await Promise.all([
       tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sp.ParameterName AS GroupName, sp.ParameterID AS GroupOrder
                   FROM security_master sm
-                  LEFT JOIN security_parameter sp ON sp.ParameterID = sm.DashboardGrouping`),
+                  LEFT JOIN security_parameter sp ON sp.ParameterID = sm.PortfolioGrouping`),
       tursoQuery(`SELECT t.SecurityID, t.Quantity, ta.ParameterName AS TrxArtName
                   FROM security_transactions t
                   LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt`),
@@ -311,8 +310,10 @@ async function load(){
 
     renderSummary(totalChf, positions, fxResults);
     renderPieChart('ccyChart', byCurrency, ['CHF','USD','EUR','OTH'], CCY_COLORS, totalChf);
-    const groupOrder = [...new Set(positions.sort((a,b)=>a.groupOrder-b.groupOrder).map(p=>p.groupName))];
-    renderPieChart('groupChart', byGroup, groupOrder, GROUP_COLORS, totalChf);
+    const byTopLevel = {};
+    for(const p of positions){ const top = (p.groupName||'Ohne Gruppe').split(' - ')[0].trim(); byTopLevel[top] = (byTopLevel[top]||0) + (p.valChf||0); }
+    const topLevelOrder = [...new Set(positions.sort((a,b)=>a.groupOrder-b.groupOrder).map(p=>(p.groupName||'Ohne Gruppe').split(' - ')[0].trim()))];
+    renderPieChart('groupChart', byTopLevel, topLevelOrder, GROUP_COLORS, totalChf);
     renderPerformers(positions);
     renderBoard(positions, totalChf);
 
@@ -413,12 +414,12 @@ function positionRow(r, total, ancestors){
   </tr>`;
 }
 function sumChf(positions){ return positions.reduce((s,p)=>s+(p.valChf||0),0); }
-function groupRow(label, positions, total, key){
+function groupRow(label, positions, total, key, ancestors){
   const sum = sumChf(positions);
   const pctPf = total ? (sum/total)*100 : null;
   const dDay=deltaFromPaired(positions,'valDayChf'), dWtd=deltaFromPaired(positions,'valWtdChf'), dTen=deltaFromPaired(positions,'valTenChf'),
         dMtd=deltaFromPaired(positions,'valMtdChf'), dNinety=deltaFromPaired(positions,'valNinetyChf'), d360=deltaFromPaired(positions,'val360Chf');
-  return `<tr class="section-row" data-key="${key}">
+  return `<tr class="section-row" data-key="${key}" data-ancestors="${ancestors||''}">
     <td class="name"><span class="chevron">▾</span>${label}</td><td></td><td></td>
     <td class="price">${pctPf!==null?pctPf.toFixed(1)+'%':'—'}</td>
     <td class="price">${fmtChf(sum)}</td>
@@ -456,24 +457,49 @@ function attachToggleHandlers(tbody){
   applyCollapseState(tbody);
 }
 
+function buildGroupTree(positions){
+  const root = {};
+  for(const p of positions){
+    const parts = (p.groupName || 'Ohne Gruppe').split(' - ').map(s=>s.trim());
+    let node = root;
+    parts.forEach((part, i) => {
+      if(!node[part]) node[part] = { order: p.groupOrder, children:{}, positions:[] };
+      if(node[part].order === undefined || p.groupOrder < node[part].order) node[part].order = p.groupOrder;
+      if(i === parts.length-1) node[part].positions.push(p);
+      node = node[part].children;
+    });
+  }
+  return root;
+}
+function collectPositions(node){
+  let all = [...node.positions];
+  for(const key of Object.keys(node.children)) all = all.concat(collectPositions(node.children[key]));
+  return all;
+}
 function renderBoard(positions, total){
   const body = document.getElementById('boardBody');
   if(!positions.length){ body.innerHTML = '<tr><td colspan="11" class="empty">Keine Positionen mit Bestand &gt; 0 gefunden.</td></tr>'; return; }
 
-  const groups = {};
-  for(const p of positions) (groups[p.groupName]=groups[p.groupName]||[]).push(p);
-  const groupNames = Object.keys(groups).sort((a,b) => {
-    const oa = groups[a][0].groupOrder, ob = groups[b][0].groupOrder;
-    return oa - ob;
-  });
-
+  const tree = buildGroupTree(positions);
   let html = '';
-  groupNames.forEach((groupName, gi) => {
-    const key = `grp-${gi}`;
-    const groupPositions = [...groups[groupName]].sort((a,b) => (b.valChf||0)-(a.valChf||0));
-    html += groupRow(groupName, groupPositions, total, key);
-    for(const r of groupPositions) html += positionRow(r, total, key);
-  });
+  let keyCounter = 0;
+
+  function renderNode(node, label, ancestors){
+    const key = `grp-${keyCounter++}`;
+    const nodePositions = collectPositions(node);
+    html += groupRow(label, nodePositions, total, key, ancestors);
+    const childKeys = Object.keys(node.children).sort((a,b) => node.children[a].order - node.children[b].order);
+    if(childKeys.length){
+      for(const childKey of childKeys) renderNode(node.children[childKey], childKey, `${ancestors} ${key}`.trim());
+    } else {
+      const sorted = [...node.positions].sort((a,b) => (b.valChf||0)-(a.valChf||0));
+      for(const r of sorted) html += positionRow(r, total, `${ancestors} ${key}`.trim());
+    }
+  }
+
+  const topKeys = Object.keys(tree).sort((a,b) => tree[a].order - tree[b].order);
+  for(const topKey of topKeys) renderNode(tree[topKey], topKey, '');
+
   html += totalRow(positions, total);
   body.innerHTML = html;
   attachToggleHandlers(body);
