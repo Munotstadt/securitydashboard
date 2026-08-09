@@ -106,23 +106,39 @@ function nowZurichDateString() {
   const p = zurichParts(new Date());
   return `${p.day}.${p.month}.${p.year}`;
 }
-// Parses "dd.mm.yyyy" -> Date | null
+// Parses "dd.mm.yyyy" OR ISO "yyyy-mm-dd" -> Date | null
+// (the collector writes ISO timestamps; manual entries use Swiss format)
 function parseSwissDate(str) {
   if (!str) return null;
-  const m = String(str).trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-  if (!m) return null;
-  const [, d, mo, y] = m;
-  const dt = new Date(Number(y), Number(mo) - 1, Number(d));
-  return isNaN(dt) ? null : dt;
+  const s = String(str).trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) { const [, y, mo, d] = m; const dt = new Date(Number(y), Number(mo) - 1, Number(d)); return isNaN(dt) ? null : dt; }
+  m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (m) { const [, d, mo, y] = m; const dt = new Date(Number(y), Number(mo) - 1, Number(d)); return isNaN(dt) ? null : dt; }
+  return null;
 }
-// Parses "dd.mm.yyyy" or "dd.mm.yyyy hh:mm:ss" -> Date | null
+// Parses "dd.mm.yyyy [hh:mm:ss]" OR ISO "yyyy-mm-dd[ hh:mm:ss]" -> Date | null
 function parseSwissDateTime(str) {
   if (!str) return null;
-  const m = String(str).trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
-  if (!m) return null;
-  const [, d, mo, y, h = '0', mi = '0', s = '0'] = m;
-  const dt = new Date(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s));
-  return isNaN(dt) ? null : dt;
+  const s = String(str).trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (m) { const [, y, mo, d, h = '0', mi = '0', se = '0'] = m; const dt = new Date(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(se)); return isNaN(dt) ? null : dt; }
+  m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (m) { const [, d, mo, y, h = '0', mi = '0', se = '0'] = m; const dt = new Date(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(se)); return isNaN(dt) ? null : dt; }
+  return null;
+}
+// Formats a Date back to Swiss dd.mm.yyyy [hh:mm:ss] using its own local
+// components (mirrors how parseSwissDateTime constructed it) — used to
+// normalize ISO-stored dates to the display format everywhere in the app.
+function toSwissDate(date) {
+  if (!date || isNaN(date)) return '';
+  const p2 = n => String(n).padStart(2, '0');
+  return `${p2(date.getDate())}.${p2(date.getMonth() + 1)}.${date.getFullYear()}`;
+}
+function toSwissDateTime(date) {
+  if (!date || isNaN(date)) return '';
+  const p2 = n => String(n).padStart(2, '0');
+  return `${toSwissDate(date)} ${p2(date.getHours())}:${p2(date.getMinutes())}:${p2(date.getSeconds())}`;
 }
 function fmtShortDateTime(date) {
   if (!date || isNaN(date)) return '—';
