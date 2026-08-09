@@ -389,8 +389,7 @@ async function loadFxRisks(byCurrency, totalChf, fxSecurityId){
     if(!secId){ cardsHtml += `<div class="risk-card"><div class="risk-card-title">${ccy}/CHF</div><div class="empty" style="padding:10px 0;">No "${ccy}/CHF" security with price data found.</div></div>`; continue; }
     try {
       const rawRows = await tursoQuery('SELECT Price, PriceDate FROM security_prices WHERE SecurityID = ?', [secId]);
-      const raw = rawRows.map(r => ({ Price: r.Price, dt: parseSwissDateTime(r.PriceDate) })).filter(r=>r.dt).sort((a,b)=>a.dt-b.dt);
-      const dailyAll = dailyCloses(raw).filter(p => p.dt >= cutoffExtended);
+      const dailyAll = dailyCloses(rawRows).filter(p => p.dt >= cutoffExtended);
       const daily360 = dailyAll.filter(p => p.dt >= cutoff360);
       const daily180 = dailyAll.filter(p => p.dt >= daysAgo(now, VOL_WINDOW_DAYS));
       const sdAnnual = annualize(stdDev(dailyReturns(daily180)));
@@ -445,25 +444,55 @@ function yieldPct12M(secId, periods, distBySecId){
 function yieldCell(pct){ return `<td class="price">${pct!==null ? pct.toFixed(2)+'%' : '-'}</td>`; }
 const MG_COLGROUP = `<colgroup><col style="width:34%"><col style="width:10%"><col style="width:11.2%"><col style="width:11.2%"><col style="width:11.2%"><col style="width:11.2%"><col style="width:11.2%"></colgroup>`;
 
-function renderMarketGroupTable(groupLabel, candidates, distBySecId, fxByCurrency){
+function computeGroupAverages(rows, distBySecId, fxByCurrency){
+  const rowData = rows.map(c => ({ ...c, yieldPct: yieldPct12M(c.secId, c.periods, distBySecId), pcts: PERIODS.map(pr => securityPct(c.periods, c.currency, pr.key, fxByCurrency)) }));
+  const avgYield = (() => { const vals = rowData.map(r=>r.yieldPct).filter(v=>v!==null); return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null; })();
+  const avgPcts = PERIODS.map((pr,i) => { const vals = rowData.map(r=>r.pcts[i]).filter(v=>v!==null); return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null; });
+  return { rowData, avgYield, avgPcts };
+}
+function diffCell(pct, benchmarkPct){
+  const f = fmtPct(pct);
+  let diffHtml = '';
+  if(benchmarkPct!==undefined && pct!==null && benchmarkPct!==null){
+    const diff = pct - benchmarkPct;
+    const df = fmtPct(diff);
+    diffHtml = `<span class="abs">${df.text} vs Idx</span>`;
+  }
+  return `<td class="chg ${f.dir}">${f.text}${diffHtml}</td>`;
+}
+function renderMarketGroupTable(groupLabel, candidates, distBySecId, fxByCurrency, indexAvgPcts){
   const rows = candidates.filter(c => c.subGroup === groupLabel);
   let html = `<div class="mg-block">`;
   if(!rows.length){ html += `<div class="mg-title">${groupLabel.toUpperCase()}</div><div class="empty" style="padding:16px 0;">No securities found.</div></div>`; return html; }
   html += `<div class="table-wrap"><table class="mg-table">${MG_COLGROUP}<thead><tr><th>Security</th><th class="num">Yield</th>${PERIODS.map(p=>`<th class="num">${p.label}</th>`).join('')}</tr></thead><tbody>`;
-  const rowData = rows.map(c => ({ ...c, yieldPct: yieldPct12M(c.secId, c.periods, distBySecId), pcts: PERIODS.map(pr => securityPct(c.periods, c.currency, pr.key, fxByCurrency)) }));
+  const { rowData, avgYield, avgPcts } = computeGroupAverages(rows, distBySecId, fxByCurrency);
   for(const r of rowData){
-    html += `<tr><td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>${yieldCell(r.yieldPct)}${r.pcts.map(mgCell).join('')}</tr>`;
+    const cells = r.pcts.map((pct,i) => diffCell(pct, indexAvgPcts ? indexAvgPcts[i] : undefined)).join('');
+    html += `<tr><td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>${yieldCell(r.yieldPct)}${cells}</tr>`;
   }
-  const avgYield = (() => { const vals = rowData.map(r=>r.yieldPct).filter(v=>v!==null); return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null; })();
-  const avgCells = PERIODS.map((pr,i) => { const vals = rowData.map(r=>r.pcts[i]).filter(v=>v!==null); const avg = vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null; return mgCell(avg); }).join('');
+  const avgCells = avgPcts.map((pct,i) => diffCell(pct, indexAvgPcts ? indexAvgPcts[i] : undefined)).join('');
   html += `<tr class="total-row"><td class="name">${groupLabel.toUpperCase()} - Average</td>${yieldCell(avgYield)}${avgCells}</tr>`;
   html += `</tbody></table></div></div>`;
   return html;
 }
+function renderIndexAverageRow(candidates, distBySecId, fxByCurrency){
+  const indexRows = candidates.filter(c => c.subGroup === 'Index');
+  if(!indexRows.length) return { html: '', avgPcts: null };
+  const { avgYield, avgPcts } = computeGroupAverages(indexRows, distBySecId, fxByCurrency);
+  const cells = avgPcts.map(pct => diffCell(pct)).join('');
+  const html = `<div class="mg-block"><div class="table-wrap"><table class="mg-table">${MG_COLGROUP}
+    <thead><tr><th>Security</th><th class="num">Yield</th>${PERIODS.map(p=>`<th class="num">${p.label}</th>`).join('')}</tr></thead>
+    <tbody><tr class="total-row"><td class="name">INDEX - AVERAGE (Benchmark)</td>${yieldCell(avgYield)}${cells}</tr></tbody>
+  </table></div></div>`;
+  return { html, avgPcts };
+}
 function renderMarketGroupsFor(containerId, candidates, distBySecId, fxByCurrency){
-  const groupNames = [...new Set(candidates.map(c => c.subGroup))].sort();
-  const html = groupNames.length ? groupNames.map(g => renderMarketGroupTable(g, candidates, distBySecId, fxByCurrency)).join('') : '<div class="empty">No securities with a PortfolioGrouping under this region.</div>';
-  document.getElementById(containerId).innerHTML = html;
+  const { html: indexHtml, avgPcts: indexAvgPcts } = renderIndexAverageRow(candidates, distBySecId, fxByCurrency);
+  const otherGroupNames = [...new Set(candidates.map(c => c.subGroup))].filter(g => g !== 'Index').sort();
+  const otherHtml = otherGroupNames.length
+    ? otherGroupNames.map(g => renderMarketGroupTable(g, candidates, distBySecId, fxByCurrency, indexAvgPcts)).join('')
+    : '<div class="empty">No securities with a PortfolioGrouping under this region.</div>';
+  document.getElementById(containerId).innerHTML = indexHtml + otherHtml;
 }
 
 document.getElementById('refreshBtn').addEventListener('click', load);
