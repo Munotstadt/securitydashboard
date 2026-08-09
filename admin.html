@@ -40,6 +40,21 @@
   .footer{margin-top:14px;display:flex;justify-content:flex-end;gap:8px;}
   .footer button{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;}
   .eyebrow{display:flex;align-items:center;justify-content:space-between;width:100%;}
+  input[type=file]{font-family:'Inter',sans-serif;font-size:13px;margin:8px 0;}
+  .upload-box{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin-top:8px;}
+  .upload-summary{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-bottom:8px;}
+  .upload-summary .bad{color:#C0293D;font-weight:600;}
+  .upload-summary .good{color:#1F8A6E;font-weight:600;}
+  .preview-table-wrap{max-height:40vh;overflow-y:auto;overflow-x:auto;}
+  .preview-table{width:100%;border-collapse:collapse;font-size:12px;min-width:700px;}
+  .preview-table th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:5px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);}
+  .preview-table td{padding:4px 5px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  .preview-table tr.row-error td{background:rgba(192,41,61,0.06);}
+  .preview-table td.status-ok{color:#1F8A6E;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+  .preview-table td.status-err{color:#C0293D;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+  .upload-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:10px;}
+  .upload-actions button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 16px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
+  .upload-actions button:disabled{opacity:.4;cursor:not-allowed;}
 </style>
 </head>
 <body>
@@ -74,6 +89,16 @@
     <tbody id="dailyBody"><tr><td colspan="2" class="empty">Loading…</td></tr></tbody>
   </table>
   </div>
+
+  <div class="section-title">Upload Prices (CSV)</div>
+  <p class="note">Columns: <code>SecurityID</code> or <code>SecurityName</code>, <code>Price</code>, <code>PriceDate</code> (dd.mm.yyyy or ISO), <code>Source</code> (optional).</p>
+  <input type="file" id="priceFile" accept=".csv,text/csv">
+  <div id="priceUploadArea"></div>
+
+  <div class="section-title">Upload Distributions (CSV)</div>
+  <p class="note">Columns: <code>SecurityID</code> or <code>SecurityName</code>, <code>DistributionAmount</code>, <code>Currency</code> (optional), <code>ExDate</code>, <code>PayDate</code> (optional), <code>Source</code> (optional).</p>
+  <input type="file" id="distFile" accept=".csv,text/csv">
+  <div id="distUploadArea"></div>
 
   <div class="footer">
     <button id="clearCacheBtn">🗑 Clear Cache</button>
@@ -191,6 +216,181 @@ document.getElementById('clearCacheBtn').addEventListener('click', () => {
   tursoClearCache();
   document.getElementById('statusText').textContent = 'Cache geleert ✓ ' + nowZurichString();
 });
+
+// ============ CSV Upload (Prices & Distributions) ============
+function detectDelimiter(headerLine){ return (headerLine.split(';').length > headerLine.split(',').length) ? ';' : ','; }
+function splitCsvLine(line, delim){
+  const out = []; let cur = ''; let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { if (inQuotes && line[i+1] === '"') { cur += '"'; i++; } else inQuotes = !inQuotes; }
+    else if (ch === delim && !inQuotes) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out.map(s => s.trim());
+}
+function parseCSV(text){
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim().length);
+  if (!lines.length) return { header: [], rows: [] };
+  const delim = detectDelimiter(lines[0]);
+  const header = splitCsvLine(lines[0], delim).map(h => h.trim());
+  const rows = lines.slice(1).map(line => {
+    const cells = splitCsvLine(line, delim);
+    const obj = {};
+    header.forEach((h, i) => { obj[h] = cells[i] !== undefined ? cells[i].trim() : ''; });
+    return obj;
+  });
+  return { header, rows };
+}
+function findCol(row, ...names) {
+  for (const n of names) { if (row[n] !== undefined) return row[n]; }
+  const lowerMap = {}; Object.keys(row).forEach(k => lowerMap[k.toLowerCase()] = row[k]);
+  for (const n of names) { if (lowerMap[n.toLowerCase()] !== undefined) return lowerMap[n.toLowerCase()]; }
+  return undefined;
+}
+
+let masterForUpload = null;
+async function ensureMasterForUpload(){
+  if (!masterForUpload) masterForUpload = await tursoQuery('SELECT SecurityID, SecurityName, Currency FROM security_master', [], 3600000);
+  return masterForUpload;
+}
+function resolveSecurity(row, master) {
+  const idVal = findCol(row, 'SecurityID');
+  if (idVal) {
+    const m = master.find(x => String(x.SecurityID) === String(idVal).trim());
+    if (m) return { ok: true, secId: m.SecurityID, currency: m.Currency };
+    return { ok: false, error: `SecurityID "${idVal}" not found` };
+  }
+  const nameVal = findCol(row, 'SecurityName');
+  if (nameVal) {
+    let m = master.find(x => x.SecurityName === nameVal);
+    if (!m) m = master.find(x => x.SecurityName.toLowerCase() === nameVal.toLowerCase());
+    if (m) return { ok: true, secId: m.SecurityID, currency: m.Currency };
+    return { ok: false, error: `SecurityName "${nameVal}" not found` };
+  }
+  return { ok: false, error: 'No SecurityID/SecurityName column' };
+}
+
+async function handlePriceFile(file){
+  const area = document.getElementById('priceUploadArea');
+  area.innerHTML = '<div class="empty">Parsing…</div>';
+  const text = await file.text();
+  const { rows } = parseCSV(text);
+  const master = await ensureMasterForUpload();
+
+  const parsed = rows.map(row => {
+    const sec = resolveSecurity(row, master);
+    const priceRaw = findCol(row, 'Price');
+    const dateRaw = findCol(row, 'PriceDate');
+    const sourceRaw = findCol(row, 'Source') || 'CSV Upload';
+    const price = parseFloat(priceRaw);
+    const dt = parseSwissDateTime(dateRaw);
+    const errors = [];
+    if (!sec.ok) errors.push(sec.error);
+    if (priceRaw === undefined || priceRaw === '' || isNaN(price)) errors.push(`Invalid Price "${priceRaw}"`);
+    if (!dt) errors.push(`Invalid PriceDate "${dateRaw}"`);
+    return {
+      raw: row, secId: sec.ok ? sec.secId : null, secName: sec.ok ? (master.find(m=>m.SecurityID===sec.secId)||{}).SecurityName : (findCol(row,'SecurityName')||findCol(row,'SecurityID')||''),
+      price, priceDate: dt ? toSwissDateTime(dt) : null, source: sourceRaw, errors,
+    };
+  });
+  renderUploadPreview(area, parsed, ['secName','price','priceDate','source'],
+    ['Security','Price','PriceDate','Source'], () => importPrices(parsed));
+}
+
+async function handleDistFile(file){
+  const area = document.getElementById('distUploadArea');
+  area.innerHTML = '<div class="empty">Parsing…</div>';
+  const text = await file.text();
+  const { rows } = parseCSV(text);
+  const master = await ensureMasterForUpload();
+
+  const parsed = rows.map(row => {
+    const sec = resolveSecurity(row, master);
+    const amountRaw = findCol(row, 'DistributionAmount', 'Amount');
+    const exDateRaw = findCol(row, 'ExDate');
+    const payDateRaw = findCol(row, 'PayDate');
+    const currencyRaw = findCol(row, 'Currency');
+    const sourceRaw = findCol(row, 'Source') || 'CSV Upload';
+    const amount = parseFloat(amountRaw);
+    const exDt = parseSwissDate(exDateRaw);
+    const payDt = payDateRaw ? parseSwissDate(payDateRaw) : null;
+    const errors = [];
+    if (!sec.ok) errors.push(sec.error);
+    if (amountRaw === undefined || amountRaw === '' || isNaN(amount)) errors.push(`Invalid Amount "${amountRaw}"`);
+    if (!exDt) errors.push(`Invalid ExDate "${exDateRaw}"`);
+    if (payDateRaw && !payDt) errors.push(`Invalid PayDate "${payDateRaw}"`);
+    const currency = currencyRaw || (sec.ok ? sec.currency : '');
+    return {
+      raw: row, secId: sec.ok ? sec.secId : null, secName: sec.ok ? (master.find(m=>m.SecurityID===sec.secId)||{}).SecurityName : (findCol(row,'SecurityName')||findCol(row,'SecurityID')||''),
+      amount, currency, exDate: exDt ? toSwissDate(exDt) : null, payDate: payDt ? toSwissDate(payDt) : null, source: sourceRaw, errors,
+    };
+  });
+  renderUploadPreview(area, parsed, ['secName','amount','currency','exDate','payDate','source'],
+    ['Security','Amount','Currency','ExDate','PayDate','Source'], () => importDistributions(parsed));
+}
+
+function renderUploadPreview(area, parsed, fields, labels, onImport){
+  const okCount = parsed.filter(p => !p.errors.length).length;
+  const errCount = parsed.length - okCount;
+  const summary = `${parsed.length} rows parsed · <span class="good">${okCount} ok</span>${errCount ? ` · <span class="bad">${errCount} with errors (skipped on import)</span>` : ''}`;
+  const rowsHtml = parsed.map(p => {
+    const cells = fields.map(f => `<td>${p[f] ?? '—'}</td>`).join('');
+    const status = p.errors.length ? `<td class="status-err">${p.errors.join('; ')}</td>` : `<td class="status-ok">OK</td>`;
+    return `<tr class="${p.errors.length ? 'row-error' : ''}">${cells}${status}</tr>`;
+  }).join('');
+  area.innerHTML = `<div class="upload-box">
+    <div class="upload-summary">${summary}</div>
+    <div class="preview-table-wrap"><table class="preview-table">
+      <thead><tr>${labels.map(l=>`<th>${l}</th>`).join('')}<th>Status</th></tr></thead>
+      <tbody>${rowsHtml || '<tr><td colspan="99">No rows found.</td></tr>'}</tbody>
+    </table></div>
+    <div class="upload-actions">
+      <span class="quick-status" id="uploadStatus" style="align-self:center;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);"></span>
+      <button id="importBtn" ${okCount ? '' : 'disabled'}>Import ${okCount} row(s)</button>
+    </div>
+  </div>`;
+  const statusEl = area.querySelector('#uploadStatus');
+  area.querySelector('#importBtn').addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    statusEl.textContent = 'Importing…';
+    try {
+      await onImport();
+      statusEl.textContent = 'Imported ✓ ' + nowZurichString();
+    } catch (err) {
+      statusEl.textContent = 'Error: ' + err.message;
+      e.target.disabled = false;
+    }
+  });
+}
+
+async function batchInChunks(stmts, chunkSize = 300){
+  for (let i = 0; i < stmts.length; i += chunkSize) {
+    await tursoBatch(stmts.slice(i, i + chunkSize));
+  }
+}
+async function importPrices(parsed){
+  const valid = parsed.filter(p => !p.errors.length);
+  const stmts = valid.map(p => ({
+    sql: 'INSERT INTO security_prices (SecurityID, Price, PriceDate, Source, created_at) VALUES (?,?,?,?,?)',
+    args: [p.secId, p.price, p.priceDate, p.source, nowZurichString()],
+  }));
+  await batchInChunks(stmts);
+  load();
+}
+async function importDistributions(parsed){
+  const valid = parsed.filter(p => !p.errors.length);
+  const stmts = valid.map(p => ({
+    sql: 'INSERT INTO security_distributions (SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source, created_at) VALUES (?,?,?,?,?,?,?)',
+    args: [p.secId, p.amount, p.currency, p.exDate, p.payDate, p.source, nowZurichString()],
+  }));
+  await batchInChunks(stmts);
+  load();
+}
+
+document.getElementById('priceFile').addEventListener('change', (e) => { if (e.target.files[0]) handlePriceFile(e.target.files[0]); });
+document.getElementById('distFile').addEventListener('change', (e) => { if (e.target.files[0]) handleDistFile(e.target.files[0]); });
 document.getElementById('settingsBtn').addEventListener('click', () => {
   document.getElementById('cfgUrl').value = TURSO.url;
   document.getElementById('cfgToken').value = TURSO.token;
