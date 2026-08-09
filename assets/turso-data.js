@@ -22,6 +22,12 @@ function toTursoArg(v) {
     return Number.isInteger(v) ? { type: 'integer', value: String(v) } : { type: 'float', value: v };
   }
   if (typeof v === 'boolean') return { type: 'integer', value: v ? '1' : '0' };
+  // Values pulled from <select>/<input> elements are always strings (e.g.
+  // SecurityID "20"). Bound parameters have no inherent type affinity, so
+  // don't rely on the server applying column-affinity coercion for
+  // comparisons — coerce numeric-looking strings ourselves.
+  if (typeof v === 'string' && /^-?\d+$/.test(v)) return { type: 'integer', value: v };
+  if (typeof v === 'string' && /^-?\d+\.\d+$/.test(v)) return { type: 'float', value: parseFloat(v) };
   return { type: 'text', value: String(v) };
 }
 function fromTursoCell(cell) {
