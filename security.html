@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Security Detail</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613;--gain:#1F8A6E;--loss:#C0293D; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:32px 16px 80px;display:flex;flex-direction:column;align-items:center;}
+  .topnav{display:flex;gap:4px;flex-wrap:wrap;align-items:center;max-width:900px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
+  .topnav a:hover{color:var(--text);border-color:var(--line);}
+  .board{width:100%;max-width:900px;}
+  .toprow{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+  #securitySwitcher{background:var(--bg);border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 28px 6px 12px;border-radius:3px;cursor:pointer;min-width:220px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23767E8A'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;}
+  .detail-header{padding-bottom:18px;border-bottom:2px solid var(--accent);}
+  .detail-header h2{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;margin:0 0 12px;}
+  .detail-stats{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+  .detail-price{font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:600;}
+  .ccy{color:var(--muted);font-size:13px;}
+  .detail-meta{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:8px;}
+  .returns{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
+  .return-box{display:flex;flex-direction:column;gap:4px;padding:10px 14px;background:var(--panel);border:1px solid var(--line);border-radius:3px;min-width:84px;}
+  .return-label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+  .return-value{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;}
+  .return-date{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);}
+  .return-value.up{color:var(--gain);} .return-value.down{color:var(--loss);} .return-value.flat{color:var(--muted);}
+  .section-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;margin:28px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;}
+  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);}
+  th.num{text-align:right;}
+  td{padding:8px 6px;border-bottom:1px solid var(--line);}
+  td.num,td.price,td.time{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
+  .toggle-row{display:flex;gap:6px;flex-wrap:wrap;margin:18px 0 4px;}
+  .toggle-btn{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;}
+  .toggle-btn:hover{border-color:var(--muted);color:var(--text);}
+  .toggle-btn.active{background:var(--text);border-color:var(--text);color:#fff;font-weight:600;}
+  .chart-wrap{margin:10px 0;background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:16px 12px 8px;position:relative;}
+  .chart-wrap svg{display:block;width:100%;height:auto;}
+  .chart-empty,.empty{padding:30px 10px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  .chart-tooltip{position:absolute;pointer-events:none;background:var(--text);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:11px;padding:5px 8px;border-radius:3px;white-space:nowrap;transform:translate(-50%,-115%);display:none;z-index:5;}
+  .links-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;}
+  .link-btn{background:none;border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;text-decoration:none;display:inline-block;}
+  .link-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:16px 0;display:none;gap:8px;}
+  .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
+  .settings label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
+  .settings input{font-family:'Inter',sans-serif;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;width:100%;}
+  .settings button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <a href="index.html">🏠 Home</a>
+  <a href="dashboard.html">📊 Dashboard</a>
+  <a href="master_editor.html">🗂 Stammdaten</a>
+  <a href="price_editor.html">✏️ Kurse</a>
+  <a href="distribution_editor.html">💰 Ausschüttungen</a>
+</nav>
+<div class="board">
+  <div class="toprow">
+    <select id="securitySwitcher"></select>
+    <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
+  </div>
+
+  <div class="settings" id="settingsPanel">
+    <div><label>Turso Database URL</label><input type="text" id="cfgUrl" placeholder="https://…turso.io"></div>
+    <div><label>Auth Token</label><input type="text" id="cfgToken" placeholder="eyJ…"></div>
+    <div style="align-self:end;"><button id="cfgSave">Apply</button></div>
+  </div>
+
+  <div id="content"><div class="empty">Loading…</div></div>
+</div>
+
+<script src="assets/turso-data.js"></script>
+<script>
+function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); return d; }
+function fmtDateOnly(date){ const p = zurichParts(date); return `${p.day}.${p.month}.`; }
+function fmtPct(v){
+  if(v===null||v===undefined||isNaN(v)) return {text:'—',dir:'flat'};
+  const r = Math.round(v*100)/100;
+  const dir = r>0?'up':(r<0?'down':'flat');
+  return {text:`${r>0?'+':''}${r.toFixed(2)}%`, dir};
+}
+function pctChange(now, ref){ return (ref===0||ref==null||now==null) ? null : ((now-ref)/ref)*100; }
+
+let masterAll = [];
+let curSecId = null;
+let priceRows = [];
+let distRows = [];
+let paramNamesById = {};
+let currentRange = '90D';
+
+function filterByRange(dailyAsc, rawAsc, range){
+  const now = new Date();
+  if(range === '10D') return rawAsc.filter(p => p.dt >= daysAgo(now,10));
+  if(range === 'ALL') return dailyAsc;
+  let cutoff;
+  if(range==='30D') cutoff = daysAgo(now,30);
+  else if(range==='90D') cutoff = daysAgo(now,90);
+  else if(range==='YTD') cutoff = new Date(now.getFullYear(),0,1);
+  else if(range==='12M') cutoff = daysAgo(now,365);
+  else return dailyAsc;
+  return dailyAsc.filter(p => p.dt >= cutoff);
+}
+
+// Single full-chart hit rectangle + nearest-neighbor x-distance lookup
+// (robust for touch, dense datasets) instead of per-point hit circles.
+function drawLineChart(container, tooltip, points, decimals, currency){
+  const width=800, height=240;
+  if(points.length < 2){ container.innerHTML = '<div class="chart-empty">Zu wenig Datenpunkte für einen Chart.</div>'; return; }
+  const amounts = points.map(p=>p.Price);
+  const minY = Math.min(...amounts), maxY = Math.max(...amounts);
+  const yPad = (maxY-minY)*0.08 || maxY*0.01 || 1;
+  const yMin = minY-yPad, yMax = maxY+yPad;
+  const axisDecimals = decideAxisDecimals(maxY);
+  const widestLabel = fmtDecimal(Math.max(Math.abs(yMin),Math.abs(yMax)), axisDecimals);
+  const leftPad = Math.max(56, widestLabel.length*7+16);
+  const pad = {top:14, right:14, bottom:26, left:leftPad};
+  const innerW = width-pad.left-pad.right, innerH = height-pad.top-pad.bottom;
+  const minX = points[0].dt.getTime(), maxX = points[points.length-1].dt.getTime();
+  const xSpan = (maxX-minX) || 1;
+  const xScale = t => pad.left + ((t-minX)/xSpan)*innerW;
+  const yScale = v => pad.top + innerH - ((v-yMin)/(yMax-yMin))*innerH;
+  const lineColor = amounts[amounts.length-1] >= amounts[0] ? '#1F8A6E' : '#C0293D';
+  let d = '';
+  points.forEach((p,i) => { const x=xScale(p.dt.getTime()), y=yScale(p.Price); d += (i===0?'M':'L')+x.toFixed(1)+','+y.toFixed(1)+' '; });
+  const areaD = d + `L${xScale(maxX).toFixed(1)},${(pad.top+innerH).toFixed(1)} L${xScale(minX).toFixed(1)},${(pad.top+innerH).toFixed(1)} Z`;
+  let grid = '';
+  for(let i=0;i<=4;i++){
+    const v = yMin + (i/4)*(yMax-yMin), y = yScale(v);
+    grid += `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${width-pad.right}" y2="${y.toFixed(1)}" stroke="#E3E6EA" stroke-width="1"/>`;
+    grid += `<text x="${pad.left-8}" y="${(y+3).toFixed(1)}" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="10" fill="#767E8A">${fmtDecimal(v,axisDecimals)}</text>`;
+  }
+  const mid = points[Math.floor(points.length/2)];
+  const xLabels = [
+    { p: points[0], anchor:'start' }, { p: mid, anchor:'middle' }, { p: points[points.length-1], anchor:'end' },
+  ].map(({p,anchor}) => `<text x="${xScale(p.dt.getTime()).toFixed(1)}" y="${height-8}" text-anchor="${anchor}" font-family="IBM Plex Mono, monospace" font-size="10" fill="#767E8A">${fmtDateOnly(p.dt)}</text>`).join('');
+
+  container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Price chart">
+    ${grid}
+    <path d="${areaD}" fill="${lineColor}" opacity="0.08" stroke="none"/>
+    <path d="${d.trim()}" fill="none" stroke="${lineColor}" stroke-width="2"/>
+    <circle id="cursorDot" cx="0" cy="0" r="4" fill="${lineColor}" style="display:none"/>
+    <rect id="hitRect" x="${pad.left}" y="${pad.top}" width="${innerW}" height="${innerH}" fill="transparent"/>
+    ${xLabels}
+  </svg>`;
+  container.appendChild(tooltip);
+
+  const svgEl = container.querySelector('svg');
+  const hitRect = svgEl.querySelector('#hitRect');
+  const cursorDot = svgEl.querySelector('#cursorDot');
+  const pxPerUnit = innerW / Math.max(1, svgEl.getBoundingClientRect().width || width);
+
+  function nearestPoint(clientX){
+    const svgRect = svgEl.getBoundingClientRect();
+    const relX = (clientX - svgRect.left) * (width / svgRect.width);
+    let best = points[0], bestDist = Infinity;
+    for(const p of points){
+      const px = xScale(p.dt.getTime());
+      const dist = Math.abs(px - relX);
+      if(dist < bestDist){ bestDist = dist; best = p; }
+    }
+    return best;
+  }
+  function handleMove(evt){
+    evt.preventDefault();
+    const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+    const p = nearestPoint(clientX);
+    const x = xScale(p.dt.getTime()), y = yScale(p.Price);
+    cursorDot.setAttribute('cx', x.toFixed(1)); cursorDot.setAttribute('cy', y.toFixed(1)); cursorDot.style.display='block';
+    showTooltip(evt, container, tooltip, `${fmtDateOnly(p.dt)}: ${fmtDecimal(p.Price,decimals)} ${currency||''}`);
+  }
+  hitRect.addEventListener('mousemove', handleMove);
+  hitRect.addEventListener('mouseenter', handleMove);
+  hitRect.addEventListener('touchstart', handleMove, {passive:false});
+  hitRect.addEventListener('touchmove', handleMove, {passive:false});
+  hitRect.addEventListener('mouseleave', () => { tooltip.style.display='none'; cursorDot.style.display='none'; });
+  svgEl.addEventListener('touchend', () => setTimeout(()=>{ tooltip.style.display='none'; cursorDot.style.display='none'; }, 1200));
+}
+function showTooltip(evt, wrap, tooltip, html){
+  const rect = wrap.getBoundingClientRect();
+  const x = (evt.touches ? evt.touches[0].clientX : evt.clientX) - rect.left;
+  const y = (evt.touches ? evt.touches[0].clientY : evt.clientY) - rect.top;
+  tooltip.style.left = x + 'px'; tooltip.style.top = y + 'px';
+  tooltip.innerHTML = html; tooltip.style.display = 'block';
+}
+
+function renderContent(master){
+  const decimals = master.GroupName === 'Currency' ? 4 : 2;
+  const withDt = priceRows.map(r => ({ ...r, dt: parseSwissDateTime(r.PriceDate) })).filter(r=>r.dt).sort((a,b)=>a.dt-b.dt);
+  const daily = dailyCloses(priceRows);
+  const last = daily[daily.length-1] || null;
+  const ref = periodReferences(priceRows, new Date());
+
+  const distSorted = [...distRows].sort((a,b)=>(parseSwissDate(b.ExDate)||0)-(parseSwissDate(a.ExDate)||0));
+
+  const returnBox = (label, r, refPoint) => {
+    const c = fmtPct(pctChange(last ? last.Price : null, refPoint ? refPoint.Price : null));
+    return `<div class="return-box">
+      <span class="return-label">${label}</span>
+      <span class="return-value ${c.dir}">${c.text}</span>
+      <span class="return-date">${refPoint ? fmtDateOnly(refPoint.dt) : '—'}</span>
+    </div>`;
+  };
+
+  document.getElementById('content').innerHTML = `
+    <div class="detail-header">
+      <h2>${master.SecurityName}</h2>
+      <div class="detail-stats">
+        <div class="detail-price">${last ? fmtDecimal(last.Price, decimals) : '—'}<span class="ccy"> ${master.Currency||''}</span></div>
+      </div>
+      <div class="detail-meta">
+        ${master.Ticker ? `Ticker: ${master.Ticker} · ` : ''}${master.ID_ISIN ? `ISIN: ${master.ID_ISIN} · ` : ''}${master.ID_Valor ? `Valor: ${master.ID_Valor} · ` : ''}Gruppe: ${master.GroupName || 'Ohne Gruppe'}${master.CollectorName ? ` · Collector: ${master.CollectorName}` : ''}
+      </div>
+      <div class="returns">
+        ${returnBox('Day', 'day', ref.day)}
+        ${returnBox('WTD', 'wtd', ref.wtd)}
+        ${returnBox('MTD', 'mtd', ref.mtd)}
+        ${returnBox('YTD', 'ytd', ref.ytd)}
+      </div>
+    </div>
+
+    <div class="toggle-row" id="rangeToggle">
+      ${['10D','30D','90D','YTD','12M','ALL'].map(r => `<button class="toggle-btn ${r===currentRange?'active':''}" data-range="${r}">${r}</button>`).join('')}
+    </div>
+    <div class="chart-wrap" id="chartWrap"></div>
+
+    <div class="links-row">
+      <a class="link-btn" href="price_editor.html?id=${master.SecurityID}">✏️ Kurse bearbeiten</a>
+      <a class="link-btn" href="distribution_editor.html?id=${master.SecurityID}">💰 Ausschüttungen bearbeiten</a>
+      <a class="link-btn" href="master_editor.html">🗂 Stammdaten bearbeiten</a>
+    </div>
+
+    <div class="section-title">Ausschüttungen</div>
+    <table>
+      <thead><tr><th>ExDate</th><th>PayDate</th><th class="num">Amount</th><th>Currency</th><th>Source</th></tr></thead>
+      <tbody>
+        ${distSorted.length ? distSorted.map(d => `<tr>
+          <td>${d.ExDate||'—'}</td><td>${d.PayDate||'—'}</td>
+          <td class="num">${d.DistributionAmount!=null ? fmtDecimal(d.DistributionAmount,4) : '—'}</td>
+          <td>${d.Currency||''}</td><td>${d.Source||''}</td>
+        </tr>`).join('') : '<tr><td colspan="5" class="empty">Keine Ausschüttungen erfasst.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+
+  const tooltip = document.createElement('div');
+  tooltip.className = 'chart-tooltip';
+  const chartWrap = document.getElementById('chartWrap');
+  const chartPoints = filterByRange(daily, withDt, currentRange);
+  drawLineChart(chartWrap, tooltip, chartPoints, decimals, master.Currency);
+
+  document.querySelectorAll('#rangeToggle .toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentRange = btn.dataset.range;
+      document.querySelectorAll('#rangeToggle .toggle-btn').forEach(b => b.classList.toggle('active', b===btn));
+      const pts = filterByRange(daily, withDt, currentRange);
+      const wrap = document.getElementById('chartWrap');
+      const tt = document.createElement('div'); tt.className='chart-tooltip';
+      drawLineChart(wrap, tt, pts, decimals, master.Currency);
+    });
+  });
+}
+
+async function loadSecurity(secId){
+  curSecId = secId;
+  const master = masterAll.find(m => String(m.SecurityID) === String(secId));
+  if(!master){ document.getElementById('content').innerHTML = '<div class="empty">Security nicht gefunden.</div>'; return; }
+  document.getElementById('content').innerHTML = '<div class="empty">Loading…</div>';
+
+  const [prices, dists] = await Promise.all([
+    tursoQuery('SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices WHERE SecurityID = ?', [secId]),
+    tursoQuery('SELECT id, SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source FROM security_distributions WHERE SecurityID = ?', [secId]),
+  ]);
+  priceRows = prices;
+  distRows = dists;
+  currentRange = '90D';
+  renderContent(master);
+
+  const url = new URL(location.href);
+  url.searchParams.set('id', secId);
+  history.replaceState(null, '', url);
+}
+
+async function load(){
+  if (!tursoConfigured()) {
+    document.getElementById('content').innerHTML = '<div class="empty">Bitte ⚙ Repo/Token setzen.</div>';
+    document.getElementById('settingsPanel').classList.add('show');
+    return;
+  }
+  try {
+    const [master, groupings] = await Promise.all([
+      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.Ticker, sm.ID_ISIN, sm.ID_Valor,
+                         gp.ParameterName AS GroupName, cl.ParameterName AS CollectorName
+                  FROM security_master sm
+                  LEFT JOIN security_parameter gp ON gp.ParameterID = sm.DashboardGrouping
+                  LEFT JOIN security_parameter cl ON cl.ParameterID = sm.Collector
+                  ORDER BY sm.SecurityName ASC`),
+    ]);
+    masterAll = master;
+
+    const sel = document.getElementById('securitySwitcher');
+    sel.innerHTML = masterAll.map(m => `<option value="${m.SecurityID}">${m.SecurityName} · ${m.SecurityID}</option>`).join('');
+
+    const urlId = new URLSearchParams(location.search).get('id');
+    const startId = (urlId && masterAll.some(m => String(m.SecurityID)===urlId)) ? urlId : (masterAll[0] && masterAll[0].SecurityID);
+    if (!startId) { document.getElementById('content').innerHTML = '<div class="empty">Keine Securities vorhanden.</div>'; return; }
+    sel.value = startId;
+    sel.addEventListener('change', () => loadSecurity(sel.value));
+    await loadSecurity(startId);
+  } catch (e) {
+    document.getElementById('content').innerHTML = `<div class="empty">Fehler: ${e.message}</div>`;
+  }
+}
+
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  document.getElementById('cfgUrl').value = TURSO.url;
+  document.getElementById('cfgToken').value = TURSO.token;
+  document.getElementById('settingsPanel').classList.toggle('show');
+});
+document.getElementById('cfgSave').addEventListener('click', () => {
+  tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
+  document.getElementById('settingsPanel').classList.remove('show');
+  load();
+});
+
+load();
+</script>
+</body>
+</html>
