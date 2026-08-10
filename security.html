@@ -56,6 +56,13 @@
   .chart-legend{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:6px;}
   .chart-tooltip{position:absolute;pointer-events:none;background:var(--text);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:11px;padding:5px 8px;border-radius:3px;white-space:nowrap;transform:translate(-50%,-115%);display:none;z-index:5;}
 
+  .heatmap-table{width:100%;border-collapse:collapse;font-size:11px;}
+  .heatmap-table th{text-align:center;font-family:'IBM Plex Mono',monospace;font-size:9px;text-transform:uppercase;color:var(--muted);padding:4px;}
+  .heatmap-table th.year-col{text-align:left;padding-left:4px;}
+  .heatmap-table td{text-align:center;padding:6px 2px;font-family:'IBM Plex Mono',monospace;border-radius:2px;}
+  .heatmap-table td.year-col{text-align:left;font-weight:600;color:var(--text);padding-left:4px;}
+  .heatmap-table td.empty-cell{color:var(--line);}
+
   .history-links{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;}
   .chart-controls-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin:18px 0 4px;}
   .chart-controls-row .toggle-row{margin:0;}
@@ -133,6 +140,27 @@
   </div>
   <div class="detail-meta" id="yieldNote" style="margin-top:8px;"></div>
   <div class="detail-meta" id="pointCountNote" style="margin-top:2px;"></div>
+
+  <div class="section-title">Returns</div>
+  <div class="table-wrap">
+  <table id="returnsTable">
+    <thead><tr><th>Period</th><th class="num">Return</th></tr></thead>
+    <tbody id="returnsBody"><tr><td colspan="2" class="empty">Loading…</td></tr></tbody>
+  </table>
+  </div>
+  <div class="detail-meta" style="margin-top:10px;">Monthly Returns</div>
+  <div class="table-wrap"><div id="heatmapWrap"></div></div>
+
+  <div class="section-title">Risk</div>
+  <div class="table-wrap">
+  <table id="riskTable">
+    <thead><tr><th></th><th class="num">1 Year</th><th class="num">3 Years</th><th class="num">5 Years</th></tr></thead>
+    <tbody id="riskBody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+  </table>
+  </div>
+  <div class="detail-meta" style="margin-top:10px;">Max Drawdown Since Inception: <span id="mddInception">—</span></div>
+  <div class="detail-meta" style="margin-top:12px;">Rolling 1-Year Volatility (annualized)</div>
+  <div class="chart-wrap" id="volChartWrap"><div class="chart-empty">Loading chart…</div></div>
 
   <div class="section-title">Price Chart</div>
   <div class="chart-wrap" id="priceChartWrap"><div class="chart-empty">Loading chart…</div></div>
@@ -223,6 +251,154 @@ function fxRateOnDateWithFallback(fxCloses, cutoff){
   const onOrBefore = latestOnOrBefore(fxCloses, cutoff);
   if(onOrBefore) return { rate: onOrBefore.Price, approx:false };
   return { rate: fxCloses[0].Price, approx:true }; // oldest available as approximation
+}
+
+// ---- Risk & Returns helpers (computed entirely from local daily-close history) ----
+function dailyReturns(dailyPoints){ const rets=[]; for(let i=1;i<dailyPoints.length;i++){ const prev=dailyPoints[i-1].Price, cur=dailyPoints[i].Price; if(prev) rets.push((cur-prev)/prev); } return rets; }
+function stdDev(values){ const n=values.length; if(n<2) return null; const mean=values.reduce((s,v)=>s+v,0)/n; const variance=values.reduce((s,v)=>s+(v-mean)*(v-mean),0)/(n-1); return Math.sqrt(variance); }
+const TRADING_DAYS_PER_YEAR = 252;
+function annualizeVol(sd){ return sd===null ? null : sd*Math.sqrt(TRADING_DAYS_PER_YEAR); }
+function volatilityForYears(daily, years, today){
+  const cutoff = daysAgo(today, Math.round(years*365.25));
+  const windowPts = daily.filter(p => p.dt >= cutoff);
+  return annualizeVol(stdDev(dailyReturns(windowPts)));
+}
+function annualizedReturnForYears(daily, years, today){
+  if(!daily.length) return null;
+  const cutoff = daysAgo(today, Math.round(years*365.25));
+  const ref = latestOnOrBefore(daily, cutoff) || daily[0];
+  const last = daily[daily.length-1];
+  if(!ref || !ref.Price) return null;
+  const totalReturn = last.Price/ref.Price - 1;
+  const elapsedYears = Math.max((last.dt - ref.dt) / (1000*60*60*24*365.25), 0.01);
+  return Math.pow(1+totalReturn, 1/elapsedYears) - 1;
+}
+function maxDrawdown(dailyPoints){
+  if(!dailyPoints.length) return null;
+  let peak = dailyPoints[0].Price, maxDd = 0;
+  for(const p of dailyPoints){
+    if(p.Price > peak) peak = p.Price;
+    const dd = peak ? (p.Price-peak)/peak : 0;
+    if(dd < maxDd) maxDd = dd;
+  }
+  return maxDd; // negative fraction
+}
+function rollingVolatility1Y(daily){
+  const windowDays = TRADING_DAYS_PER_YEAR;
+  const out = [];
+  for(let i=0;i<daily.length;i++){
+    const cutoff = daysAgo(daily[i].dt, 365);
+    const windowPts = daily.filter(p => p.dt > cutoff && p.dt <= daily[i].dt);
+    if(windowPts.length < 30) continue;
+    const vol = annualizeVol(stdDev(dailyReturns(windowPts)));
+    if(vol !== null) out.push({ dt: daily[i].dt, Price: vol*100 });
+  }
+  return out;
+}
+function pctChangeSimple(now, ref){ return (ref===0||ref==null||now==null) ? null : ((now-ref)/ref)*100; }
+function computeReturnPeriods(daily, today){
+  if(!daily.length) return {};
+  const last = daily[daily.length-1];
+  const ytdCutoff = new Date(today.getFullYear()-1, 11, 31, 23,59,59);
+  const cutoffs = {
+    ytd: ytdCutoff, oneMonth: daysAgo(today,30), threeMonth: daysAgo(today,91),
+    sixMonth: daysAgo(today,182), oneYear: daysAgo(today,365),
+    threeYear: daysAgo(today,365*3), fiveYear: daysAgo(today,365*5),
+  };
+  const out = {};
+  for(const key in cutoffs){ const ref = latestOnOrBefore(daily, cutoffs[key]); out[key] = ref ? pctChangeSimple(last.Price, ref.Price) : null; }
+  out.sinceInception = pctChangeSimple(last.Price, daily[0].Price);
+  return out;
+}
+function yearlyReturns(daily){
+  if(!daily.length) return [];
+  const years = [...new Set(daily.map(p => p.dt.getFullYear()))].sort((a,b)=>b-a);
+  return years.map(y => {
+    const yearEnd = new Date(y, 11, 31, 23,59,59);
+    const prevYearEnd = new Date(y-1, 11, 31, 23,59,59);
+    const endPt = latestOnOrBefore(daily, yearEnd);
+    const startPt = latestOnOrBefore(daily, prevYearEnd) || daily[0];
+    return { year: y, pct: (endPt && startPt) ? pctChangeSimple(endPt.Price, startPt.Price) : null };
+  });
+}
+function monthlyReturnGrid(daily){
+  if(!daily.length) return { years: [], grid: {} };
+  const grid = {}; // grid[year][month(0-11)] = pct
+  const years = [...new Set(daily.map(p => p.dt.getFullYear()))].sort((a,b)=>b-a);
+  years.forEach(y => grid[y] = {});
+  const monthKeys = [...new Set(daily.map(p => `${p.dt.getFullYear()}-${p.dt.getMonth()}`))];
+  for(const mk of monthKeys){
+    const [y,m] = mk.split('-').map(Number);
+    const monthEnd = new Date(y, m+1, 0, 23,59,59);
+    const prevMonthEnd = new Date(y, m, 0, 23,59,59);
+    const endPt = latestOnOrBefore(daily, monthEnd);
+    const startPt = latestOnOrBefore(daily, prevMonthEnd) || daily[0];
+    if(endPt && startPt) grid[y][m] = pctChangeSimple(endPt.Price, startPt.Price);
+  }
+  return { years, grid };
+}
+function heatColor(pct){
+  if(pct===null||pct===undefined) return 'transparent';
+  const clamped = Math.max(-20, Math.min(20, pct));
+  if(clamped >= 0){ const t = clamped/20; return `rgba(31,138,110,${0.12+t*0.55})`; }
+  const t = -clamped/20; return `rgba(192,41,61,${0.12+t*0.55})`;
+}
+
+function renderReturnsSection(daily, today){
+  const periods = computeReturnPeriods(daily, today);
+  const rows = [
+    ['Lfd. Jahr', periods.ytd], ['1 Monat', periods.oneMonth], ['3 Monate', periods.threeMonth],
+    ['6 Monate', periods.sixMonth], ['1 Jahr', periods.oneYear], ['3 Jahre', periods.threeYear],
+    ['5 Jahre', periods.fiveYear], ['Seit Auflage (MAX)', periods.sinceInception],
+  ];
+  const yearly = yearlyReturns(daily);
+  const allRows = [...rows, ...yearly.map(y => [String(y.year), y.pct])];
+  document.getElementById('returnsBody').innerHTML = allRows.map(([label,pct]) => {
+    const f = fmtPct(pct);
+    return `<tr><td>${label}</td><td class="chg ${f.dir}">${f.text}</td></tr>`;
+  }).join('');
+
+  const { years, grid } = monthlyReturnGrid(daily);
+  const monthNames = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+  if(!years.length){ document.getElementById('heatmapWrap').innerHTML = '<div class="empty">No data.</div>'; return; }
+  let html = `<table class="heatmap-table"><thead><tr><th class="year-col"></th>${monthNames.map(m=>`<th>${m}</th>`).join('')}</tr></thead><tbody>`;
+  for(const y of years){
+    html += `<tr><td class="year-col">${y}</td>`;
+    for(let m=0; m<12; m++){
+      const pct = grid[y][m];
+      if(pct===undefined || pct===null){ html += `<td class="empty-cell">·</td>`; continue; }
+      html += `<td style="background:${heatColor(pct)}">${pct>=0?'+':''}${pct.toFixed(1)}</td>`;
+    }
+    html += `</tr>`;
+  }
+  html += `</tbody></table>`;
+  document.getElementById('heatmapWrap').innerHTML = html;
+}
+
+function renderRiskSection(daily, today, decimals){
+  const cols = [1,3,5];
+  const vols = cols.map(y => volatilityForYears(daily, y, today));
+  const rets = cols.map(y => annualizedReturnForYears(daily, y, today));
+  const ratios = cols.map((y,i) => (vols[i]!==null && vols[i]!==0 && rets[i]!==null) ? rets[i]/vols[i] : null);
+  const mdds = cols.map(y => { const cutoff = daysAgo(today, Math.round(y*365.25)); return maxDrawdown(daily.filter(p=>p.dt>=cutoff)); });
+  const mddInception = maxDrawdown(daily);
+
+  function volRow(vals){ return vals.map(v => `<td class="price">${v!==null?(v*100).toFixed(2)+'%':'—'}</td>`).join(''); }
+  function ratioRow(vals){ return vals.map(v => `<td class="price">${v!==null?v.toFixed(2):'—'}</td>`).join(''); }
+  function mddRow(vals){ return vals.map(v => `<td class="price" style="color:${v!==null&&v<0?'#C0293D':'inherit'}">${v!==null?(v*100).toFixed(2)+'%':'—'}</td>`).join(''); }
+
+  document.getElementById('riskBody').innerHTML = `
+    <tr><td>Volatility (ann.)</td>${volRow(vols)}</tr>
+    <tr><td>Return/Risk</td>${ratioRow(ratios)}</tr>
+    <tr><td>Max Drawdown</td>${mddRow(mdds)}</tr>
+  `;
+  document.getElementById('mddInception').textContent = mddInception!==null ? (mddInception*100).toFixed(2)+'%' : '—';
+
+  const volChartWrap = document.getElementById('volChartWrap');
+  const rollingVol = rollingVolatility1Y(daily);
+  const tooltip = document.createElement('div'); tooltip.className='chart-tooltip';
+  if(rollingVol.length < 2){ volChartWrap.innerHTML = '<div class="chart-empty">Zu wenig Datenpunkte für rollierende Volatilität (min. ~30 Tage Historie nötig).</div>'; }
+  else drawLineChart(volChartWrap, tooltip, rollingVol, 2, '%');
 }
 
 function drawLineChart(container, tooltip, points, decimals, currency){
@@ -471,6 +647,11 @@ async function loadSecurity(secId){
     document.getElementById('distChartWrap').innerHTML = '<div class="chart-empty">Keine Dividendendaten.</div>';
     document.getElementById('perfBody').innerHTML = '<tr><td colspan="6" class="empty">Keine Daten.</td></tr>';
     document.getElementById('returnsBoxes').innerHTML = '';
+    document.getElementById('returnsBody').innerHTML = '<tr><td colspan="2" class="empty">Keine Daten.</td></tr>';
+    document.getElementById('heatmapWrap').innerHTML = '<div class="empty">Keine Daten.</div>';
+    document.getElementById('riskBody').innerHTML = '<tr><td colspan="4" class="empty">Keine Daten.</td></tr>';
+    document.getElementById('mddInception').textContent = '—';
+    document.getElementById('volChartWrap').innerHTML = '<div class="chart-empty">Keine Kursdaten.</div>';
     const url = new URL(location.href); url.searchParams.set('id', secId); history.replaceState(null,'',url);
     return;
   }
@@ -482,6 +663,9 @@ async function loadSecurity(secId){
   const now = new Date();
 
   const decimals = master.GroupName === 'Currency' ? 4 : 2;
+
+  renderReturnsSection(daily, now);
+  renderRiskSection(daily, now, decimals);
 
   function mondayOfThisWeek(d){ const diff=(d.getDay()+6)%7; const r=new Date(d); r.setDate(r.getDate()-diff); r.setHours(0,0,0,0); return r; }
   function wtdCutoff(d){ const monday = mondayOfThisWeek(d); const boundary = new Date(monday); boundary.setDate(boundary.getDate()-1); return endOfDay(boundary); }
