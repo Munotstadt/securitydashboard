@@ -191,11 +191,11 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     if (!r._dirty) return;
     if (r._new) {
       stmts.push({ sql:`INSERT INTO security_distributions (SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source, created_at) VALUES (?,?,?,?,?,?,?)`,
-        args:[r.SecurityID, r.DistributionAmount||null, r.Currency, r.ExDate, r.PayDate||null, r.Source, nowZurichString()] });
+        args:[r.SecurityID, r.DistributionAmount||null, r.Currency, toIsoDate(parseSwissDate(r.ExDate)), r.PayDate ? toIsoDate(parseSwissDate(r.PayDate)) : null, r.Source, nowZurichString()] });
       newRowIdxs.push(i);
     } else {
       stmts.push({ sql:`UPDATE security_distributions SET SecurityID=?, DistributionAmount=?, Currency=?, ExDate=?, PayDate=?, Source=? WHERE id=?`,
-        args:[r.SecurityID, r.DistributionAmount||null, r.Currency, r.ExDate, r.PayDate||null, r.Source, r.id] });
+        args:[r.SecurityID, r.DistributionAmount||null, r.Currency, toIsoDate(parseSwissDate(r.ExDate)), r.PayDate ? toIsoDate(parseSwissDate(r.PayDate)) : null, r.Source, r.id] });
     }
   });
   for (const id of deleteQueue) stmts.push({ sql:`DELETE FROM security_distributions WHERE id=?`, args:[id] });

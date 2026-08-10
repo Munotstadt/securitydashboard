@@ -177,16 +177,20 @@ document.getElementById('addBtn').addEventListener('click', () => {
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
   if (!tursoConfigured()) { setStatus('Bitte ⚙ Repo/Token setzen.', 'error'); document.getElementById('settingsPanel').classList.add('show'); return; }
+  for (const r of rows) {
+    if (r.PriceDate && !parseSwissDateTime(r.PriceDate)) { setStatus(`Ungültiges PriceDate "${r.PriceDate}" für SecurityID ${r.SecurityID} - erwartet dd.mm.yyyy hh:mm:ss.`, 'error'); return; }
+  }
   const stmts = []; const newRowIdxs = [];
   rows.forEach((r,i) => {
     if (!r._dirty) return;
+    const isoDate = toIsoDateTime(parseSwissDateTime(r.PriceDate));
     if (r._new) {
       stmts.push({ sql:`INSERT INTO security_prices (SecurityID, Price, PriceDate, Source, created_at) VALUES (?,?,?,?,?)`,
-        args:[r.SecurityID, r.Price||null, r.PriceDate, r.Source, nowZurichString()] });
+        args:[r.SecurityID, r.Price||null, isoDate, r.Source, nowZurichString()] });
       newRowIdxs.push(i);
     } else {
       stmts.push({ sql:`UPDATE security_prices SET SecurityID=?, Price=?, PriceDate=?, Source=? WHERE id=?`,
-        args:[r.SecurityID, r.Price||null, r.PriceDate, r.Source, r.id] });
+        args:[r.SecurityID, r.Price||null, isoDate, r.Source, r.id] });
     }
   });
   for (const id of deleteQueue) stmts.push({ sql:`DELETE FROM security_prices WHERE id=?`, args:[id] });

@@ -622,7 +622,7 @@ document.getElementById('qpSave').addEventListener('click', async () => {
   if(!price || !parseSwissDateTime(date)){ setQuickStatus('qpStatus','Bitte Preis und gültiges Datum (dd.mm.yyyy hh:mm:ss) angeben.','err'); return; }
   try{
     setQuickStatus('qpStatus','Speichere…','');
-    await tursoRun('INSERT INTO security_prices (SecurityID, Price, PriceDate, Source, created_at) VALUES (?,?,?,?,?)', [curSecId, price, date, source, nowZurichString()]);
+    await tursoRun('INSERT INTO security_prices (SecurityID, Price, PriceDate, Source, created_at) VALUES (?,?,?,?,?)', [curSecId, price, toIsoDateTime(parseSwissDateTime(date)), source, nowZurichString()]);
     setQuickStatus('qpStatus','Gespeichert ✓','ok');
     document.getElementById('qpPrice').value = '';
     await loadSecurity(curSecId);
@@ -638,7 +638,7 @@ document.getElementById('qdSave').addEventListener('click', async () => {
   try{
     setQuickStatus('qdStatus','Speichere…','');
     await tursoRun('INSERT INTO security_distributions (SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source, created_at) VALUES (?,?,?,?,?,?,?)',
-      [curSecId, amount, currency, exDate, payDate||null, source, nowZurichString()]);
+      [curSecId, amount, currency, toIsoDate(parseSwissDate(exDate)), payDate ? toIsoDate(parseSwissDate(payDate)) : null, source, nowZurichString()]);
     setQuickStatus('qdStatus','Gespeichert ✓','ok');
     document.getElementById('qdAmount').value = ''; document.getElementById('qdExDate').value = ''; document.getElementById('qdPayDate').value = '';
     await loadSecurity(curSecId);
