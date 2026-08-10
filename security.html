@@ -142,7 +142,15 @@
   <div class="detail-meta" id="pointCountNote" style="margin-top:2px;"></div>
 
   <div class="detail-meta" style="margin-top:18px;">Annual Returns</div>
-  <div class="table-wrap"><div id="annualHeatmapWrap"></div></div>
+  <div class="table-wrap">
+  <table id="annualTable">
+    <thead><tr>
+      <th>Year</th><th class="num">Price Return LC</th><th class="num">Total Return LC</th>
+      <th class="num">Cry</th><th class="num">Price Return CHF</th><th class="num">Total Return CHF</th>
+    </tr></thead>
+    <tbody id="annualBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+  </table>
+  </div>
   <div class="detail-meta" style="margin-top:8px;">IRR (CAGR seit Auflage): <span id="irrValue">—</span> · Median: <span id="medianValue">—</span></div>
 
   <div class="detail-meta" style="margin-top:18px;">Monthly Returns</div>
@@ -228,6 +236,7 @@ function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); r
 function fmtDateOnly(date){ const p = zurichParts(date); return `${p.day}.${p.month}.`; }
 function fmtMonthYear(date){ return `${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getFullYear()).slice(-2)}`; }
 function fmtDateDDMM(date){ const p = zurichParts(date); return `${p.day}.${p.month}.${p.year}`; }
+function fmtDateTimeDDMM(date){ const p = zurichParts(date); return `${p.day}.${p.month}.${p.year} ${p.hour}:${p.minute}`; }
 function fmtPct(v){ if(v===null||v===undefined||isNaN(v)) return {text:'—',dir:'flat'}; const r=Math.round(v*100)/100; const dir=r>0?'up':(r<0?'down':'flat'); return {text:`${r>0?'+':''}${r.toFixed(2)}%`, dir}; }
 function pctChange(now, ref){ return (ref===0||ref==null||now==null) ? null : ((now-ref)/ref)*100; }
 function endOfDay(d){ const r = new Date(d); r.setHours(23,59,59,999); return r; }
@@ -344,23 +353,12 @@ function heatColor(pct){
 
 function renderReturnsSection(daily, today){
   if(!daily.length){
-    document.getElementById('annualHeatmapWrap').innerHTML = '<div class="empty">Keine Daten.</div>';
     document.getElementById('irrValue').textContent = '—';
     document.getElementById('medianValue').textContent = '—';
     document.getElementById('heatmapWrap').innerHTML = '<div class="empty">Keine Daten.</div>';
     return;
   }
-  const currentYear = today.getFullYear();
-  const yearly = yearlyReturns(daily); // [{year,pct}]
-  const yearsAsc = [...yearly].sort((a,b) => a.year - b.year);
-
-  let annualHtml = `<table class="heatmap-table"><thead><tr>${yearsAsc.map(y => `<th>${y.year}${y.year===currentYear?' YTD':''}</th>`).join('')}</tr></thead><tbody><tr>`;
-  annualHtml += yearsAsc.map(y => {
-    if(y.pct===null||y.pct===undefined) return `<td class="empty-cell">·</td>`;
-    return `<td style="background:${heatColor(y.pct)}">${y.pct>=0?'+':''}${y.pct.toFixed(1)}</td>`;
-  }).join('');
-  annualHtml += `</tr></tbody></table>`;
-  document.getElementById('annualHeatmapWrap').innerHTML = annualHtml;
+  const yearly = yearlyReturns(daily); // [{year,pct}] — price-only, used for IRR/Median summary
 
   // IRR: CAGR from first to last available data point (lump-sum, buy-and-hold)
   const first = daily[0], last = daily[daily.length-1];
@@ -664,7 +662,7 @@ async function loadSecurity(secId){
     document.getElementById('distChartWrap').innerHTML = '<div class="chart-empty">Keine Dividendendaten.</div>';
     document.getElementById('perfBody').innerHTML = '<tr><td colspan="6" class="empty">Keine Daten.</td></tr>';
     document.getElementById('returnsBoxes').innerHTML = '';
-    document.getElementById('annualHeatmapWrap').innerHTML = '<div class="empty">Keine Daten.</div>';
+    document.getElementById('annualBody').innerHTML = '<tr><td colspan="6" class="empty">Keine Daten.</td></tr>';
     document.getElementById('irrValue').textContent = '—';
     document.getElementById('medianValue').textContent = '—';
     document.getElementById('heatmapWrap').innerHTML = '<div class="empty">Keine Daten.</div>';
@@ -719,7 +717,7 @@ async function loadSecurity(secId){
   const low52wRow = last52w.length ? last52w.reduce((a,b)=> b.Price<a.Price ? b : a) : null;
 
   document.getElementById('detailPrice').textContent = fmtDecimal(last.Price, decimals);
-  document.getElementById('detailMeta').textContent = `Stand ${fmtDateDDMM(last.dt)} · Quelle: ${last.Source||'—'}`;
+  document.getElementById('detailMeta').textContent = `Stand ${fmtDateTimeDDMM(last.dt)} · VN ${master.ID_Valor||'—'} · Quelle: ${last.Source||'—'}`;
 
   const oneYearAgo = daysAgo(now,365);
   const dist12m = distRows.filter(d => d.exDate > oneYearAgo && d.exDate <= now).reduce((s,d)=>s+d.amount,0);
@@ -766,25 +764,26 @@ async function loadSecurity(secId){
     }, 0);
   }
   let anyApprox = false;
-  function computePeriod(ref, cutoff){
-    if(!ref) return { priceLc:null, totalLc:null, cry:null, priceChf:null, totalChf:null, approx:false };
-    const priceLc = pctChange(last.Price, ref.Price);
-    const distSum = sumDist(ref.dt, last.dt);
-    const totalLc = ref.Price ? ((last.Price-ref.Price+distSum)/ref.Price)*100 : null;
-    const nowFx = currencyFx(endOfDay(now));
-    const refFx = currencyFx(cutoff);
+  function computePeriodBetween(fromRef, toRef){
+    if(!fromRef || !toRef) return { priceLc:null, totalLc:null, cry:null, priceChf:null, totalChf:null, approx:false };
+    const priceLc = pctChange(toRef.Price, fromRef.Price);
+    const distSum = sumDist(fromRef.dt, toRef.dt);
+    const totalLc = fromRef.Price ? ((toRef.Price-fromRef.Price+distSum)/fromRef.Price)*100 : null;
+    const toFx = currencyFx(endOfDay(toRef.dt));
+    const fromFx = currencyFx(endOfDay(fromRef.dt));
     let cry=null, priceChf=null, totalChf=null;
-    const approx = nowFx.approx || refFx.approx;
-    if(nowFx.rate!==null && refFx.rate!==null){
-      cry = refFx.rate ? ((nowFx.rate-refFx.rate)/refFx.rate)*100 : null;
-      const nowChf = last.Price*nowFx.rate, refChf = ref.Price*refFx.rate;
-      priceChf = refChf ? ((nowChf-refChf)/refChf)*100 : null;
-      const distSumChf = sumDistChf(ref.dt, last.dt);
-      totalChf = refChf ? ((nowChf-refChf+distSumChf)/refChf)*100 : null;
+    const approx = toFx.approx || fromFx.approx;
+    if(toFx.rate!==null && fromFx.rate!==null){
+      cry = fromFx.rate ? ((toFx.rate-fromFx.rate)/fromFx.rate)*100 : null;
+      const toChf = toRef.Price*toFx.rate, fromChf = fromRef.Price*fromFx.rate;
+      priceChf = fromChf ? ((toChf-fromChf)/fromChf)*100 : null;
+      const distSumChf = sumDistChf(fromRef.dt, toRef.dt);
+      totalChf = fromChf ? ((toChf-fromChf+distSumChf)/fromChf)*100 : null;
       if(approx) anyApprox = true;
     }
     return { priceLc, totalLc, cry, priceChf, totalChf, approx };
   }
+  function computePeriod(ref, cutoff){ return computePeriodBetween(ref, last); }
 
   const periods = [
     {label:'Day', ref:prev, cutoff:cutoffDay}, {label:'WTD', ref:refWtd, cutoff:cutoffWtd},
@@ -803,6 +802,23 @@ async function loadSecurity(secId){
   document.getElementById('yieldNote').textContent = yieldPct!==null
     ? `Dividend Yield (letzte 12 Monate vs. Kurs ${master.Currency||''}): ${yieldPct.toFixed(2)}%${anyApprox ? ' · * FX-Kurs genähert (kein Kurs so weit zurück verfügbar)' : ''}`
     : 'Keine Dividendendaten verfügbar.' + (anyApprox ? ' · * FX-Kurs genähert' : '');
+
+  const currentYear = now.getFullYear();
+  const annualYears = [...new Set(daily.map(p => p.dt.getFullYear()))].sort((a,b)=>b-a);
+  const annualRows = annualYears.map(y => {
+    const yearEndCutoff = endOfDay(new Date(y, 11, 31));
+    const prevYearEndCutoff = endOfDay(new Date(y-1, 11, 31));
+    const toRef = (y === currentYear) ? last : (latestOnOrBefore(daily, yearEndCutoff) || last);
+    const fromRef = latestOnOrBefore(daily, prevYearEndCutoff) || daily[0];
+    return { label: `${y}${y===currentYear?' YTD':''}`, fromRef, toRef };
+  });
+  document.getElementById('annualBody').innerHTML = annualRows.length ? annualRows.map(row => {
+    const r = computePeriodBetween(row.fromRef, row.toRef);
+    const a=fmtPct(r.priceLc), b=fmtPct(r.totalLc), cr=fmtPct(r.cry), c=fmtPct(r.priceChf), e=fmtPct(r.totalChf);
+    const mark = r.approx ? '<span title="FX-Kurs genähert.">*</span>' : '';
+    return `<tr><td>${row.label}</td><td class="chg ${a.dir}">${a.text}</td><td class="chg ${b.dir}">${b.text}</td>
+      <td class="chg ${cr.dir}">${cr.text}${mark}</td><td class="chg ${c.dir}">${c.text}${mark}</td><td class="chg ${e.dir}">${e.text}${mark}</td></tr>`;
+  }).join('') : '<tr><td colspan="6" class="empty">Keine Daten.</td></tr>';
 
   const priceChartWrap = document.getElementById('priceChartWrap');
   const distChartWrap = document.getElementById('distChartWrap');
