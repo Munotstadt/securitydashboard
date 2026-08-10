@@ -36,6 +36,9 @@
   .range52w-date{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-top:2px;}
 
   .section-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;margin:28px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  .section-title-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:28px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  .section-title-row .section-title-text{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;}
+  .section-title-row .toggle-btn{margin:0;}
   table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;}
   th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);}
   th.num{text-align:right;}
@@ -73,16 +76,29 @@
   .quick-form input, .quick-form select{width:100%;font-family:'Inter',sans-serif;font-size:14px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:3px;padding:8px 9px;outline:none;}
   .quick-form input:focus, .quick-form select:focus{border-color:var(--accent);}
   .quick-form .actions{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-top:12px;}
-  .quick-form button{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12px;letter-spacing:.04em;text-transform:uppercase;background:var(--accent);color:#fff;border:none;border-radius:3px;padding:10px 18px;cursor:pointer;}
+  .quick-form button{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:12px;letter-spacing:.04em;text-transform:uppercase;background:var(--accent);color:#fff;border:none;border-radius:3px;padding:10px 18px;cursor:pointer;white-space:nowrap;}
   .quick-form button:hover{background:#b8050f;}
   .quick-status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
   .quick-status.ok{color:var(--gain);} .quick-status.err{color:var(--loss);}
+  .quick-form-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;}
+  .quick-form-row .field{flex:1 1 120px;min-width:110px;}
+  .quick-form-row + .quick-form-row{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);}
+  .quick-form-row .quick-status{flex:0 0 auto;align-self:center;}
 
-  .master-form{margin-top:8px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;}
-  .master-form .field label{display:block;font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px;}
-  .master-form input, .master-form select{width:100%;font-family:'Inter',sans-serif;font-size:14px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:9px 10px;outline:none;}
+  .master-form{margin-top:6px;}
+  .master-form .mf-row{display:grid;gap:8px;margin-bottom:8px;}
+  .master-form .mf-row.cols-4{grid-template-columns:repeat(4,1fr);}
+  .master-form .mf-row.cols-3{grid-template-columns:repeat(3,1fr);}
+  .master-form .mf-row.cols-2{grid-template-columns:repeat(2,1fr);}
+  .master-form .mf-row.cols-1{grid-template-columns:1fr;}
+  .master-form .field label{display:block;font-family:'IBM Plex Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:3px;}
+  .master-form input, .master-form select{width:100%;font-family:'Inter',sans-serif;font-size:13px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:7px 8px;outline:none;}
   .master-form input:disabled{color:var(--muted);background:#EFF1F4;}
   .master-form input:focus, .master-form select:focus{border-color:var(--accent);}
+  @media (max-width:560px){
+    .master-form .mf-row.cols-4{grid-template-columns:repeat(2,1fr);}
+    .master-form .mf-row.cols-3{grid-template-columns:repeat(2,1fr);}
+  }
 
   .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin-bottom:8px;display:none;gap:8px;}
   .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
@@ -128,6 +144,17 @@
     <div class="range52w-wrap" id="range52wWrap"></div>
   </div>
 
+  <div class="section-title-row"><span class="section-title-text">Price Chart</span><a class="toggle-btn" id="linkPriceHistory" href="price_editor.html">📈 View Price History</a></div>
+  <div class="chart-wrap" id="priceChartWrap"><div class="chart-empty">Loading chart…</div></div>
+  <div class="toggle-row" id="priceRangeRow">
+    <button type="button" class="toggle-btn" data-range="10D">10 Days</button>
+    <button type="button" class="toggle-btn" data-range="30D">30 Days</button>
+    <button type="button" class="toggle-btn active" data-range="90D">90 Days</button>
+    <button type="button" class="toggle-btn" data-range="YTD">YTD</button>
+    <button type="button" class="toggle-btn" data-range="12M">12 Months</button>
+    <button type="button" class="toggle-btn" data-range="ALL">All</button>
+  </div>
+
   <div class="section-title">Returns</div>
   <div class="table-wrap">
   <table id="perfTable">
@@ -138,8 +165,6 @@
     <tbody id="perfBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
   </table>
   </div>
-  <div class="detail-meta" id="yieldNote" style="margin-top:8px;"></div>
-  <div class="detail-meta" id="pointCountNote" style="margin-top:2px;"></div>
 
   <div class="detail-meta" style="margin-top:18px;">Annual Returns</div>
   <div class="table-wrap">
@@ -152,6 +177,8 @@
   </table>
   </div>
   <div class="detail-meta" style="margin-top:8px;">IRR (CAGR seit Auflage): <span id="irrValue">—</span> · Median: <span id="medianValue">—</span></div>
+  <div class="detail-meta" id="yieldNote" style="margin-top:8px;"></div>
+  <div class="detail-meta" id="pointCountNote" style="margin-top:2px;"></div>
 
   <div class="detail-meta" style="margin-top:18px;">Monthly Returns</div>
   <div class="table-wrap"><div id="heatmapWrap"></div></div>
@@ -167,60 +194,40 @@
   <div class="detail-meta" style="margin-top:12px;">Rolling 1-Year Volatility (annualized)</div>
   <div class="chart-wrap" id="volChartWrap"><div class="chart-empty">Loading chart…</div></div>
 
-  <div class="section-title">Price Chart</div>
-  <div class="chart-wrap" id="priceChartWrap"><div class="chart-empty">Loading chart…</div></div>
-  <div class="chart-controls-row">
-    <div class="toggle-row" id="priceRangeRow">
-      <button type="button" class="toggle-btn" data-range="10D">10 Days</button>
-      <button type="button" class="toggle-btn" data-range="30D">30 Days</button>
-      <button type="button" class="toggle-btn active" data-range="90D">90 Days</button>
-      <button type="button" class="toggle-btn" data-range="YTD">YTD</button>
-      <button type="button" class="toggle-btn" data-range="12M">12 Months</button>
-      <button type="button" class="toggle-btn" data-range="ALL">All</button>
-    </div>
-    <div class="history-links"><a class="toggle-btn" id="linkPriceHistory" href="price_editor.html">📈 View Price History</a></div>
-  </div>
-
-  <div class="section-title">Dividend Chart</div>
+  <div class="section-title-row"><span class="section-title-text">Dividend Chart</span><a class="toggle-btn" id="linkDividendHistory" href="distribution_editor.html">💰 View Dividend History</a></div>
   <div class="chart-wrap" id="distChartWrap"><div class="chart-empty">Loading chart…</div></div>
-  <div class="chart-controls-row">
-    <div class="toggle-row" id="distRangeRow">
-      <button type="button" class="toggle-btn" data-range="12M">12 Months</button>
-      <button type="button" class="toggle-btn active" data-range="24M">24 Months</button>
-      <button type="button" class="toggle-btn" data-range="ALL">All</button>
-    </div>
-    <a class="toggle-btn" id="linkDividendHistory" href="distribution_editor.html">💰 View Dividend History</a>
+  <div class="toggle-row" id="distRangeRow">
+    <button type="button" class="toggle-btn" data-range="12M">12 Months</button>
+    <button type="button" class="toggle-btn active" data-range="24M">24 Months</button>
+    <button type="button" class="toggle-btn" data-range="ALL">All</button>
   </div>
 
-  <div class="section-title">Recent Transactions</div>
+  <div class="section-title-row"><span class="section-title-text">Recent Transactions</span><a class="toggle-btn" id="linkTransactionHistory" href="transactions_editor.html">📋 View All Transactions</a></div>
   <div class="table-wrap">
   <table id="txnTable">
     <thead><tr><th>DateTrx</th><th>Art</th><th class="num">Quantity</th><th class="num">AmtCHF</th><th class="num">AmtLC</th><th>Source</th></tr></thead>
     <tbody id="txnBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
   </table>
   </div>
-  <div class="history-links" style="margin-top:8px;"><a class="toggle-btn" id="linkTransactionHistory" href="transactions_editor.html">📋 View All Transactions</a></div>
 
-  <div class="section-title">Add Price</div>
-  <div class="quick-form" id="quickPriceForm">
-    <div class="fields">
+  <div class="section-title">Add Price / Dividend</div>
+  <div class="quick-form">
+    <div class="quick-form-row" id="quickPriceForm">
       <div class="field"><label>Price</label><input type="number" step="any" id="qpPrice"></div>
       <div class="field"><label>Date/Time</label><input type="text" id="qpDate" placeholder="dd.mm.yyyy hh:mm:ss"></div>
       <div class="field"><label>Source</label><input type="text" id="qpSource" value="manual"></div>
+      <button type="button" id="qpSave">Save Price</button>
+      <span class="quick-status" id="qpStatus"></span>
     </div>
-    <div class="actions"><span class="quick-status" id="qpStatus"></span><button type="button" id="qpSave">Save Price</button></div>
-  </div>
-
-  <div class="section-title">Add Dividend</div>
-  <div class="quick-form" id="quickDistForm">
-    <div class="fields">
+    <div class="quick-form-row" id="quickDistForm">
       <div class="field"><label>Amount</label><input type="number" step="any" id="qdAmount"></div>
       <div class="field"><label>Currency</label><input type="text" id="qdCurrency"></div>
       <div class="field"><label>Ex-Date</label><input type="text" id="qdExDate" placeholder="dd.mm.yyyy"></div>
       <div class="field"><label>Pay-Date</label><input type="text" id="qdPayDate" placeholder="dd.mm.yyyy"></div>
       <div class="field"><label>Source</label><input type="text" id="qdSource" value="manual"></div>
+      <button type="button" id="qdSave">Save Dividend</button>
+      <span class="quick-status" id="qdStatus"></span>
     </div>
-    <div class="actions"><span class="quick-status" id="qdStatus"></span><button type="button" id="qdSave">Save Dividend</button></div>
   </div>
 
   <div class="section-title">Master Data</div>
@@ -604,15 +611,24 @@ function optionList(opts, current, allowBlank){
 function renderMasterForm(master){
   const currencyOpts = CURRENCY_OPTS.map(o => `<option value="${o}" ${o===master.Currency?'selected':''}>${o}</option>`).join('');
   document.getElementById('masterForm').innerHTML = `
-    <div class="field"><label>Name</label><input type="text" id="mfName" value="${master.SecurityName||''}"></div>
-    <div class="field"><label>Currency</label><select id="mfCurrency">${currencyOpts}</select></div>
-    <div class="field"><label>Ticker</label><input type="text" id="mfTicker" value="${master.Ticker||''}"></div>
-    <div class="field"><label>ISIN</label><input type="text" id="mfIsin" value="${master.ID_ISIN||''}"></div>
-    <div class="field"><label>Valor</label><input type="number" id="mfValor" value="${master.ID_Valor||''}"></div>
-    <div class="field"><label>Collector</label><select id="mfCollector">${optionList(collectorOpts, master.Collector, true)}</select></div>
-    <div class="field"><label>DashboardGrouping</label><select id="mfGrouping">${optionList(groupingOpts, master.DashboardGrouping, true)}</select></div>
-    <div class="field"><label>Instrument</label><select id="mfInstrument">${optionList(instrumentOpts, master.Instrument, true)}</select></div>
-    <div class="field"><label>PortfolioGrouping</label><select id="mfPortfolioGrouping">${optionList(portfolioGroupingOpts, master.PortfolioGrouping, true)}</select></div>
+    <div class="mf-row cols-3">
+      <div class="field"><label>Name</label><input type="text" id="mfName" value="${master.SecurityName||''}"></div>
+      <div class="field"><label>Currency</label><select id="mfCurrency">${currencyOpts}</select></div>
+      <div class="field"><label>Instrument</label><select id="mfInstrument">${optionList(instrumentOpts, master.Instrument, true)}</select></div>
+    </div>
+    <div class="mf-row cols-4">
+      <div class="field"><label>Ticker</label><input type="text" id="mfTicker" value="${master.Ticker||''}"></div>
+      <div class="field"><label>Valor</label><input type="number" id="mfValor" value="${master.ID_Valor||''}"></div>
+      <div class="field"><label>ISIN</label><input type="text" id="mfIsin" value="${master.ID_ISIN||''}"></div>
+      <div class="field"><label>SecurityID</label><input type="text" value="${master.SecurityID||''}" disabled></div>
+    </div>
+    <div class="mf-row cols-2">
+      <div class="field"><label>DashboardGrouping</label><select id="mfGrouping">${optionList(groupingOpts, master.DashboardGrouping, true)}</select></div>
+      <div class="field"><label>PortfolioGrouping</label><select id="mfPortfolioGrouping">${optionList(portfolioGroupingOpts, master.PortfolioGrouping, true)}</select></div>
+    </div>
+    <div class="mf-row cols-1">
+      <div class="field"><label>Collector</label><select id="mfCollector">${optionList(collectorOpts, master.Collector, true)}</select></div>
+    </div>
   `;
 }
 

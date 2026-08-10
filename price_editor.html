@@ -11,25 +11,33 @@
   body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:32px 16px 80px;}
   .wrap{max-width:1100px;margin:0 auto;}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;text-transform:uppercase;letter-spacing:.02em;border-bottom:2px solid var(--accent);padding-bottom:14px;}
-  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 8px;}
-  input[type=text], select, input[type=number]{font-family:'Inter',sans-serif;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);outline:none;}
-  #filterSecurity{min-width:260px;}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:16px 0 8px;}
+  input[type=text], select, input[type=number]{font-family:'Inter',sans-serif;font-size:14px;padding:8px 9px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);outline:none;}
+  #filterSecurity{min-width:220px;}
+  #searchText{min-width:160px;}
+  .price-range{display:flex;gap:4px;align-items:center;}
+  .price-range input{width:80px;}
   button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--line);background:none;cursor:pointer;color:var(--text);}
   button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
   button:hover{border-color:var(--text);}
   button:disabled, a.disabled{opacity:.4;cursor:not-allowed;pointer-events:none;}
   .count-line{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin:0 0 14px;}
   table{width:100%;border-collapse:collapse;font-size:13px;}
-  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);background:var(--panel);}
-  td{padding:6px;border-bottom:1px solid var(--line);vertical-align:middle;}
-  td input, td select{width:100%;}
+  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px;border-bottom:1px solid var(--line);background:var(--panel);}
+  th[data-sort]{cursor:pointer;user-select:none;}
+  th[data-sort]:hover{color:var(--text);}
+  th .arrow{color:var(--accent);margin-left:2px;}
+  td{padding:2px 6px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  td input, td select{width:100%;padding:5px 7px;font-size:12.5px;}
+  tr.new-row td{background:rgba(227,6,19,0.04);}
   .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;}
   .status.error{color:#C0293D;} .status.ok{color:#1F8A6E;}
-  .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin-bottom:16px;display:none;gap:8px;}
+  .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin-top:12px;display:none;gap:8px;}
   .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
   .settings label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
   .note{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin:24px 0 0;padding-top:14px;border-top:1px solid var(--line);}
   .table-wrap{overflow-x:auto;max-height:60vh;overflow-y:auto;}
+  .footer{margin-top:14px;}
   .topnav{display:flex;gap:4px;flex-wrap:wrap;align-items:center;max-width:960px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;}
   .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
   .topnav a:hover{color:var(--text);border-color:var(--line);}
@@ -51,14 +59,38 @@
 <div class="wrap">
   <h1>Security Prices · Editor</h1>
   <div class="toolbar">
+    <input type="text" id="searchText" placeholder="Suche (Security, Source)…">
     <select id="filterSecurity"><option value="">All securities…</option></select>
+    <div class="price-range">
+      <input type="number" step="any" id="priceMin" placeholder="Preis min">
+      <span>–</span>
+      <input type="number" step="any" id="priceMax" placeholder="Preis max">
+    </div>
     <a id="linkSecurityForm" class="disabled"><button disabled id="btnSecurityForm">📈 View Security</button></a>
     <a id="linkDistributions" class="disabled"><button disabled id="btnDistributions">💰 View Distributions</button></a>
-    <button id="settingsBtn">⚙ Repo/Token</button>
     <button id="addBtn">+ New Price</button>
     <button id="saveBtn" class="primary">Save</button>
   </div>
   <div class="count-line" id="countLine">Loading…</div>
+
+  <div class="table-wrap">
+  <table>
+    <thead><tr id="headerRow">
+      <th data-sort="SecurityName">Security</th>
+      <th data-sort="Price">Price</th>
+      <th data-sort="PriceDate" style="min-width:170px;">PriceDate</th>
+      <th data-sort="Source">Source</th>
+      <th></th>
+    </tr></thead>
+    <tbody id="body"><tr><td colspan="5">Loading…</td></tr></tbody>
+  </table>
+  </div>
+  <div class="status" id="status"></div>
+  <p class="note">Zeigt die letzten 300 Einträge der Auswahl. Der Collector schreibt weiterhin regelmässig neue Zeilen in die DB; hier können einzelne Kurse manuell korrigiert oder ergänzt werden. Neu hinzugefügte Zeilen erscheinen immer zuoberst.</p>
+
+  <div class="footer">
+    <button id="settingsBtn">⚙ Repo/Token</button>
+  </div>
   <div class="settings" id="settingsPanel">
     <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
       <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="https://…turso.io"></div>
@@ -66,14 +98,6 @@
       <div style="align-self:end;"><button id="cfgSave" type="submit" class="primary">Apply</button></div>
     </form>
   </div>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>Security</th><th>Price</th><th style="min-width:170px;">PriceDate</th><th>Source</th><th></th></tr></thead>
-    <tbody id="body"><tr><td colspan="5">Loading…</td></tr></tbody>
-  </table>
-  </div>
-  <div class="status" id="status"></div>
-  <p class="note">Zeigt die letzten 300 Einträge der Auswahl (neueste zuerst). Der Collector schreibt weiterhin regelmässig neue Zeilen in die DB; hier können einzelne Kurse manuell korrigiert oder ergänzt werden.</p>
 </div>
 
 <script src="assets/turso-data.js"></script>
@@ -81,12 +105,15 @@
 let rows = [];
 let masterRows = [];
 let deleteQueue = [];
+let sortField = 'PriceDate';
+let sortDir = 'desc';
 
+function masterName(secId){ const m = masterRows.find(x => String(x.SecurityID)===String(secId)); return m ? m.SecurityName : ''; }
 function secOptions(selected) {
   return masterRows.map(m => `<option value="${m.SecurityID}" ${String(m.SecurityID)===String(selected)?'selected':''}>${m.SecurityName} · ${m.SecurityID}</option>`).join('');
 }
 function renderRow(row, idx) {
-  return `<tr data-idx="${idx}">
+  return `<tr data-idx="${idx}" class="${row._new?'new-row':''}">
     <td><select data-field="SecurityID">${secOptions(row.SecurityID)}</select></td>
     <td><input type="number" step="any" data-field="Price" value="${row.Price??''}" style="width:100px"></td>
     <td><input type="text" data-field="PriceDate" value="${row.PriceDate||''}" placeholder="dd.mm.yyyy hh:mm:ss" style="width:170px"></td>
@@ -110,16 +137,52 @@ function updateSelectionLinks(secId) {
     btnSecurityForm.disabled = true; btnDistributions.disabled = true;
   }
 }
+function compareRows(a, b, field) {
+  let av, bv;
+  switch (field) {
+    case 'SecurityName': av = masterName(a.SecurityID); bv = masterName(b.SecurityID); return String(av).toLowerCase().localeCompare(String(bv).toLowerCase());
+    case 'Price': return (Number(a.Price)||0) - (Number(b.Price)||0);
+    case 'PriceDate': return (parseSwissDateTime(a.PriceDate)||0) - (parseSwissDateTime(b.PriceDate)||0);
+    default: av = a[field]||''; bv = b[field]||''; return String(av).toLowerCase().localeCompare(String(bv).toLowerCase());
+  }
+}
+function updateSortIndicators() {
+  document.querySelectorAll('#headerRow th[data-sort]').forEach(th => {
+    th.innerHTML = th.textContent.replace(/\s*[▲▼]$/, '');
+    if (th.dataset.sort === sortField) th.innerHTML += ` <span class="arrow">${sortDir === 'asc' ? '▲' : '▼'}</span>`;
+  });
+}
+
 function renderAll(filterSecId='') {
   const body = document.getElementById('body');
-  const filtered = rows.map((r,i)=>({r,i}))
+  const search = (document.getElementById('searchText').value || '').toLowerCase().trim();
+  const priceMin = parseFloat(document.getElementById('priceMin').value);
+  const priceMax = parseFloat(document.getElementById('priceMax').value);
+
+  let filtered = rows.map((r,i)=>({r,i}))
     .filter(({r}) => !filterSecId || String(r.SecurityID) === String(filterSecId))
-    .sort((a,b) => (parseSwissDateTime(b.r.PriceDate)||0) - (parseSwissDateTime(a.r.PriceDate)||0));
+    .filter(({r}) => !search || masterName(r.SecurityID).toLowerCase().includes(search) || (r.Source||'').toLowerCase().includes(search))
+    .filter(({r}) => isNaN(priceMin) || Number(r.Price) >= priceMin)
+    .filter(({r}) => isNaN(priceMax) || Number(r.Price) <= priceMax);
 
-  document.getElementById('countLine').textContent = `Total ${rows.length} · ${filtered.length} ausgewählt`;
   updateSelectionLinks(filterSecId);
+  updateSortIndicators();
 
-  body.innerHTML = filtered.length ? filtered.slice(0,300).map(({r,i}) => renderRow(r,i)).join('') : '<tr><td colspan="5">No entries.</td></tr>';
+  // New (unsaved) rows always pinned to top; the rest sorted by the active column.
+  const newOnes = filtered.filter(({r}) => r._new);
+  const existingOnes = filtered.filter(({r}) => !r._new)
+    .sort((a,b) => { const cmp = compareRows(a.r, b.r, sortField); return sortDir === 'asc' ? cmp : -cmp; });
+  const ordered = [...newOnes, ...existingOnes];
+
+  const dates = filtered.map(({r}) => parseSwissDateTime(r.PriceDate)).filter(Boolean);
+  let rangeText = '';
+  if (dates.length) {
+    const minD = new Date(Math.min(...dates)), maxD = new Date(Math.max(...dates));
+    rangeText = ` · ${toSwissDate(minD)} – ${toSwissDate(maxD)}`;
+  }
+  document.getElementById('countLine').textContent = `Total ${rows.length} · ${filtered.length} ausgewählt${rangeText}`;
+
+  body.innerHTML = ordered.length ? ordered.slice(0,300).map(({r,i}) => renderRow(r,i)).join('') : '<tr><td colspan="5">No entries.</td></tr>';
 
   body.querySelectorAll('input, select').forEach(el => {
     el.addEventListener('change', () => {
@@ -160,7 +223,6 @@ async function load() {
     const urlId = new URLSearchParams(location.search).get('id');
     if (urlId && masterRows.some(m => String(m.SecurityID) === urlId)) { sel.value = urlId; renderAll(urlId); }
     else renderAll();
-    setStatus(`${rows.length} price entries geladen.`, 'ok');
   } catch (e) {
     document.getElementById('body').innerHTML = `<tr><td colspan="5">Error: ${e.message}</td></tr>`;
   }
@@ -168,6 +230,18 @@ async function load() {
 function setStatus(msg, cls) { const s = document.getElementById('status'); s.textContent = msg; s.className = 'status ' + (cls||''); }
 
 document.getElementById('filterSecurity').addEventListener('change', (e) => renderAll(e.target.value));
+document.getElementById('searchText').addEventListener('input', () => renderAll(document.getElementById('filterSecurity').value));
+document.getElementById('priceMin').addEventListener('input', () => renderAll(document.getElementById('filterSecurity').value));
+document.getElementById('priceMax').addEventListener('input', () => renderAll(document.getElementById('filterSecurity').value));
+
+document.querySelectorAll('#headerRow th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const field = th.dataset.sort;
+    if (sortField === field) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
+    else { sortField = field; sortDir = field === 'PriceDate' ? 'desc' : 'asc'; }
+    renderAll(document.getElementById('filterSecurity').value);
+  });
+});
 
 document.getElementById('addBtn').addEventListener('click', () => {
   const secId = document.getElementById('filterSecurity').value || (masterRows[0] && masterRows[0].SecurityID) || '';
