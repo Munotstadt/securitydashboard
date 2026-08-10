@@ -1,5 +1,5 @@
 // ============ Turso Config (Database URL + Auth Token, localStorage) ============
-const TURSO_CFG_KEY = 'TURSO_CFG';
+const TURSO_CFG_KEY = 'SECURITYDASHBOARD_TURSO_CFG';
 let TURSO = { url: '', token: '' };
 
 function tursoLoadConfig() {
@@ -40,7 +40,7 @@ function fromTursoCell(cell) {
 // ============ Session cache (sessionStorage) for read-heavy queries ============
 // Opt-in per call via tursoQuery(sql, args, ttlMs). Any non-SELECT statement in
 // a batch clears the entire cache, so edits never risk serving stale data.
-const TURSO_CACHE_PREFIX = 'TURSO_CACHE_';
+const TURSO_CACHE_PREFIX = 'SECURITYDASHBOARD_TURSO_CACHE_';
 function tursoCacheKey(sql, args) { return TURSO_CACHE_PREFIX + JSON.stringify({ sql, args }); }
 function tursoCacheGet(key, ttlMs) {
   try {
