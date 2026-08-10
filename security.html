@@ -396,7 +396,8 @@ function renderRiskSection(daily, today, decimals){
   document.getElementById('mddInception').textContent = mddInception!==null ? (mddInception*100).toFixed(2)+'%' : '—';
 
   const volChartWrap = document.getElementById('volChartWrap');
-  const rollingVol = rollingVolatility1Y(daily);
+  const rollingVolFull = rollingVolatility1Y(daily);
+  const rollingVol = rollingVolFull.filter(p => p.dt >= daysAgo(today, 365));
   const tooltip = document.createElement('div'); tooltip.className='chart-tooltip';
   if(rollingVol.length < 2){ volChartWrap.innerHTML = '<div class="chart-empty">Zu wenig Datenpunkte für rollierende Volatilität (min. ~30 Tage Historie nötig).</div>'; }
   else drawLineChart(volChartWrap, tooltip, rollingVol, 2, '%');
