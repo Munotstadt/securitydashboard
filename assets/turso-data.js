@@ -188,6 +188,19 @@ function toSwissDateTime(date) {
   const p2 = n => String(n).padStart(2, '0');
   return `${toSwissDate(date)} ${p2(date.getHours())}:${p2(date.getMinutes())}:${p2(date.getSeconds())}`;
 }
+// ISO format for writing to columns with a CHECK constraint like
+// PriceDate GLOB '????-??-??' OR '????-??-?? ??:??:??' — reading still
+// accepts both formats via parseSwissDate/parseSwissDateTime.
+function toIsoDate(date) {
+  if (!date || isNaN(date)) return '';
+  const p2 = n => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p2(date.getMonth() + 1)}-${p2(date.getDate())}`;
+}
+function toIsoDateTime(date) {
+  if (!date || isNaN(date)) return '';
+  const p2 = n => String(n).padStart(2, '0');
+  return `${toIsoDate(date)} ${p2(date.getHours())}:${p2(date.getMinutes())}:${p2(date.getSeconds())}`;
+}
 function fmtShortDateTime(date) {
   if (!date || isNaN(date)) return '—';
   const p = zurichParts(date);
