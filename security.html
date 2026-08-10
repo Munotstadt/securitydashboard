@@ -229,6 +229,7 @@
 <script>
 function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); return d; }
 function fmtDateOnly(date){ const p = zurichParts(date); return `${p.day}.${p.month}.`; }
+function fmtMonthYear(date){ return `${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getFullYear()).slice(-2)}`; }
 function fmtDateDDMM(date){ const p = zurichParts(date); return `${p.day}.${p.month}.${p.year}`; }
 function fmtPct(v){ if(v===null||v===undefined||isNaN(v)) return {text:'—',dir:'flat'}; const r=Math.round(v*100)/100; const dir=r>0?'up':(r<0?'down':'flat'); return {text:`${r>0?'+':''}${r.toFixed(2)}%`, dir}; }
 function pctChange(now, ref){ return (ref===0||ref==null||now==null) ? null : ((now-ref)/ref)*100; }
@@ -429,7 +430,7 @@ function drawLineChart(container, tooltip, points, decimals, currency){
   }
   const mid = points[Math.floor(points.length/2)];
   const xLabels = [{p:points[0],anchor:'start'},{p:mid,anchor:'middle'},{p:points[points.length-1],anchor:'end'}]
-    .map(({p,anchor}) => `<text x="${xScale(p.dt.getTime()).toFixed(1)}" y="${height-8}" text-anchor="${anchor}" font-family="IBM Plex Mono, monospace" font-size="10" fill="#767E8A">${fmtDateOnly(p.dt)}</text>`).join('');
+    .map(({p,anchor}) => `<text x="${xScale(p.dt.getTime()).toFixed(1)}" y="${height-8}" text-anchor="${anchor}" font-family="IBM Plex Mono, monospace" font-size="10" fill="#767E8A">${fmtMonthYear(p.dt)}</text>`).join('');
 
   container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Price chart">
     ${grid}<path d="${areaD}" fill="${lineColor}" opacity="0.08" stroke="none"/><path d="${d.trim()}" fill="none" stroke="${lineColor}" stroke-width="2"/>
@@ -521,7 +522,7 @@ function drawDistributionChart(container, tooltip, displayDist, allDist, currenc
     const vr=(i/4)*maxRoll, yr=yScaleRoll(vr);
     rightLabels += `<text x="${width-pad.right+8}" y="${(yr+3).toFixed(1)}" text-anchor="start" font-family="IBM Plex Mono, monospace" font-size="10" fill="#C0293D">${fmtDecimal(vr,2)}</text>`;
   }
-  const fmtMY = d => `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getFullYear()).slice(-2)}`;
+  const fmtMY = fmtMonthYear;
   let quarters = [];
   let cursor = new Date(new Date(minX).getFullYear(), new Date(minX).getMonth(), 1);
   const endD = new Date(maxX);
