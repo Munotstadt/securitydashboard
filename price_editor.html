@@ -15,8 +15,8 @@
   input[type=text], select, input[type=number]{font-family:'Inter',sans-serif;font-size:14px;padding:8px 9px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);outline:none;}
   #filterSecurity{min-width:220px;}
   #searchText{min-width:160px;}
-  .price-range{display:flex;gap:4px;align-items:center;}
-  .price-range input{width:80px;}
+  .date-range{display:flex;gap:4px;align-items:center;}
+  .date-range input{width:90px;}
   button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--line);background:none;cursor:pointer;color:var(--text);}
   button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
   button:hover{border-color:var(--text);}
@@ -61,10 +61,10 @@
   <div class="toolbar">
     <input type="text" id="searchText" placeholder="Suche (Security, Source)…">
     <select id="filterSecurity"><option value="">All securities…</option></select>
-    <div class="price-range">
-      <input type="number" step="any" id="priceMin" placeholder="Preis min">
+    <div class="date-range">
+      <input type="text" id="dateFrom" placeholder="DD.MM.YY">
       <span>–</span>
-      <input type="number" step="any" id="priceMax" placeholder="Preis max">
+      <input type="text" id="dateTo" placeholder="DD.MM.YY">
     </div>
     <a id="linkSecurityForm" class="disabled"><button disabled id="btnSecurityForm">📈 View Security</button></a>
     <a id="linkDistributions" class="disabled"><button disabled id="btnDistributions">💰 View Distributions</button></a>
@@ -109,6 +109,15 @@ let sortField = 'PriceDate';
 let sortDir = 'desc';
 
 function masterName(secId){ const m = masterRows.find(x => String(x.SecurityID)===String(secId)); return m ? m.SecurityName : ''; }
+function parseFilterDate(str){
+  if(!str) return null;
+  const m = String(str).trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})$/);
+  if(!m) return null;
+  let [, d, mo, y] = m;
+  if(y.length === 2) y = (Number(y) <= 69 ? '20' : '19') + y;
+  const dt = new Date(Number(y), Number(mo)-1, Number(d));
+  return isNaN(dt) ? null : dt;
+}
 function secOptions(selected) {
   return masterRows.map(m => `<option value="${m.SecurityID}" ${String(m.SecurityID)===String(selected)?'selected':''}>${m.SecurityName} · ${m.SecurityID}</option>`).join('');
 }
@@ -156,14 +165,15 @@ function updateSortIndicators() {
 function renderAll(filterSecId='') {
   const body = document.getElementById('body');
   const search = (document.getElementById('searchText').value || '').toLowerCase().trim();
-  const priceMin = parseFloat(document.getElementById('priceMin').value);
-  const priceMax = parseFloat(document.getElementById('priceMax').value);
+  const dateFrom = parseFilterDate(document.getElementById('dateFrom').value);
+  const dateTo = parseFilterDate(document.getElementById('dateTo').value);
+  const dateToEnd = dateTo ? new Date(dateTo.getFullYear(), dateTo.getMonth(), dateTo.getDate(), 23,59,59) : null;
 
   let filtered = rows.map((r,i)=>({r,i}))
     .filter(({r}) => !filterSecId || String(r.SecurityID) === String(filterSecId))
     .filter(({r}) => !search || masterName(r.SecurityID).toLowerCase().includes(search) || (r.Source||'').toLowerCase().includes(search))
-    .filter(({r}) => isNaN(priceMin) || Number(r.Price) >= priceMin)
-    .filter(({r}) => isNaN(priceMax) || Number(r.Price) <= priceMax);
+    .filter(({r}) => { if(!dateFrom) return true; const dt = parseSwissDateTime(r.PriceDate); return dt && dt >= dateFrom; })
+    .filter(({r}) => { if(!dateToEnd) return true; const dt = parseSwissDateTime(r.PriceDate); return dt && dt <= dateToEnd; });
 
   updateSelectionLinks(filterSecId);
   updateSortIndicators();
@@ -231,8 +241,8 @@ function setStatus(msg, cls) { const s = document.getElementById('status'); s.te
 
 document.getElementById('filterSecurity').addEventListener('change', (e) => renderAll(e.target.value));
 document.getElementById('searchText').addEventListener('input', () => renderAll(document.getElementById('filterSecurity').value));
-document.getElementById('priceMin').addEventListener('input', () => renderAll(document.getElementById('filterSecurity').value));
-document.getElementById('priceMax').addEventListener('input', () => renderAll(document.getElementById('filterSecurity').value));
+document.getElementById('dateFrom').addEventListener('input', () => renderAll(document.getElementById('filterSecurity').value));
+document.getElementById('dateTo').addEventListener('input', () => renderAll(document.getElementById('filterSecurity').value));
 
 document.querySelectorAll('#headerRow th[data-sort]').forEach(th => {
   th.addEventListener('click', () => {
