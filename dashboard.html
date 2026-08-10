@@ -69,9 +69,11 @@
   <input type="text" id="search" class="search-input" placeholder="Wertschrift suchen…">
 
   <div class="settings" id="settingsPanel">
-    <div><label>Turso Database URL</label><input type="text" id="cfgUrl" placeholder="https://munotstadtsecuritydb-munotstadt.turso.io"></div>
-    <div><label>Auth Token</label><input type="text" id="cfgToken" placeholder="eyJ…"></div>
-    <div style="align-self:end;"><button id="cfgSave">Apply</button></div>
+    <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
+      <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="https://munotstadtsecuritydb-munotstadt.turso.io"></div>
+      <div><label>Auth Token</label><input type="password" id="cfgToken" name="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…"></div>
+      <div style="align-self:end;"><button id="cfgSave" type="submit">Apply</button></div>
+    </form>
   </div>
 
   <table id="boardTable">

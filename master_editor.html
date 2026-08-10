@@ -64,9 +64,11 @@
     <button id="saveBtn" class="primary">Save</button>
   </div>
   <div class="settings" id="settingsPanel">
-    <div><label>Turso Database URL</label><input type="text" id="cfgUrl" placeholder="https://…turso.io"></div>
-    <div><label>Auth Token</label><input type="text" id="cfgToken" placeholder="eyJ…"></div>
-    <div style="align-self:end;"><button id="cfgSave" class="primary">Apply</button></div>
+    <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
+      <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="https://…turso.io"></div>
+      <div><label>Auth Token</label><input type="password" id="cfgToken" name="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…"></div>
+      <div style="align-self:end;"><button id="cfgSave" type="submit" class="primary">Apply</button></div>
+    </form>
   </div>
   <div class="table-wrap">
   <table>
