@@ -146,9 +146,16 @@ function renderRow(row, idx) {
     <td><select data-field="DashboardGrouping">${optionList(groupingOpts, row.DashboardGrouping, true)}</select></td>
     <td><select data-field="Instrument">${optionList(instrumentOpts, row.Instrument, true)}</select></td>
     <td><select data-field="PortfolioGrouping">${optionList(portfolioGroupingOpts, row.PortfolioGrouping, true)}</select></td>
-    <td><input type="text" value="${row.SecurityID||'(neu)'}" disabled style="width:60px"></td>
+    <td>${row._new
+      ? `<input type="number" data-field="SecurityID" value="${row.SecurityID||''}" style="width:70px">`
+      : `<input type="text" value="${row.SecurityID||''}" disabled style="width:70px">`}</td>
     <td><button data-del="${idx}">✕</button></td>
   </tr>`;
+}
+function suggestNextSecurityId(){
+  const START_ID = 34000;
+  const used = rows.map(r => Number(r.SecurityID)).filter(n => Number.isInteger(n) && n >= START_ID);
+  return used.length ? Math.max(...used) + 1 : START_ID;
 }
 
 function renderAll(filter='') {
@@ -232,7 +239,7 @@ document.querySelectorAll('#headerRow th[data-sort]').forEach(th => {
 });
 
 document.getElementById('addBtn').addEventListener('click', () => {
-  rows.push({SecurityID:null, SecurityName:'', Currency:'CHF', Ticker:'', ID_ISIN:'', ID_Valor:'', Collector:null, DashboardGrouping:null, Instrument:null, PortfolioGrouping:null, _dirty:true, _new:true});
+  rows.push({SecurityID: suggestNextSecurityId(), SecurityName:'', Currency:'CHF', Ticker:'', ID_ISIN:'', ID_Valor:'', Collector:null, DashboardGrouping:null, Instrument:null, PortfolioGrouping:null, _dirty:true, _new:true});
   document.getElementById('search').value = '';
   sortField = null;
   renderAll('');
@@ -242,13 +249,28 @@ document.getElementById('addBtn').addEventListener('click', () => {
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
   if (!tursoConfigured()) { setStatus('Bitte ⚙ Repo/Token setzen.', 'error'); document.getElementById('settingsPanel').classList.add('show'); return; }
+
+  const newRows = rows.filter(r => r._new);
+  for (const r of newRows) {
+    if (!Number.isInteger(Number(r.SecurityID)) || Number(r.SecurityID) <= 0) {
+      setStatus(`Ungültige SecurityID "${r.SecurityID}" für "${r.SecurityName||'(unbenannt)'}" - muss eine positive Ganzzahl sein.`, 'error');
+      return;
+    }
+  }
+  const allIds = rows.map(r => Number(r.SecurityID));
+  const dupes = allIds.filter((id, i) => allIds.indexOf(id) !== i);
+  if (dupes.length) {
+    setStatus(`Doppelte SecurityID gefunden: ${[...new Set(dupes)].join(', ')} - bitte eindeutige IDs vergeben.`, 'error');
+    return;
+  }
+
   const stmts = [];
   const newRowIdxs = [];
   rows.forEach((r, i) => {
     if (!r._dirty) return;
     if (r._new) {
-      stmts.push({ sql: `INSERT INTO security_master (SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, DashboardGrouping, Instrument, PortfolioGrouping) VALUES (?,?,?,?,?,?,?,?,?)`,
-        args: [r.SecurityName, r.Currency, r.Ticker, r.ID_ISIN, r.ID_Valor||null, r.Collector||null, r.DashboardGrouping||null, r.Instrument||null, r.PortfolioGrouping||null] });
+      stmts.push({ sql: `INSERT INTO security_master (SecurityID, SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, DashboardGrouping, Instrument, PortfolioGrouping) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        args: [Number(r.SecurityID), r.SecurityName, r.Currency, r.Ticker, r.ID_ISIN, r.ID_Valor||null, r.Collector||null, r.DashboardGrouping||null, r.Instrument||null, r.PortfolioGrouping||null] });
       newRowIdxs.push(i);
     } else {
       stmts.push({ sql: `UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, DashboardGrouping=?, Instrument=?, PortfolioGrouping=? WHERE SecurityID=?`,
