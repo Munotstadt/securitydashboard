@@ -277,61 +277,73 @@ function resolveSecurity(row, master) {
 async function handlePriceFile(file){
   const area = document.getElementById('priceUploadArea');
   area.innerHTML = '<div class="empty">Parsing…</div>';
-  const text = await file.text();
-  const { rows } = parseCSV(text);
-  const master = await ensureMasterForUpload();
+  try {
+    const text = await file.text();
+    const { rows } = parseCSV(text);
+    if (!rows.length) { area.innerHTML = '<div class="error">No data rows found in file (check the file isn\'t empty and has a header row).</div>'; return; }
+    const master = await ensureMasterForUpload();
 
-  const parsed = rows.map(row => {
-    const sec = resolveSecurity(row, master);
-    const priceRaw = findCol(row, 'Price');
-    const dateRaw = findCol(row, 'PriceDate');
-    const sourceRaw = findCol(row, 'Source') || 'CSV Upload';
-    const price = parseFloat(priceRaw);
-    const dt = parseSwissDateTime(dateRaw);
-    const errors = [];
-    if (!sec.ok) errors.push(sec.error);
-    if (priceRaw === undefined || priceRaw === '' || isNaN(price)) errors.push(`Invalid Price "${priceRaw}"`);
-    if (!dt) errors.push(`Invalid PriceDate "${dateRaw}"`);
-    return {
-      raw: row, secId: sec.ok ? sec.secId : null, secName: sec.ok ? (master.find(m=>m.SecurityID===sec.secId)||{}).SecurityName : (findCol(row,'SecurityName')||findCol(row,'SecurityID')||''),
-      price, priceDate: dt ? toSwissDateTime(dt) : null, priceDateIso: dt ? toIsoDateTime(dt) : null, source: sourceRaw, errors,
-    };
-  });
-  renderUploadPreview(area, parsed, ['secName','price','priceDate','source'],
-    ['Security','Price','PriceDate','Source'], () => importPrices(parsed));
+    const parsed = rows.map(row => {
+      const sec = resolveSecurity(row, master);
+      const priceRaw = findCol(row, 'Price');
+      const dateRaw = findCol(row, 'PriceDate');
+      const sourceRaw = findCol(row, 'Source') || 'CSV Upload';
+      const price = parseFloat(priceRaw);
+      const dt = parseSwissDateTime(dateRaw);
+      const errors = [];
+      if (!sec.ok) errors.push(sec.error);
+      if (priceRaw === undefined || priceRaw === '' || isNaN(price)) errors.push(`Invalid Price "${priceRaw}"`);
+      if (!dt) errors.push(`Invalid PriceDate "${dateRaw}"`);
+      return {
+        raw: row, secId: sec.ok ? sec.secId : null, secName: sec.ok ? (master.find(m=>m.SecurityID===sec.secId)||{}).SecurityName : (findCol(row,'SecurityName')||findCol(row,'SecurityID')||''),
+        price, priceDate: dt ? toSwissDateTime(dt) : null, priceDateIso: dt ? toIsoDateTime(dt) : null, source: sourceRaw, errors,
+      };
+    });
+    renderUploadPreview(area, parsed, ['secName','price','priceDate','source'],
+      ['Security','Price','PriceDate','Source'], () => importPrices(parsed));
+  } catch (e) {
+    console.error('CSV price upload failed:', e);
+    area.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+  }
 }
 
 async function handleDistFile(file){
   const area = document.getElementById('distUploadArea');
   area.innerHTML = '<div class="empty">Parsing…</div>';
-  const text = await file.text();
-  const { rows } = parseCSV(text);
-  const master = await ensureMasterForUpload();
+  try {
+    const text = await file.text();
+    const { rows } = parseCSV(text);
+    if (!rows.length) { area.innerHTML = '<div class="error">No data rows found in file (check the file isn\'t empty and has a header row).</div>'; return; }
+    const master = await ensureMasterForUpload();
 
-  const parsed = rows.map(row => {
-    const sec = resolveSecurity(row, master);
-    const amountRaw = findCol(row, 'DistributionAmount', 'Amount');
-    const exDateRaw = findCol(row, 'ExDate');
-    const payDateRaw = findCol(row, 'PayDate');
-    const currencyRaw = findCol(row, 'Currency');
-    const sourceRaw = findCol(row, 'Source') || 'CSV Upload';
-    const amount = parseFloat(amountRaw);
-    const exDt = parseSwissDate(exDateRaw);
-    const payDt = payDateRaw ? parseSwissDate(payDateRaw) : null;
-    const errors = [];
-    if (!sec.ok) errors.push(sec.error);
-    if (amountRaw === undefined || amountRaw === '' || isNaN(amount)) errors.push(`Invalid Amount "${amountRaw}"`);
-    if (!exDt) errors.push(`Invalid ExDate "${exDateRaw}"`);
-    if (payDateRaw && !payDt) errors.push(`Invalid PayDate "${payDateRaw}"`);
-    const currency = currencyRaw || (sec.ok ? sec.currency : '');
-    return {
-      raw: row, secId: sec.ok ? sec.secId : null, secName: sec.ok ? (master.find(m=>m.SecurityID===sec.secId)||{}).SecurityName : (findCol(row,'SecurityName')||findCol(row,'SecurityID')||''),
-      amount, currency, exDate: exDt ? toSwissDate(exDt) : null, payDate: payDt ? toSwissDate(payDt) : null,
-      exDateIso: exDt ? toIsoDate(exDt) : null, payDateIso: payDt ? toIsoDate(payDt) : null, source: sourceRaw, errors,
-    };
-  });
-  renderUploadPreview(area, parsed, ['secName','amount','currency','exDate','payDate','source'],
-    ['Security','Amount','Currency','ExDate','PayDate','Source'], () => importDistributions(parsed));
+    const parsed = rows.map(row => {
+      const sec = resolveSecurity(row, master);
+      const amountRaw = findCol(row, 'DistributionAmount', 'Amount');
+      const exDateRaw = findCol(row, 'ExDate');
+      const payDateRaw = findCol(row, 'PayDate');
+      const currencyRaw = findCol(row, 'Currency');
+      const sourceRaw = findCol(row, 'Source') || 'CSV Upload';
+      const amount = parseFloat(amountRaw);
+      const exDt = parseSwissDate(exDateRaw);
+      const payDt = payDateRaw ? parseSwissDate(payDateRaw) : null;
+      const errors = [];
+      if (!sec.ok) errors.push(sec.error);
+      if (amountRaw === undefined || amountRaw === '' || isNaN(amount)) errors.push(`Invalid Amount "${amountRaw}"`);
+      if (!exDt) errors.push(`Invalid ExDate "${exDateRaw}"`);
+      if (payDateRaw && !payDt) errors.push(`Invalid PayDate "${payDateRaw}"`);
+      const currency = currencyRaw || (sec.ok ? sec.currency : '');
+      return {
+        raw: row, secId: sec.ok ? sec.secId : null, secName: sec.ok ? (master.find(m=>m.SecurityID===sec.secId)||{}).SecurityName : (findCol(row,'SecurityName')||findCol(row,'SecurityID')||''),
+        amount, currency, exDate: exDt ? toSwissDate(exDt) : null, payDate: payDt ? toSwissDate(payDt) : null,
+        exDateIso: exDt ? toIsoDate(exDt) : null, payDateIso: payDt ? toIsoDate(payDt) : null, source: sourceRaw, errors,
+      };
+    });
+    renderUploadPreview(area, parsed, ['secName','amount','currency','exDate','payDate','source'],
+      ['Security','Amount','Currency','ExDate','PayDate','Source'], () => importDistributions(parsed));
+  } catch (e) {
+    console.error('CSV distribution upload failed:', e);
+    area.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+  }
 }
 
 function renderUploadPreview(area, parsed, fields, labels, onImport){
