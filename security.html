@@ -128,7 +128,7 @@
     <div class="range52w-wrap" id="range52wWrap"></div>
   </div>
 
-  <div class="section-title">Performance</div>
+  <div class="section-title">Returns</div>
   <div class="table-wrap">
   <table id="perfTable">
     <thead><tr>
@@ -141,14 +141,11 @@
   <div class="detail-meta" id="yieldNote" style="margin-top:8px;"></div>
   <div class="detail-meta" id="pointCountNote" style="margin-top:2px;"></div>
 
-  <div class="section-title">Returns</div>
-  <div class="table-wrap">
-  <table id="returnsTable">
-    <thead><tr><th>Period</th><th class="num">Return</th></tr></thead>
-    <tbody id="returnsBody"><tr><td colspan="2" class="empty">Loading…</td></tr></tbody>
-  </table>
-  </div>
-  <div class="detail-meta" style="margin-top:10px;">Monthly Returns</div>
+  <div class="detail-meta" style="margin-top:18px;">Annual Returns</div>
+  <div class="table-wrap"><div id="annualHeatmapWrap"></div></div>
+  <div class="detail-meta" style="margin-top:8px;">IRR (CAGR seit Auflage): <span id="irrValue">—</span> · Median: <span id="medianValue">—</span></div>
+
+  <div class="detail-meta" style="margin-top:18px;">Monthly Returns</div>
   <div class="table-wrap"><div id="heatmapWrap"></div></div>
 
   <div class="section-title">Risk</div>
@@ -346,18 +343,36 @@ function heatColor(pct){
 }
 
 function renderReturnsSection(daily, today){
-  const periods = computeReturnPeriods(daily, today);
-  const rows = [
-    ['Lfd. Jahr', periods.ytd], ['1 Monat', periods.oneMonth], ['3 Monate', periods.threeMonth],
-    ['6 Monate', periods.sixMonth], ['1 Jahr', periods.oneYear], ['3 Jahre', periods.threeYear],
-    ['5 Jahre', periods.fiveYear], ['Seit Auflage (MAX)', periods.sinceInception],
-  ];
-  const yearly = yearlyReturns(daily);
-  const allRows = [...rows, ...yearly.map(y => [String(y.year), y.pct])];
-  document.getElementById('returnsBody').innerHTML = allRows.map(([label,pct]) => {
-    const f = fmtPct(pct);
-    return `<tr><td>${label}</td><td class="chg ${f.dir}">${f.text}</td></tr>`;
+  if(!daily.length){
+    document.getElementById('annualHeatmapWrap').innerHTML = '<div class="empty">Keine Daten.</div>';
+    document.getElementById('irrValue').textContent = '—';
+    document.getElementById('medianValue').textContent = '—';
+    document.getElementById('heatmapWrap').innerHTML = '<div class="empty">Keine Daten.</div>';
+    return;
+  }
+  const currentYear = today.getFullYear();
+  const yearly = yearlyReturns(daily); // [{year,pct}]
+  const yearsAsc = [...yearly].sort((a,b) => a.year - b.year);
+
+  let annualHtml = `<table class="heatmap-table"><thead><tr>${yearsAsc.map(y => `<th>${y.year}${y.year===currentYear?' YTD':''}</th>`).join('')}</tr></thead><tbody><tr>`;
+  annualHtml += yearsAsc.map(y => {
+    if(y.pct===null||y.pct===undefined) return `<td class="empty-cell">·</td>`;
+    return `<td style="background:${heatColor(y.pct)}">${y.pct>=0?'+':''}${y.pct.toFixed(1)}</td>`;
   }).join('');
+  annualHtml += `</tr></tbody></table>`;
+  document.getElementById('annualHeatmapWrap').innerHTML = annualHtml;
+
+  // IRR: CAGR from first to last available data point (lump-sum, buy-and-hold)
+  const first = daily[0], last = daily[daily.length-1];
+  const elapsedYears = Math.max((last.dt-first.dt)/(1000*60*60*24*365.25), 0.01);
+  const irr = first.Price ? (Math.pow(last.Price/first.Price, 1/elapsedYears)-1)*100 : null;
+  document.getElementById('irrValue').textContent = irr!==null ? `${irr>=0?'+':''}${irr.toFixed(2)}%` : '—';
+
+  // Median across all displayed annual returns (including the partial current year)
+  const vals = yearly.map(y=>y.pct).filter(v=>v!==null && v!==undefined).sort((a,b)=>a-b);
+  let median = null;
+  if(vals.length){ const mid = Math.floor(vals.length/2); median = vals.length%2 ? vals[mid] : (vals[mid-1]+vals[mid])/2; }
+  document.getElementById('medianValue').textContent = median!==null ? `${median>=0?'+':''}${median.toFixed(2)}%` : '—';
 
   const { years, grid } = monthlyReturnGrid(daily);
   const monthNames = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
@@ -649,7 +664,9 @@ async function loadSecurity(secId){
     document.getElementById('distChartWrap').innerHTML = '<div class="chart-empty">Keine Dividendendaten.</div>';
     document.getElementById('perfBody').innerHTML = '<tr><td colspan="6" class="empty">Keine Daten.</td></tr>';
     document.getElementById('returnsBoxes').innerHTML = '';
-    document.getElementById('returnsBody').innerHTML = '<tr><td colspan="2" class="empty">Keine Daten.</td></tr>';
+    document.getElementById('annualHeatmapWrap').innerHTML = '<div class="empty">Keine Daten.</div>';
+    document.getElementById('irrValue').textContent = '—';
+    document.getElementById('medianValue').textContent = '—';
     document.getElementById('heatmapWrap').innerHTML = '<div class="empty">Keine Daten.</div>';
     document.getElementById('riskBody').innerHTML = '<tr><td colspan="4" class="empty">Keine Daten.</td></tr>';
     document.getElementById('mddInception').textContent = '—';
@@ -685,6 +702,17 @@ async function loadSecurity(secId){
   const refMtd = latestOnOrBefore(daily, cutoffMtd);
   const refNinety = latestOnOrBefore(daily, cutoffNinety);
   const ref360 = latestOnOrBefore(daily, cutoff360);
+
+  const cutoff3M = endOfDay(daysAgo(now,91));
+  const cutoff6M = endOfDay(daysAgo(now,182));
+  const cutoff1Y = endOfDay(daysAgo(now,365));
+  const cutoff3Y = endOfDay(daysAgo(now,365*3));
+  const cutoff5Y = endOfDay(daysAgo(now,365*5));
+  const ref3M = latestOnOrBefore(daily, cutoff3M);
+  const ref6M = latestOnOrBefore(daily, cutoff6M);
+  const ref1Y = latestOnOrBefore(daily, cutoff1Y);
+  const ref3Y = latestOnOrBefore(daily, cutoff3Y);
+  const ref5Y = latestOnOrBefore(daily, cutoff5Y);
 
   const last52w = priceRows.map(r => ({ ...r, dt: parseSwissDateTime(r.PriceDate) })).filter(r => r.dt && r.dt >= daysAgo(now,365));
   const high52wRow = last52w.length ? last52w.reduce((a,b)=> b.Price>a.Price ? b : a) : null;
@@ -760,8 +788,10 @@ async function loadSecurity(secId){
 
   const periods = [
     {label:'Day', ref:prev, cutoff:cutoffDay}, {label:'WTD', ref:refWtd, cutoff:cutoffWtd},
-    {label:'10D', ref:refTen, cutoff:cutoffTen}, {label:'MTD', ref:refMtd, cutoff:cutoffMtd},
-    {label:'90D', ref:refNinety, cutoff:cutoffNinety}, {label:'360D', ref:ref360, cutoff:cutoff360},
+    {label:'10 Days', ref:refTen, cutoff:cutoffTen}, {label:'MTD', ref:refMtd, cutoff:cutoffMtd},
+    {label:'3 Months', ref:ref3M, cutoff:cutoff3M}, {label:'6 Months', ref:ref6M, cutoff:cutoff6M},
+    {label:'1 Year', ref:ref1Y, cutoff:cutoff1Y}, {label:'3 Years', ref:ref3Y, cutoff:cutoff3Y},
+    {label:'5 Years', ref:ref5Y, cutoff:cutoff5Y},
   ];
   document.getElementById('perfBody').innerHTML = periods.map(p => {
     const r = computePeriod(p.ref, p.cutoff);
