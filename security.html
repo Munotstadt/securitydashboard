@@ -633,7 +633,7 @@ function renderRange52w(highRow, lowRow, last, decimals){
     </div>`;
 }
 
-const CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY'];
+const CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD'];
 function optionList(opts, current, allowBlank){
   let html = allowBlank ? `<option value="" ${!current?'selected':''}>—</option>` : '';
   html += opts.map(o => `<option value="${o.ParameterID}" ${String(current)===String(o.ParameterID)?'selected':''}>${o.ParameterName}</option>`).join('');
