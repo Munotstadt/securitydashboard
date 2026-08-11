@@ -129,7 +129,7 @@ async function load(){
       tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sp.ParameterName AS GroupName
               FROM security_master sm
               LEFT JOIN security_parameter sp ON sp.ParameterID = sm.DashboardGrouping
-              ORDER BY (sp.ParameterID IS NULL), sp.ParameterID ASC, sm.SecurityName ASC`, [], 3600000),
+              ORDER BY (sp.ParameterID IS NULL), sp.ParameterID ASC, sm.SecurityName COLLATE NOCASE ASC`, [], 3600000),
       tursoQuery(`SELECT SecurityID, Price, PriceDate, Source FROM security_prices`, [], 3600000),
     ]);
 

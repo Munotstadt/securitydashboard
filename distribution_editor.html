@@ -153,7 +153,7 @@ async function load() {
   try {
     const [distRows, master] = await Promise.all([
       tursoQuery('SELECT id, SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source FROM security_distributions'),
-      tursoQuery('SELECT SecurityID, SecurityName, Currency FROM security_master ORDER BY SecurityName ASC', [], 3600000),
+      tursoQuery('SELECT SecurityID, SecurityName, Currency FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC', [], 3600000),
     ]);
     rows = distRows.map(r => ({ ...r, _dirty:false, _new:false }));
     masterRows = master;

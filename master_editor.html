@@ -221,7 +221,7 @@ async function load() {
   }
   try {
     const [masterRows, collectors, groupings, instruments, portfolioGroupings] = await Promise.all([
-      tursoQuery('SELECT SecurityID, SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, DashboardGrouping, Instrument, PortfolioGrouping FROM security_master ORDER BY SecurityName ASC'),
+      tursoQuery('SELECT SecurityID, SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, DashboardGrouping, Instrument, PortfolioGrouping FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC'),
       tursoParameterOptions('security_master','Collector'),
       tursoParameterOptions('security_master','DashboardGrouping'),
       tursoParameterOptions('security_master','Instrument'),

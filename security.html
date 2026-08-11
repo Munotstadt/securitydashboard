@@ -973,7 +973,7 @@ async function load(){
                          gp.ParameterName AS GroupName
                   FROM security_master sm
                   LEFT JOIN security_parameter gp ON gp.ParameterID = sm.DashboardGrouping
-                  ORDER BY sm.SecurityName ASC`, [], 3600000),
+                  ORDER BY sm.SecurityName COLLATE NOCASE ASC`, [], 3600000),
       tursoParameterOptions('security_master','Collector'),
       tursoParameterOptions('security_master','DashboardGrouping'),
       tursoParameterOptions('security_master','Instrument'),
