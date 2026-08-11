@@ -177,12 +177,14 @@
     <tbody id="annualBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
   </table>
   </div>
+  <div id="annualToggleWrap" style="margin-top:6px;"></div>
   <div class="detail-meta" style="margin-top:8px;">IRR (CAGR seit Auflage): <span id="irrValue">—</span> · Median: <span id="medianValue">—</span></div>
   <div class="detail-meta" id="yieldNote" style="margin-top:8px;"></div>
   <div class="detail-meta" id="pointCountNote" style="margin-top:2px;"></div>
 
-  <div class="detail-meta" style="margin-top:18px;">Monthly Returns</div>
+  <div class="detail-meta" style="margin-top:18px;">Monthly Price Returns</div>
   <div class="table-wrap"><div id="heatmapWrap"></div></div>
+  <div id="monthlyToggleWrap" style="margin-top:6px;"></div>
 
   <div class="section-title">Risk</div>
   <div class="table-wrap">
@@ -195,20 +197,24 @@
   <div class="detail-meta" style="margin-top:12px;">Rolling 1-Year Volatility (annualized)</div>
   <div class="chart-wrap" id="volChartWrap"><div class="chart-empty">Loading chart…</div></div>
 
-  <div class="section-title-row"><span class="section-title-text">Dividend Chart</span><a class="toggle-btn" id="linkDividendHistory" href="distribution_editor.html">💰 View Dividend History</a></div>
-  <div class="chart-wrap" id="distChartWrap"><div class="chart-empty">Loading chart…</div></div>
-  <div class="toggle-row" id="distRangeRow">
-    <button type="button" class="toggle-btn" data-range="12M">12 Months</button>
-    <button type="button" class="toggle-btn active" data-range="24M">24 Months</button>
-    <button type="button" class="toggle-btn" data-range="ALL">All</button>
+  <div id="dividendSection">
+    <div class="section-title-row"><span class="section-title-text">Dividend Chart</span><a class="toggle-btn" id="linkDividendHistory" href="distribution_editor.html">💰 View Dividend History</a></div>
+    <div class="chart-wrap" id="distChartWrap"><div class="chart-empty">Loading chart…</div></div>
+    <div class="toggle-row" id="distRangeRow">
+      <button type="button" class="toggle-btn" data-range="12M">12 Months</button>
+      <button type="button" class="toggle-btn active" data-range="24M">24 Months</button>
+      <button type="button" class="toggle-btn" data-range="ALL">All</button>
+    </div>
   </div>
 
-  <div class="section-title-row"><span class="section-title-text">Recent Transactions</span><a class="toggle-btn" id="linkTransactionHistory" href="transactions_editor.html">📋 View All Transactions</a></div>
-  <div class="table-wrap">
-  <table id="txnTable">
-    <thead><tr><th>DateTrx</th><th>Art</th><th class="num">Quantity</th><th class="num">AmtCHF</th><th class="num">AmtLC</th><th>Source</th></tr></thead>
-    <tbody id="txnBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
-  </table>
+  <div id="transactionsSection">
+    <div class="section-title-row"><span class="section-title-text">Recent Transactions</span><a class="toggle-btn" id="linkTransactionHistory" href="transactions_editor.html">📋 View All Transactions</a></div>
+    <div class="table-wrap">
+    <table id="txnTable">
+      <thead><tr><th>DateTrx</th><th>Art</th><th class="num">Quantity</th><th class="num">AmtCHF</th><th class="num">AmtLC</th><th>Source</th></tr></thead>
+      <tbody id="txnBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+    </table>
+    </div>
   </div>
 
   <div class="section-title">Add Price / Dividend</div>
@@ -253,6 +259,12 @@ let masterAll = [];
 let curSecId = null;
 let priceRows = [];
 let distRows = [];
+let annualDataFull = [];
+let annualExpanded = false;
+let renderAnnualTable = function(){};
+let monthlyYearsFull = [];
+let monthlyGridFull = {};
+let monthlyExpanded = false;
 let collectorOpts = [];
 let groupingOpts = [];
 let instrumentOpts = [];
@@ -363,7 +375,9 @@ function renderReturnsSection(daily, today){
   if(!daily.length){
     document.getElementById('irrValue').textContent = '—';
     document.getElementById('medianValue').textContent = '—';
+    monthlyYearsFull = []; monthlyGridFull = {}; monthlyExpanded = false;
     document.getElementById('heatmapWrap').innerHTML = '<div class="empty">Keine Daten.</div>';
+    document.getElementById('monthlyToggleWrap').innerHTML = '';
     return;
   }
   const yearly = yearlyReturns(daily); // [{year,pct}] — price-only, used for IRR/Median summary
@@ -381,13 +395,21 @@ function renderReturnsSection(daily, today){
   document.getElementById('medianValue').textContent = median!==null ? `${median>=0?'+':''}${median.toFixed(2)}%` : '—';
 
   const { years, grid } = monthlyReturnGrid(daily);
+  monthlyYearsFull = years;
+  monthlyGridFull = grid;
+  monthlyExpanded = false;
+  renderMonthlyHeatmap();
+}
+
+function renderMonthlyHeatmap(){
   const monthNames = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
-  if(!years.length){ document.getElementById('heatmapWrap').innerHTML = '<div class="empty">No data.</div>'; return; }
+  if(!monthlyYearsFull.length){ document.getElementById('heatmapWrap').innerHTML = '<div class="empty">No data.</div>'; document.getElementById('monthlyToggleWrap').innerHTML = ''; return; }
+  const years = monthlyExpanded ? monthlyYearsFull : monthlyYearsFull.slice(0,6);
   let html = `<table class="heatmap-table"><thead><tr><th class="year-col"></th>${monthNames.map(m=>`<th>${m}</th>`).join('')}</tr></thead><tbody>`;
   for(const y of years){
     html += `<tr><td class="year-col">${y}</td>`;
     for(let m=0; m<12; m++){
-      const pct = grid[y][m];
+      const pct = monthlyGridFull[y][m];
       if(pct===undefined || pct===null){ html += `<td class="empty-cell">·</td>`; continue; }
       html += `<td style="background:${heatColor(pct)}">${pct>=0?'+':''}${pct.toFixed(1)}</td>`;
     }
@@ -395,6 +417,14 @@ function renderReturnsSection(daily, today){
   }
   html += `</tbody></table>`;
   document.getElementById('heatmapWrap').innerHTML = html;
+
+  const toggleWrap = document.getElementById('monthlyToggleWrap');
+  if(monthlyYearsFull.length > 6){
+    toggleWrap.innerHTML = `<button type="button" class="toggle-btn" id="monthlyToggleBtn">${monthlyExpanded ? 'Weniger anzeigen' : `Alle ${monthlyYearsFull.length} Jahre anzeigen`}</button>`;
+    document.getElementById('monthlyToggleBtn').addEventListener('click', () => { monthlyExpanded = !monthlyExpanded; renderMonthlyHeatmap(); });
+  } else {
+    toggleWrap.innerHTML = '';
+  }
 }
 
 function renderRiskSection(daily, today, decimals){
@@ -665,6 +695,8 @@ async function loadSecurity(secId){
         <td>${t.Source||''}</td>
       </tr>`).join('')
     : '<tr><td colspan="6" class="empty">No transactions for this security.</td></tr>';
+  document.getElementById('transactionsSection').style.display = txnSorted.length ? '' : 'none';
+  document.getElementById('dividendSection').style.display = distRows.length ? '' : 'none';
 
   document.getElementById('detailName').textContent = master.SecurityName;
   document.title = `${master.SecurityName} · Security Detail`;
@@ -680,9 +712,11 @@ async function loadSecurity(secId){
     document.getElementById('perfBody').innerHTML = '<tr><td colspan="6" class="empty">Keine Daten.</td></tr>';
     document.getElementById('returnsBoxes').innerHTML = '';
     document.getElementById('annualBody').innerHTML = '<tr><td colspan="6" class="empty">Keine Daten.</td></tr>';
+    document.getElementById('annualToggleWrap').innerHTML = '';
     document.getElementById('irrValue').textContent = '—';
     document.getElementById('medianValue').textContent = '—';
     document.getElementById('heatmapWrap').innerHTML = '<div class="empty">Keine Daten.</div>';
+    document.getElementById('monthlyToggleWrap').innerHTML = '';
     document.getElementById('riskBody').innerHTML = '<tr><td colspan="4" class="empty">Keine Daten.</td></tr>';
     document.getElementById('mddInception').textContent = '—';
     document.getElementById('volChartWrap').innerHTML = '<div class="chart-empty">Keine Kursdaten.</div>';
@@ -734,7 +768,8 @@ async function loadSecurity(secId){
   const low52wRow = last52w.length ? last52w.reduce((a,b)=> b.Price<a.Price ? b : a) : null;
 
   document.getElementById('detailPrice').textContent = fmtDecimal(last.Price, decimals);
-  document.getElementById('detailMeta').textContent = `Stand ${fmtDateTimeDDMM(last.dt)} · VN ${master.ID_Valor||'—'} · Quelle: ${last.Source||'—'}`;
+  const valorLabel = master.ID_Valor ? `VN ${master.ID_Valor}` : `ID ${master.SecurityID}`;
+  document.getElementById('detailMeta').textContent = `Stand ${fmtDateTimeDDMM(last.dt)} · ${valorLabel} · Quelle: ${last.Source||'—'}`;
 
   const oneYearAgo = daysAgo(now,365);
   const dist12m = distRows.filter(d => d.exDate > oneYearAgo && d.exDate <= now).reduce((s,d)=>s+d.amount,0);
@@ -802,6 +837,25 @@ async function loadSecurity(secId){
   }
   function computePeriod(ref, cutoff){ return computePeriodBetween(ref, last); }
 
+  renderAnnualTable = function(){
+    const rowsToShow = annualExpanded ? annualDataFull : annualDataFull.slice(0,6);
+    document.getElementById('annualBody').innerHTML = rowsToShow.length ? rowsToShow.map(row => {
+      const r = computePeriodBetween(row.fromRef, row.toRef);
+      const a=fmtPct(r.priceLc), b=fmtPct(r.totalLc), cr=fmtPct(r.cry), c=fmtPct(r.priceChf), e=fmtPct(r.totalChf);
+      const mark = r.approx ? '<span title="FX-Kurs genähert.">*</span>' : '';
+      return `<tr><td>${row.label}</td><td class="chg ${a.dir}">${a.text}</td><td class="chg ${b.dir}">${b.text}</td>
+        <td class="chg ${cr.dir}">${cr.text}${mark}</td><td class="chg ${c.dir}">${c.text}${mark}</td><td class="chg ${e.dir}">${e.text}${mark}</td></tr>`;
+    }).join('') : '<tr><td colspan="6" class="empty">Keine Daten.</td></tr>';
+
+    const toggleWrap = document.getElementById('annualToggleWrap');
+    if(annualDataFull.length > 6){
+      toggleWrap.innerHTML = `<button type="button" class="toggle-btn" id="annualToggleBtn">${annualExpanded ? 'Weniger anzeigen' : `Alle ${annualDataFull.length} Jahre anzeigen`}</button>`;
+      document.getElementById('annualToggleBtn').addEventListener('click', () => { annualExpanded = !annualExpanded; renderAnnualTable(); });
+    } else {
+      toggleWrap.innerHTML = '';
+    }
+  };
+
   const periods = [
     {label:'Day', ref:prev, cutoff:cutoffDay}, {label:'WTD', ref:refWtd, cutoff:cutoffWtd},
     {label:'10 Days', ref:refTen, cutoff:cutoffTen}, {label:'MTD', ref:refMtd, cutoff:cutoffMtd},
@@ -822,20 +876,15 @@ async function loadSecurity(secId){
 
   const currentYear = now.getFullYear();
   const annualYears = [...new Set(daily.map(p => p.dt.getFullYear()))].sort((a,b)=>b-a);
-  const annualRows = annualYears.map(y => {
+  annualDataFull = annualYears.map(y => {
     const yearEndCutoff = endOfDay(new Date(y, 11, 31));
     const prevYearEndCutoff = endOfDay(new Date(y-1, 11, 31));
     const toRef = (y === currentYear) ? last : (latestOnOrBefore(daily, yearEndCutoff) || last);
     const fromRef = latestOnOrBefore(daily, prevYearEndCutoff) || daily[0];
     return { label: `${y}${y===currentYear?' YTD':''}`, fromRef, toRef };
   });
-  document.getElementById('annualBody').innerHTML = annualRows.length ? annualRows.map(row => {
-    const r = computePeriodBetween(row.fromRef, row.toRef);
-    const a=fmtPct(r.priceLc), b=fmtPct(r.totalLc), cr=fmtPct(r.cry), c=fmtPct(r.priceChf), e=fmtPct(r.totalChf);
-    const mark = r.approx ? '<span title="FX-Kurs genähert.">*</span>' : '';
-    return `<tr><td>${row.label}</td><td class="chg ${a.dir}">${a.text}</td><td class="chg ${b.dir}">${b.text}</td>
-      <td class="chg ${cr.dir}">${cr.text}${mark}</td><td class="chg ${c.dir}">${c.text}${mark}</td><td class="chg ${e.dir}">${e.text}${mark}</td></tr>`;
-  }).join('') : '<tr><td colspan="6" class="empty">Keine Daten.</td></tr>';
+  annualExpanded = false;
+  renderAnnualTable();
 
   const priceChartWrap = document.getElementById('priceChartWrap');
   const distChartWrap = document.getElementById('distChartWrap');
