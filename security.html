@@ -930,7 +930,7 @@ async function load(){
       tursoParameterOptions('security_master','PortfolioGrouping'),
     ]);
     masterAll = master;
-    collectorOpts = collectors;
+    collectorOpts = [...collectors].sort((a,b) => a.ParameterName.localeCompare(b.ParameterName));
     groupingOpts = groupings;
     instrumentOpts = instruments;
     portfolioGroupingOpts = portfolioGroupings;
