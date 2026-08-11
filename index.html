@@ -6,18 +6,60 @@
 <title>securitydashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613; }
+  :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613;--gain:#1F8A6E;--loss:#C0293D; }
   *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:60px 16px;display:flex;flex-direction:column;align-items:center;}
-  .wrap{width:100%;max-width:720px;}
-  h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;text-transform:uppercase;letter-spacing:.02em;border-bottom:2px solid var(--accent);padding-bottom:16px;margin-bottom:24px;}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:40px 16px 80px;display:flex;flex-direction:column;align-items:center;}
+  .board{width:100%;max-width:960px;}
+  .eyebrow{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:2px solid var(--accent);}
+  .brand h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:.02em;margin:0;}
+  .brand span{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+  .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+  .section-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;margin:32px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+
+  .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:14px 0;}
+  .summary-box{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px 14px;}
+  .summary-label{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+  .summary-value{font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600;margin-top:4px;}
+  .summary-pct{font-family:'IBM Plex Mono',monospace;font-size:11px;margin-top:2px;}
+  .summary-value.up, .summary-pct.up{color:var(--gain);}
+  .summary-value.down, .summary-pct.down{color:var(--loss);}
+  .summary-value.flat, .summary-pct.flat{color:var(--muted);}
+
+  table{width:100%;border-collapse:collapse;margin-top:4px;}
+  thead th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:12px 8px 8px;border-bottom:1px solid var(--line);}
+  thead th.num{text-align:right;}
+  tbody td{padding:12px 8px;border-bottom:1px solid var(--line);font-size:14px;}
+  tbody tr.section-row td{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);padding:20px 8px 6px;font-weight:600;border-bottom:1px solid var(--line);}
+  .name{font-weight:500;border-left:3px solid transparent;padding-left:10px !important;}
+  tr.up .name{border-left-color:var(--gain);}
+  tr.down .name{border-left-color:var(--loss);}
+  .price,.time{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
+  .time{color:var(--muted);font-size:12px;}
+  .chg{font-family:'IBM Plex Mono',monospace;text-align:right;font-size:13px;white-space:nowrap;}
+  .chg.up{color:var(--gain);} .chg.down{color:var(--loss);} .chg.flat{color:var(--muted);}
+  .ccy{color:var(--muted);font-size:11px;margin-left:4px;}
+  .empty,.error{padding:30px 10px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  .error{color:var(--loss);}
+  .missing{color:var(--muted);font-style:italic;font-size:12px;}
+  @media (max-width:700px){ #boardTable thead th:nth-child(4), #boardTable tbody td:nth-child(4){display:none;} }
+
+  .footer{margin-top:20px;display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+  .footer button{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;}
+  .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:16px 0;display:none;gap:8px;}
+  .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
+  .settings label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
+  .settings input{font-family:'Inter',sans-serif;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;width:100%;}
+  .settings button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;}
   a.card{display:block;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:20px;text-decoration:none;color:var(--text);transition:border-color .15s ease;}
   a.card:hover{border-color:var(--accent);}
   .card h2{font-family:'Space Grotesk',sans-serif;font-size:16px;margin:0 0 6px;}
   .card p{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin:0;}
   @media (max-width:560px){ .grid{grid-template-columns:1fr;} }
-  .topnav{display:flex;gap:4px;flex-wrap:wrap;align-items:center;max-width:960px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;}
+
+  .topnav{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;align-items:center;max-width:960px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;scrollbar-width:none;}
+  .topnav::-webkit-scrollbar{display:none;}
   .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
   .topnav a:hover{color:var(--text);border-color:var(--line);}
   .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
@@ -35,8 +77,41 @@
   <a href="distribution_editor.html">💰 Distributions</a>
   <a href="admin.html">⚙️ Admin</a>
 </nav>
-<div class="wrap">
-  <h1>securitydashboard</h1>
+<div class="board">
+  <div class="eyebrow">
+    <div class="brand"><h1>securitydashboard</h1><span>munotstadtsecuritydb</span></div>
+    <div class="status" id="statusText">lädt…</div>
+  </div>
+
+  <div class="settings" id="settingsPanel">
+    <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
+      <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="https://…turso.io"></div>
+      <div><label>Auth Token</label><input type="password" id="cfgToken" name="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…"></div>
+      <div style="align-self:end;"><button id="cfgSave" type="submit">Apply</button></div>
+    </form>
+  </div>
+
+  <div class="section-title">Portfolio</div>
+  <div class="summary" id="summaryBoxes"><div class="empty">Loading…</div></div>
+
+  <div class="section-title">Markets</div>
+  <table id="boardTable">
+    <thead><tr>
+      <th>Security</th><th class="num">Last</th><th class="num">Δ Day</th>
+      <th class="num">WTD</th><th class="num">MTD</th><th class="num">YTD</th><th class="num">Zeit</th>
+    </tr></thead>
+    <tbody id="boardBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+  </table>
+
+  <div class="footer">
+    <span id="lastSynced">—</span>
+    <span>
+      <button id="settingsBtn">⚙ Repo/Token</button>
+      <button id="refreshBtn">Refresh</button>
+    </span>
+  </div>
+
+  <div class="section-title">All Tools</div>
   <div class="grid">
     <a class="card" href="dashboard.html">
       <h2>📊 Dashboard</h2>
@@ -72,5 +147,242 @@
     </a>
   </div>
 </div>
+
+<script src="assets/turso-data.js"></script>
+<script>
+const REFRESH_MS = 5 * 60 * 1000;
+
+function pctChange(now, ref){ return (ref===0||ref==null||now==null) ? null : ((now-ref)/ref)*100; }
+function fmtPct(v){
+  if (v===null||v===undefined||isNaN(v)) return {text:'—',dir:'flat'};
+  const r = Math.round(v*100)/100;
+  const dir = r>0?'up':(r<0?'down':'flat');
+  return {text:`${r>0?'+':''}${r.toFixed(2)}%`, dir};
+}
+function fmtChf(v){ return v===null||v===undefined||isNaN(v) ? '—' : v.toLocaleString('de-CH',{maximumFractionDigits:0}); }
+function fmtChfDelta(v){ if(v===null||v===undefined||isNaN(v)) return {text:'—',dir:'flat'}; const r=Math.round(v); const dir=r>0?'up':(r<0?'down':'flat'); return {text:`${r>0?'+':''}${fmtChf(r)}`, dir}; }
+
+// ============ Portfolio summary (7 tiles) — same computation as portfolio.html ============
+function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); return d; }
+function computeAllPeriods(rowsForSecurity, today){
+  const closes = dailyCloses(rowsForSecurity);
+  if(!closes.length) return {last:null, day:null, wtd:null, ten:null, mtd:null, ninety:null, threeSixty:null};
+  const last = closes[closes.length-1];
+  const day = closes.length>1 ? closes[closes.length-2] : null;
+  const dow = today.getDay();
+  const lastSunday = new Date(today.getFullYear(), today.getMonth(), today.getDate()-dow);
+  const wtdCutoff = new Date(lastSunday.getFullYear(), lastSunday.getMonth(), lastSunday.getDate()-1, 23,59,59);
+  const mtdCutoff = new Date(today.getFullYear(), today.getMonth(), 0, 23,59,59);
+  return {
+    last, day,
+    wtd: latestOnOrBefore(closes, wtdCutoff),
+    mtd: latestOnOrBefore(closes, mtdCutoff),
+    ten: latestOnOrBefore(closes, daysAgo(today,10)),
+    ninety: latestOnOrBefore(closes, daysAgo(today,90)),
+    threeSixty: latestOnOrBefore(closes, daysAgo(today,360)),
+  };
+}
+function netQuantity(secId, txnRows){
+  return txnRows.filter(t => t.SecurityID === secId && (t.TrxArtName === 'Buy' || t.TrxArtName === 'Sell'))
+    .reduce((s,t) => s + (Number(t.Quantity)||0), 0);
+}
+function pairedSums(positions, refField){
+  let curSum=0, refSum=0, n=0;
+  for(const p of positions){ if(p.valChf!==null && p[refField]!==null){ curSum+=p.valChf; refSum+=p[refField]; n++; } }
+  return { curSum, refSum, n };
+}
+function deltaFromPaired(positions, refField){
+  const { curSum, refSum, n } = pairedSums(positions, refField);
+  if(n===0) return { delta:null, pct:null };
+  const delta = curSum-refSum;
+  return { delta, pct: refSum ? (delta/refSum)*100 : null };
+}
+function summaryTile(label, positions, refField, fxImpact, totalChf){
+  const { delta, pct } = deltaFromPaired(positions, refField);
+  const f = fmtPct(pct);
+  const dir = delta===null ? 'flat' : f.dir;
+  return `<div class="summary-box">
+    <div class="summary-label">${label}</div>
+    <div class="summary-value ${dir}">${delta!==null?fmtChf(delta):'n/a'}</div>
+    <div class="summary-pct ${dir}">${f.text}</div>
+  </div>`;
+}
+function renderPortfolioSummary(total, positions){
+  document.getElementById('summaryBoxes').innerHTML = `
+    <div class="summary-box"><div class="summary-label">Portfolio Value</div><div class="summary-value">${fmtChf(total)} CHF</div></div>
+    ${summaryTile('Δ Day', positions, 'valDayChf')}
+    ${summaryTile('WTD', positions, 'valWtdChf')}
+    ${summaryTile('10D', positions, 'valTenChf')}
+    ${summaryTile('MTD', positions, 'valMtdChf')}
+    ${summaryTile('90D', positions, 'valNinetyChf')}
+    ${summaryTile('360D', positions, 'val360Chf')}
+  `;
+}
+
+// ============ Curated Markets table ============
+const CURATED_GROUPS = [
+  { name: 'Currency', items: [
+    { label: 'EUR', id: 897789 },
+    { label: 'USD', id: 275000 },
+  ]},
+  { name: 'Crypto', items: [
+    { label: 'BTC', id: 18789194 },
+    { label: 'ETH', id: 40149561 },
+    { label: 'SOL', id: 22000 },
+  ]},
+  { name: 'Index', items: [
+    { label: 'SMI Total Return', id: 22213 },
+    { label: 'SMI Price', id: 998089 },
+    { label: 'SPI', id: 998750 },
+    { label: 'S&P500 Total Return', id: 12007 },
+    { label: 'Stoxx Euro 600', id: 31008 },
+  ]},
+  { name: 'Commodities', items: [
+    { label: 'Gold/oz USD', id: 274702 },
+    { label: 'Silver/oz USD', id: 274720 },
+    { label: 'Brent Oil', id: 274207 },
+  ]},
+  { name: 'Others', items: [
+    { label: 'Rendite Eidgenossenschaft', id: 31007 },
+    { label: 'Hypothek 5 Jahre', id: 31010 },
+  ]},
+];
+function findMasterMatch(master, id){
+  return master.find(m => Number(m.SecurityID) === id) || null;
+}
+
+let currentGroups = {};
+function renderBoard(groups){
+  currentGroups = groups;
+  const body = document.getElementById('boardBody');
+  let html = '';
+  for(const groupName of Object.keys(groups)){
+    const rows = groups[groupName];
+    if(!rows.length) continue;
+    html += `<tr class="section-row"><td colspan="7">${groupName}</td></tr>`;
+    for(const r of rows){
+      if(!r.match){
+        html += `<tr><td class="name missing">${r.label} — nicht gefunden</td><td colspan="6"></td></tr>`;
+        continue;
+      }
+      const lastAmt = r.last ? r.last.Price : null;
+      const dDay = fmtPct(pctChange(lastAmt, r.prev ? r.prev.Price : null));
+      const dWtd = fmtPct(pctChange(lastAmt, r.wtd ? r.wtd.Price : null));
+      const dMtd = fmtPct(pctChange(lastAmt, r.mtd ? r.mtd.Price : null));
+      const dYtd = fmtPct(pctChange(lastAmt, r.ytd ? r.ytd.Price : null));
+      const decimals = groupName === 'Currency' ? 4 : 2;
+      const timeStr = r.last ? fmtShortDateTime(r.last.dt) : '—';
+      html += `<tr class="${dDay.dir}">
+        <td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.match.SecurityName}</a></td>
+        <td class="price">${lastAmt!==null ? fmtDecimal(lastAmt, decimals) : '—'}<span class="ccy">${r.match.Currency||''}</span></td>
+        <td class="chg ${dDay.dir}">${dDay.text}</td>
+        <td class="chg ${dWtd.dir}">${dWtd.text}</td>
+        <td class="chg ${dMtd.dir}">${dMtd.text}</td>
+        <td class="chg ${dYtd.dir}">${dYtd.text}</td>
+        <td class="time">${timeStr}</td>
+      </tr>`;
+    }
+  }
+  body.innerHTML = html || '<tr><td colspan="7" class="empty">Keine Treffer.</td></tr>';
+}
+
+async function load(){
+  if (!tursoConfigured()) {
+    document.getElementById('boardBody').innerHTML = `<tr><td colspan="7" class="error">Bitte zuerst ⚙ Repo/Token setzen.</td></tr>`;
+    document.getElementById('summaryBoxes').innerHTML = `<div class="error">Bitte zuerst ⚙ Repo/Token setzen.</div>`;
+    document.getElementById('settingsPanel').classList.add('show');
+    document.getElementById('statusText').textContent = 'nicht konfiguriert';
+    return;
+  }
+  try{
+    const [master, txns, prices] = await Promise.all([
+      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, pg.ParameterName AS PortfolioGroupName
+                  FROM security_master sm
+                  LEFT JOIN security_parameter pg ON pg.ParameterID = sm.PortfolioGrouping`, [], 3600000),
+      tursoQuery(`SELECT t.SecurityID, t.Quantity, ta.ParameterName AS TrxArtName
+                  FROM security_transactions t
+                  LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt`),
+      tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices`, [], 3600000),
+    ]);
+
+    const pricesBySecId = new Map();
+    for(const p of prices){ if(!pricesBySecId.has(p.SecurityID)) pricesBySecId.set(p.SecurityID, []); pricesBySecId.get(p.SecurityID).push(p); }
+    const today = new Date();
+    const periodsBySecId = new Map();
+    for(const m of master) periodsBySecId.set(m.SecurityID, computeAllPeriods(pricesBySecId.get(m.SecurityID) || [], today));
+
+    // ---- Portfolio 7-tile summary (FX-aware, same logic as portfolio.html) ----
+    const fxByCurrency = {};
+    for(const m of master){
+      const match = (m.SecurityName||'').trim().match(/^([A-Za-z]{3})\/CHF$/i);
+      if(match) fxByCurrency[match[1].toUpperCase()] = periodsBySecId.get(m.SecurityID);
+    }
+    function fxRate(currency, periodKey){
+      if(!currency || currency.toUpperCase()==='CHF') return 1;
+      const fx = fxByCurrency[currency.toUpperCase()];
+      return (fx && fx[periodKey]) ? fx[periodKey].Price : null;
+    }
+    function valueAt(qty, periods, periodKey, currency){
+      if(!periods || !periods[periodKey]) return null;
+      const rate = fxRate(currency, periodKey);
+      return rate!==null ? qty*periods[periodKey].Price*rate : null;
+    }
+    const positions = [];
+    let totalChf = 0;
+    for(const m of master){
+      const qty = netQuantity(m.SecurityID, txns);
+      if(Math.abs(qty) < 1e-9) continue;
+      const periods = periodsBySecId.get(m.SecurityID);
+      if(!periods || !periods.last) continue;
+      const valChf = valueAt(qty, periods, 'last', m.Currency);
+      if(valChf!==null) totalChf += valChf;
+      positions.push({
+        valChf,
+        valDayChf: valueAt(qty, periods, 'day', m.Currency),
+        valWtdChf: valueAt(qty, periods, 'wtd', m.Currency),
+        valTenChf: valueAt(qty, periods, 'ten', m.Currency),
+        valMtdChf: valueAt(qty, periods, 'mtd', m.Currency),
+        valNinetyChf: valueAt(qty, periods, 'ninety', m.Currency),
+        val360Chf: valueAt(qty, periods, 'threeSixty', m.Currency),
+      });
+    }
+    renderPortfolioSummary(totalChf, positions);
+
+    // ---- Curated Markets table (Day/WTD/MTD/YTD — same definitions as dashboard.html) ----
+    const groups = {};
+    for(const group of CURATED_GROUPS){
+      groups[group.name] = group.items.map(item => {
+        const m = findMasterMatch(master, item.id);
+        if(!m) return { label: item.label, match: null };
+        const ref = periodReferences(pricesBySecId.get(m.SecurityID) || [], today);
+        return { label: item.label, match: m, secId: m.SecurityID, last: ref.last, prev: ref.day, wtd: ref.wtd, mtd: ref.mtd, ytd: ref.ytd };
+      });
+    }
+    renderBoard(groups);
+
+    document.getElementById('statusText').textContent = 'live';
+    document.getElementById('lastSynced').textContent = `Geladen: ${nowZurichString()}`;
+  }catch(e){
+    document.getElementById('boardBody').innerHTML = `<tr><td colspan="7" class="error">Fehler: ${e.message}</td></tr>`;
+    document.getElementById('summaryBoxes').innerHTML = `<div class="error">Fehler: ${e.message}</div>`;
+    document.getElementById('statusText').textContent = 'Fehler';
+  }
+}
+
+document.getElementById('refreshBtn').addEventListener('click', () => { tursoClearCache(); load(); });
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  document.getElementById('cfgUrl').value = TURSO.url;
+  document.getElementById('cfgToken').value = TURSO.token;
+  document.getElementById('settingsPanel').classList.toggle('show');
+});
+document.getElementById('cfgSave').addEventListener('click', () => {
+  tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
+  document.getElementById('settingsPanel').classList.remove('show');
+  load();
+});
+
+load();
+setInterval(load, REFRESH_MS);
+</script>
 </body>
 </html>
