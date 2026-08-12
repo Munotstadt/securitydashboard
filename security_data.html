@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Security Data</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613;--gain:#1F8A6E;--loss:#C0293D; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:32px 16px 80px;display:flex;flex-direction:column;align-items:center;}
+  .topnav{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;align-items:center;max-width:900px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;scrollbar-width:none;}
+  .topnav::-webkit-scrollbar{display:none;}
+  .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
+  .topnav a:hover{color:var(--text);border-color:var(--line);}
+
+  .board{width:100%;max-width:900px;}
+  .toprow{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+  #securitySwitcher{background:var(--bg);border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 28px 6px 12px;border-radius:3px;cursor:pointer;min-width:220px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23767E8A'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;}
+  .toggle-btn{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;}
+  .toggle-btn:hover{border-color:var(--muted);color:var(--text);}
+
+  .detail-header{padding-bottom:14px;border-bottom:2px solid var(--accent);}
+  .detail-header h2{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;margin:0 0 6px;}
+  .detail-meta{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+
+  .section-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;margin:28px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  .section-meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;}
+  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);}
+  th.num{text-align:right;}
+  td{padding:7px 6px;border-bottom:1px solid var(--line);}
+  td.num{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
+  td.desc{color:var(--muted);font-size:12px;}
+  .empty,.error{padding:20px 6px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  .error{color:var(--loss);}
+  .table-wrap{overflow-x:auto;}
+
+  .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:16px 0;display:none;gap:8px;}
+  .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
+  .settings label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
+  .settings input{width:100%;font-family:'Inter',sans-serif;font-size:14px;padding:8px 9px;border:1px solid var(--line);border-radius:3px;background:var(--bg);color:var(--text);}
+  .settings button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <a href="index.html">🏠 Home</a>
+  <a href="dashboard.html">📊 Dashboard</a>
+  <a href="portfolio.html">💼 Portfolio</a>
+  <a href="analyser.html">🔬 Analyser</a>
+  <a href="master_editor.html">🗂 Master Data</a>
+  <a href="price_editor.html">✏️ Prices</a>
+  <a href="transactions_editor.html">📋 Transactions</a>
+  <a href="distribution_editor.html">💰 Distributions</a>
+  <a href="admin.html">⚙️ Admin</a>
+</nav>
+<div class="board">
+  <div class="toprow">
+    <select id="securitySwitcher"></select>
+    <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
+  </div>
+
+  <div class="settings" id="settingsPanel">
+    <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
+      <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="https://…turso.io"></div>
+      <div><label>Auth Token</label><input type="password" id="cfgToken" name="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…"></div>
+      <div style="align-self:end;"><button id="cfgSave" type="submit">Apply</button></div>
+    </form>
+  </div>
+
+  <div class="detail-header">
+    <h2 id="detailName">Loading…</h2>
+    <div class="detail-meta" id="detailMeta"></div>
+  </div>
+
+  <div id="sectionsWrap"><div class="empty">Loading…</div></div>
+</div>
+
+<script src="assets/turso-data.js"></script>
+<script>
+let masterAll = [];
+let curSecId = null;
+
+// DataTypes rendered in this order, each as its own section.
+const SECTION_DEFS = [
+  { dataType: 'FundOverview',   title: 'Fund Overview',    nameLabel: 'Field',  valueLabel: 'Value',  sortDesc: false },
+  { dataType: 'FundOperations', title: 'Fund Operations',  nameLabel: 'Field',  valueLabel: 'Value',  sortDesc: false },
+  { dataType: 'AssetClass',     title: 'Asset Allocation', nameLabel: 'Asset Class', valueLabel: 'Weight', sortDesc: true },
+  { dataType: 'SectorWeight',   title: 'Sector Weights',   nameLabel: 'Sector', valueLabel: 'Weight', sortDesc: true },
+  { dataType: 'BondRating',     title: 'Bond Ratings',     nameLabel: 'Rating', valueLabel: 'Weight', sortDesc: true },
+  { dataType: 'TopHolding',     title: 'Top Holdings',     nameLabel: 'Holding', valueLabel: 'Weight', sortDesc: true },
+  { dataType: 'EquityHolding',  title: 'Equity Holdings',  nameLabel: 'Holding', valueLabel: 'Weight', sortDesc: true },
+  { dataType: 'BondHolding',    title: 'Bond Holdings',    nameLabel: 'Holding', valueLabel: 'Weight', sortDesc: true },
+];
+
+function fmtValue(row){
+  if(row.NumericValue !== null && row.NumericValue !== undefined){
+    const decimals = row.Unit === '%' ? 2 : (Math.abs(row.NumericValue) >= 1000 ? 0 : 2);
+    const formatted = fmtDecimal(row.NumericValue, decimals);
+    return row.Unit ? `${formatted} ${row.Unit}` : formatted;
+  }
+  if(row.FieldValue) return row.FieldValue;
+  return '—';
+}
+
+function renderSection(def, rows){
+  if(!rows.length) return '';
+  // Keep only the latest snapshot for this DataType.
+  const maxDate = rows.reduce((max, r) => (r.AsOfDate > max ? r.AsOfDate : max), rows[0].AsOfDate);
+  let latest = rows.filter(r => r.AsOfDate === maxDate);
+  if(def.sortDesc){
+    latest = [...latest].sort((a,b) => (b.NumericValue ?? -Infinity) - (a.NumericValue ?? -Infinity));
+  }
+  const rowsHtml = latest.map(r => {
+    const name = r.ParameterName || r.FieldName || '—';
+    return `<tr><td>${name}</td><td class="num">${fmtValue(r)}</td></tr>`;
+  }).join('');
+  return `
+    <div class="section-title">${def.title}</div>
+    <div class="section-meta">Stand: ${maxDate}${latest.length !== rows.length ? ` · ${latest.length} von ${rows.length} Zeilen (ältere Snapshots ausgeblendet)` : ''}</div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>${def.nameLabel}</th><th class="num">${def.valueLabel}</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    </div>
+  `;
+}
+
+async function loadSecurity(secId){
+  curSecId = secId;
+  const master = masterAll.find(m => String(m.SecurityID) === String(secId));
+  if(!master){ document.getElementById('detailName').textContent = 'Security nicht gefunden.'; return; }
+
+  document.getElementById('detailName').textContent = master.SecurityName;
+  document.title = `${master.SecurityName} · Security Data`;
+  document.getElementById('sectionsWrap').innerHTML = '<div class="empty">Loading…</div>';
+
+  try {
+    const data = await tursoQuery(
+      `SELECT sd.DataType, sd.FieldName, sd.FieldValue, sd.NumericValue, sd.Unit, sd.AsOfDate, sp.ParameterName
+       FROM security_data sd
+       LEFT JOIN security_parameter sp ON sp.ParameterID = sd.FieldNameID
+       WHERE sd.SecurityID = ?`,
+      [secId]
+    );
+
+    document.getElementById('detailMeta').textContent = data.length
+      ? `${data.length} Datenpunkt(e) über ${new Set(data.map(r=>r.DataType)).size} Kategorie(n)`
+      : 'Keine security_data-Einträge für diese Security.';
+
+    if(!data.length){
+      document.getElementById('sectionsWrap').innerHTML = '<div class="empty">Keine Daten vorhanden — läuft der Fund-Data-Collector für diese Security?</div>';
+      const url = new URL(location.href); url.searchParams.set('id', secId); history.replaceState(null,'',url);
+      return;
+    }
+
+    const byType = {};
+    for(const row of data){ (byType[row.DataType] = byType[row.DataType] || []).push(row); }
+
+    let html = SECTION_DEFS.map(def => renderSection(def, byType[def.dataType] || [])).join('');
+
+    // Any DataType not covered by SECTION_DEFS (e.g. future 'Fundamental') gets a generic fallback section.
+    const knownTypes = new Set(SECTION_DEFS.map(d => d.dataType));
+    for(const dataType of Object.keys(byType)){
+      if(knownTypes.has(dataType)) continue;
+      html += renderSection({ dataType, title: dataType, nameLabel: 'Field', valueLabel: 'Value', sortDesc: false }, byType[dataType]);
+    }
+
+    document.getElementById('sectionsWrap').innerHTML = html || '<div class="empty">Keine Daten vorhanden.</div>';
+    const url = new URL(location.href); url.searchParams.set('id', secId); history.replaceState(null,'',url);
+  } catch (e) {
+    document.getElementById('sectionsWrap').innerHTML = `<div class="error">Fehler: ${e.message}</div>`;
+  }
+}
+
+async function load(){
+  if (!tursoConfigured()) {
+    document.getElementById('detailName').textContent = 'Bitte ⚙ Repo/Token setzen.';
+    document.getElementById('settingsPanel').classList.add('show');
+    return;
+  }
+  try {
+    masterAll = await tursoQuery('SELECT SecurityID, SecurityName FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC', [], 3600000);
+
+    const sel = document.getElementById('securitySwitcher');
+    sel.innerHTML = masterAll.map(m => `<option value="${m.SecurityID}">${m.SecurityName} · ${m.SecurityID}</option>`).join('');
+
+    const urlId = new URLSearchParams(location.search).get('id');
+    const startId = (urlId && masterAll.some(m => String(m.SecurityID)===urlId)) ? urlId : (masterAll[0] && masterAll[0].SecurityID);
+    if (!startId) { document.getElementById('detailName').textContent = 'Keine Securities vorhanden.'; return; }
+    sel.value = startId;
+    sel.addEventListener('change', () => loadSecurity(sel.value));
+    await loadSecurity(startId);
+  } catch (e) {
+    document.getElementById('detailName').textContent = 'Fehler: ' + e.message;
+  }
+}
+
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  document.getElementById('cfgUrl').value = TURSO.url;
+  document.getElementById('cfgToken').value = TURSO.token;
+  document.getElementById('settingsPanel').classList.toggle('show');
+});
+document.getElementById('cfgSave').addEventListener('click', () => {
+  tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
+  document.getElementById('settingsPanel').classList.remove('show');
+  load();
+});
+
+load();
+</script>
+</body>
+</html>
