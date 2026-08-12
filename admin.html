@@ -56,6 +56,7 @@
   .upload-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:10px;}
   .upload-actions button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 16px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
   .upload-actions button:disabled{opacity:.4;cursor:not-allowed;}
+  tr.total-row td{font-weight:600;background:var(--panel);}
 </style>
 </head>
 <body>
@@ -83,13 +84,13 @@
 
   <div class="summary" id="summaryBoxes"></div>
 
-  <div class="section-title">Prices Added Per Day (last 30 days)</div>
+  <div class="section-title">Prices Added Per Day (last 10 days)</div>
   <div class="chart-wrap" id="chartWrap"><div class="empty">Loading…</div></div>
 
   <div class="table-wrap">
-  <table>
-    <thead><tr><th>Date</th><th class="num">Prices Added</th></tr></thead>
-    <tbody id="dailyBody"><tr><td colspan="2" class="empty">Loading…</td></tr></tbody>
+  <table id="sourceTable">
+    <thead><tr id="sourceTableHead"></tr></thead>
+    <tbody id="dailyBody"><tr><td class="empty">Loading…</td></tr></tbody>
   </table>
   </div>
 
@@ -173,7 +174,7 @@ async function load(){
       tursoQuery('SELECT COUNT(*) AS n FROM security_prices'),
       tursoQuery('SELECT COUNT(*) AS n FROM security_distributions'),
       tursoQuery('SELECT COUNT(*) AS n FROM security_transactions'),
-      tursoQuery('SELECT created_at FROM security_prices'),
+      tursoQuery('SELECT created_at, Source FROM security_prices'),
     ]);
 
     document.getElementById('summaryBoxes').innerHTML = `
@@ -184,17 +185,23 @@ async function load(){
       <div class="summary-box"><div class="summary-label">Cached Queries (this tab)</div><div class="summary-value">${tursoCacheCount()}</div></div>
     `;
 
+    const DAYS_BACK = 10;
     const now = new Date();
-    const cutoff = daysAgo(now, 29); cutoff.setHours(0,0,0,0);
-    const countsByDay = new Map();
+    const cutoff = daysAgo(now, DAYS_BACK-1); cutoff.setHours(0,0,0,0);
+    const countsByDay = new Map();       // day -> total count (for the chart)
+    const countsBySourceDay = new Map(); // source -> Map(day -> count)
     for(const r of recentPrices){
       const dt = parseSwissDateTime(r.created_at);
       if(!dt || dt < cutoff) continue;
       const key = dayKey(dt);
       countsByDay.set(key, (countsByDay.get(key)||0)+1);
+      const src = r.Source || '—';
+      if(!countsBySourceDay.has(src)) countsBySourceDay.set(src, new Map());
+      const bySrc = countsBySourceDay.get(src);
+      bySrc.set(key, (bySrc.get(key)||0)+1);
     }
     const buckets = [];
-    for(let i=29; i>=0; i--){
+    for(let i=DAYS_BACK-1; i>=0; i--){
       const d = daysAgo(now, i);
       const key = dayKey(d);
       buckets.push({ key, count: countsByDay.get(key) || 0 });
@@ -203,9 +210,32 @@ async function load(){
     const tooltip = document.createElement('div'); tooltip.className='chart-tooltip';
     drawBarChart(document.getElementById('chartWrap'), tooltip, buckets);
 
-    document.getElementById('dailyBody').innerHTML = [...buckets].reverse().map(b =>
-      `<tr><td>${fmtKeyDisplay(b.key)}</td><td class="num">${b.count}</td></tr>`
-    ).join('');
+    // Matrix table: Source in rows, days in columns, Total column + Total row.
+    const dayKeys = buckets.map(b => b.key);
+    document.getElementById('sourceTableHead').innerHTML =
+      `<th>Source</th>${dayKeys.map(k => `<th class="num">${fmtKeyDisplay(k).slice(0,5)}</th>`).join('')}<th class="num">Total</th>`;
+
+    const sources = [...countsBySourceDay.keys()].sort((a,b) => a.localeCompare(b));
+    const colTotals = dayKeys.map(k => countsByDay.get(k) || 0);
+    let grandTotal = 0;
+
+    const rowsHtml = sources.map(src => {
+      const bySrc = countsBySourceDay.get(src);
+      let rowTotal = 0;
+      const cells = dayKeys.map(k => {
+        const c = bySrc.get(k) || 0;
+        rowTotal += c;
+        return `<td class="num">${c || '—'}</td>`;
+      }).join('');
+      grandTotal += rowTotal;
+      return `<tr><td>${src}</td>${cells}<td class="num">${rowTotal}</td></tr>`;
+    }).join('');
+
+    const totalCells = colTotals.map(c => `<td class="num">${c || '—'}</td>`).join('');
+    const totalRow = `<tr class="total-row"><td>Total</td>${totalCells}<td class="num">${grandTotal}</td></tr>`;
+
+    document.getElementById('dailyBody').innerHTML =
+      (rowsHtml || `<tr><td colspan="${dayKeys.length+2}" class="empty">No data</td></tr>`) + totalRow;
 
     document.getElementById('statusText').textContent = 'live · ' + nowZurichString();
   }catch(e){
