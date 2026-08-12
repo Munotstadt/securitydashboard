@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Admin</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -80,18 +80,21 @@
   .page{margin-left:212px;padding:32px 16px 80px;display:flex;flex-direction:column;align-items:center;transition:margin-left .18s ease;}
   .sidebar.collapsed + .page{margin-left:56px;}
 
+  .mobile-toggle{display:none;position:fixed;top:12px;left:12px;z-index:110;width:38px;height:38px;
+    align-items:center;justify-content:center;background:#fff;border:1px solid var(--line);border-radius:4px;
+    cursor:pointer;font-size:18px;line-height:1;color:var(--text);-webkit-tap-highlight-color:transparent;padding:0;}
+
   @media (max-width:768px){
-    .sidebar{transform:translateX(-100%);width:212px;box-shadow:2px 0 12px rgba(0,0,0,.15);}
+    .sidebar{transform:translateX(-100%);width:212px;box-shadow:2px 0 12px rgba(0,0,0,.15);
+      padding-top:calc(16px + env(safe-area-inset-top));}
     .sidebar.mobile-open{transform:translateX(0);}
     .sidebar.collapsed{width:212px;} /* on mobile "collapsed" just means hidden, not icon-only */
     .sidebar.collapsed .sidebar-brand,.sidebar.collapsed .sidebar-label{display:block;}
-    .page,.sidebar.collapsed + .page{margin-left:0;padding-top:64px;}
+    .page,.sidebar.collapsed + .page{margin-left:0;padding-top:calc(64px + env(safe-area-inset-top));}
     .sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:90;}
     .sidebar-backdrop.show{display:block;}
-    .mobile-toggle{display:flex;}
+    .mobile-toggle{display:flex;top:calc(12px + env(safe-area-inset-top));left:calc(12px + env(safe-area-inset-left));}
   }
-  .mobile-toggle{display:none;position:fixed;top:12px;left:12px;z-index:110;width:36px;height:36px;align-items:center;justify-content:center;
-    background:#fff;border:1px solid var(--line);border-radius:4px;cursor:pointer;font-size:16px;color:var(--text);}
 
 </style>
 </head>
