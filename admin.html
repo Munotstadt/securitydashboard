@@ -9,7 +9,7 @@
   :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613; }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:32px 16px 80px;display:flex;flex-direction:column;align-items:center;}
-  .topnav{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;align-items:center;max-width:960px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px[...]
+  .topnav{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;align-items:center;max-width:960px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;scrollbar-width:none;}
   .topnav::-webkit-scrollbar{display:none;}
   .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
   .topnav a:hover{color:var(--text);border-color:var(--line);}
@@ -23,7 +23,7 @@
   .summary-value{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;margin-top:4px;}
   .chart-wrap{margin:10px 0;background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:16px 12px 8px;position:relative;}
   .chart-wrap svg{display:block;width:100%;height:auto;}
-  .chart-tooltip{position:absolute;pointer-events:none;background:var(--text);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:11px;padding:5px 8px;border-radius:3px;white-space:nowrap;t[...]
+  .chart-tooltip{position:absolute;pointer-events:none;background:var(--text);color:#fff;font-family:'IBM Plex Mono',monospace;font-size:11px;padding:5px 8px;border-radius:3px;white-space:nowrap;transform:translate(-50%,-115%);display:none;z-index:5;}
   table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;}
   th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);}
   th.num{text-align:right;}
@@ -37,7 +37,7 @@
   .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
   .settings label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
   .settings input{font-family:'Inter',sans-serif;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;width:100%;}
-  .settings button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor[...]
+  .settings button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
   .footer{margin-top:14px;display:flex;justify-content:flex-end;gap:8px;}
   .footer button{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;}
   .eyebrow{display:flex;align-items:center;justify-content:space-between;width:100%;}
@@ -48,16 +48,14 @@
   .upload-summary .good{color:#1F8A6E;font-weight:600;}
   .preview-table-wrap{max-height:40vh;overflow-y:auto;overflow-x:auto;}
   .preview-table{width:100%;border-collapse:collapse;font-size:12px;min-width:700px;}
-  .preview-table th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:5px;border-bottom:1px solid var(--l[...]
+  .preview-table th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:5px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);}
   .preview-table td{padding:4px 5px;border-bottom:1px solid var(--line);white-space:nowrap;}
   .preview-table tr.row-error td{background:rgba(192,41,61,0.06);}
   .preview-table td.status-ok{color:#1F8A6E;font-family:'IBM Plex Mono',monospace;font-size:11px;}
   .preview-table td.status-err{color:#C0293D;font-family:'IBM Plex Mono',monospace;font-size:11px;}
   .upload-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:10px;}
-  .upload-actions button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 16px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;[...]
+  .upload-actions button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 16px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
   .upload-actions button:disabled{opacity:.4;cursor:not-allowed;}
-  .sources-cell{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);}
-  .source-item{display:block;padding:2px 0;}
 </style>
 </head>
 <body>
@@ -77,8 +75,8 @@
 
   <div class="settings" id="settingsPanel">
     <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
-      <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeho[...]
-      <div><label>Auth Token</label><input type="password" id="cfgToken" name="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…">[...]
+      <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="https://…turso.io"></div>
+      <div><label>Auth Token</label><input type="password" id="cfgToken" name="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…"></div>
       <div style="align-self:end;"><button id="cfgSave" type="submit">Apply</button></div>
     </form>
   </div>
@@ -88,11 +86,10 @@
   <div class="section-title">Prices Added Per Day (last 30 days)</div>
   <div class="chart-wrap" id="chartWrap"><div class="empty">Loading…</div></div>
 
-  <div class="section-title">Recent Prices (last 10 days)</div>
   <div class="table-wrap">
   <table>
-    <thead><tr><th>Date</th><th class="num">Total</th><th>Sources</th></tr></thead>
-    <tbody id="dailyBody"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody>
+    <thead><tr><th>Date</th><th class="num">Prices Added</th></tr></thead>
+    <tbody id="dailyBody"><tr><td colspan="2" class="empty">Loading…</td></tr></tbody>
   </table>
   </div>
 
@@ -102,7 +99,7 @@
   <div id="priceUploadArea"></div>
 
   <div class="section-title">Upload Distributions (CSV)</div>
-  <p class="note">Columns: <code>SecurityID</code> or <code>SecurityName</code>, <code>DistributionAmount</code>, <code>Currency</code> (optional), <code>ExDate</code>, <code>PayDate</code> (opti[...]
+  <p class="note">Columns: <code>SecurityID</code> or <code>SecurityName</code>, <code>DistributionAmount</code>, <code>Currency</code> (optional), <code>ExDate</code>, <code>PayDate</code> (optional), <code>Source</code> (optional).</p>
   <input type="file" id="distFile" accept=".csv,text/csv">
   <div id="distUploadArea"></div>
 
@@ -137,7 +134,7 @@ function drawBarChart(container, tooltip, buckets){
   let bars = '';
   buckets.forEach((b,i) => {
     const x = xScale(i)+barW*0.15, w = barW*0.7, y = yScale(b.count), h = (pad.top+innerH)-y;
-    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0,h).toFixed(1)}" fill="#E30613" opacity="0.7" class="bar-pt" data-date="${fmtKeyDisplay(b.ke[...]
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0,h).toFixed(1)}" fill="#E30613" opacity="0.7" class="bar-pt" data-date="${fmtKeyDisplay(b.key)}" data-count="${b.count}"/>`;
   });
   const step = Math.ceil(buckets.length/8);
   let xLabels = '';
@@ -176,7 +173,7 @@ async function load(){
       tursoQuery('SELECT COUNT(*) AS n FROM security_prices'),
       tursoQuery('SELECT COUNT(*) AS n FROM security_distributions'),
       tursoQuery('SELECT COUNT(*) AS n FROM security_transactions'),
-      tursoQuery('SELECT created_at, Source FROM security_prices'),
+      tursoQuery('SELECT created_at FROM security_prices'),
     ]);
 
     document.getElementById('summaryBoxes').innerHTML = `
@@ -190,40 +187,24 @@ async function load(){
     const now = new Date();
     const cutoff = daysAgo(now, 29); cutoff.setHours(0,0,0,0);
     const countsByDay = new Map();
-    const sourcesByDay = new Map();
-    
     for(const r of recentPrices){
       const dt = parseSwissDateTime(r.created_at);
       if(!dt || dt < cutoff) continue;
       const key = dayKey(dt);
       countsByDay.set(key, (countsByDay.get(key)||0)+1);
-      
-      if (!sourcesByDay.has(key)) sourcesByDay.set(key, new Set());
-      if (r.Source) sourcesByDay.get(key).add(r.Source);
     }
-    
     const buckets = [];
     for(let i=29; i>=0; i--){
       const d = daysAgo(now, i);
       const key = dayKey(d);
-      buckets.push({ 
-        key, 
-        count: countsByDay.get(key) || 0,
-        sources: sourcesByDay.get(key) ? Array.from(sourcesByDay.get(key)).sort() : []
-      });
+      buckets.push({ key, count: countsByDay.get(key) || 0 });
     }
 
     const tooltip = document.createElement('div'); tooltip.className='chart-tooltip';
     drawBarChart(document.getElementById('chartWrap'), tooltip, buckets);
 
-    // Show only last 10 days in table, reversed (newest first)
-    const last10 = [...buckets].slice(-10).reverse();
-    document.getElementById('dailyBody').innerHTML = last10.map(b =>
-      `<tr>
-        <td>${fmtKeyDisplay(b.key)}</td>
-        <td class="num">${b.count}</td>
-        <td class="sources-cell">${b.sources.length > 0 ? b.sources.map(s => `<span class="source-item">${s}</span>`).join('') : '—'}</td>
-      </tr>`
+    document.getElementById('dailyBody').innerHTML = [...buckets].reverse().map(b =>
+      `<tr><td>${fmtKeyDisplay(b.key)}</td><td class="num">${b.count}</td></tr>`
     ).join('');
 
     document.getElementById('statusText').textContent = 'live · ' + nowZurichString();
