@@ -80,6 +80,7 @@
 let rows = [];
 let masterRows = [];
 let deleteQueue = [];
+const CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD'];
 
 function secOptions(selected) {
   return masterRows.map(m => `<option value="${m.SecurityID}" ${String(m.SecurityID)===String(selected)?'selected':''}>${m.SecurityName} · ${m.SecurityID}</option>`).join('');
@@ -88,7 +89,7 @@ function renderRow(row, idx) {
   return `<tr data-idx="${idx}">
     <td><select data-field="SecurityID">${secOptions(row.SecurityID)}</select></td>
     <td><input type="number" step="any" data-field="DistributionAmount" value="${row.DistributionAmount??''}" style="width:100px"></td>
-    <td><input type="text" data-field="Currency" value="${row.Currency||''}" style="width:60px"></td>
+    <td><select data-field="Currency" style="width:70px">${CURRENCY_OPTS.map(c => `<option value="${c}" ${c===row.Currency?'selected':''}>${c}</option>`).join('')}</select></td>
     <td><input type="text" data-field="ExDate" value="${row.ExDate||''}" placeholder="dd.mm.yyyy" style="width:110px"></td>
     <td><input type="text" data-field="PayDate" value="${row.PayDate||''}" placeholder="dd.mm.yyyy" style="width:110px"></td>
     <td><input type="text" data-field="Source" value="${row.Source||''}"></td>
