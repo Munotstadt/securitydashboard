@@ -457,6 +457,9 @@ const UBS_SOURCE = 'UBS Quotes Import (Uploader)';
 // Learned Name->SecurityID matching lives in its own table so it survives
 // across uploads and keeps getting smarter. Created lazily (no separate
 // migration step in this repo) — idempotent, safe to call every time.
+// Enforced 1:1: ExternalName is PRIMARY KEY (one Name -> one SecurityID) and
+// we additionally check SecurityID uniqueness ourselves (see computeUbsConflicts)
+// since SQLite has no simple two-way-unique constraint across a mutable pair.
 let ubsMappingTableReady = false;
 async function ensureNameMappingTable(){
   if (ubsMappingTableReady) return;
@@ -469,12 +472,14 @@ async function ensureNameMappingTable(){
   )`);
   ubsMappingTableReady = true;
 }
-let nameMappingCache = null;
+let nameMappingCache = null;        // ExternalName -> SecurityID
+let nameMappingReverseCache = null; // SecurityID -> ExternalName
 async function ensureNameMapping(){
   await ensureNameMappingTable();
   if (!nameMappingCache) {
     const rows = await tursoQuery('SELECT ExternalName, SecurityID FROM security_name_mapping');
     nameMappingCache = new Map(rows.map(r => [r.ExternalName, r.SecurityID]));
+    nameMappingReverseCache = new Map(rows.map(r => [r.SecurityID, r.ExternalName]));
   }
   return nameMappingCache;
 }
@@ -536,7 +541,7 @@ async function handleUbsFile(file){
     });
     if (!raw.length) { area.innerHTML = '<div class="error">Keine Datenzeilen gefunden (Spalte "Name" fehlt oder Datei leer).</div>'; return; }
 
-    const parsed = raw.map(({ sheet, row }) => {
+    const parsed = raw.map(({ sheet, row }, i) => {
       const name = (row.Name || '').toString().trim();
       const priceRaw = row.Price;
       const price = parseFloat(priceRaw);
@@ -546,19 +551,68 @@ async function handleUbsFile(file){
       if (priceRaw === undefined || priceRaw === '' || isNaN(price)) errors.push(`Kein Kurs "${priceRaw ?? ''}"`);
       if (td.error) errors.push(td.error);
       return {
-        sheet, excelName: name, priceRaw, price: isNaN(price) ? null : price,
+        _idx: i, sheet, excelName: name, priceRaw, price: isNaN(price) ? null : price,
         priceDateIso: td.iso, priceDateDisplay: td.display,
         secId: sec.secId, secName: sec.secName, matchType: sec.matchType,
-        errors, duplicate: false,
+        errors, conflict: null, duplicate: false,
       };
     });
 
+    ubsSort = { key: null, dir: 1 };
     await markUbsDuplicates(parsed);
+    computeUbsConflicts(parsed);
     renderUbsPreview(area, parsed, master);
   } catch (e) {
     console.error('UBS Excel upload failed:', e);
     area.innerHTML = `<div class="error">Error: ${e.message}</div>`;
   }
+}
+
+// Enforces 1:1 Name<->SecurityID:
+// - two different Excel names in this file pointing at the same Security -> conflict
+// - the same Excel name pointing at two different Securities in this file -> conflict
+// - a Security already learned under a different name in security_name_mapping -> conflict
+function computeUbsConflicts(parsed){
+  const byName = new Map(); // excelName -> Set(secId)
+  const bySec = new Map();  // secId -> Set(excelName)
+  parsed.forEach(p => {
+    if (!p.secId) return;
+    if (!byName.has(p.excelName)) byName.set(p.excelName, new Set());
+    byName.get(p.excelName).add(p.secId);
+    if (!bySec.has(p.secId)) bySec.set(p.secId, new Set());
+    bySec.get(p.secId).add(p.excelName);
+  });
+  parsed.forEach(p => {
+    p.conflict = null;
+    if (!p.secId) return;
+    if (byName.get(p.excelName).size > 1) { p.conflict = `Name "${p.excelName}" ist in dieser Datei mehreren Securities zugeordnet`; return; }
+    if (bySec.get(p.secId).size > 1) { p.conflict = `Diese Security ist in dieser Datei mehreren Namen zugeordnet`; return; }
+    const savedName = nameMappingReverseCache && nameMappingReverseCache.get(p.secId);
+    if (savedName && savedName !== p.excelName) { p.conflict = `Security ist bereits dem Namen "${savedName}" zugeordnet`; }
+  });
+}
+
+// ---- Column sorting ----
+let ubsSort = { key: null, dir: 1 };
+function ubsSortedRows(parsed){
+  if (!ubsSort.key) return parsed;
+  const key = ubsSort.key, dir = ubsSort.dir;
+  const val = p => {
+    switch (key) {
+      case 'sheet': return p.sheet || '';
+      case 'name': return p.excelName || '';
+      case 'security': return p.secName || '';
+      case 'price': return p.price === null ? -Infinity : p.price;
+      case 'date': return p.priceDateIso || '';
+      default: return '';
+    }
+  };
+  return parsed.map((p, i) => ({ p, i })).sort((a, b) => {
+    const va = val(a.p), vb = val(b.p);
+    let cmp = (typeof va === 'number' && typeof vb === 'number') ? va - vb : String(va).localeCompare(String(vb), 'de');
+    if (cmp === 0) cmp = a.i - b.i;
+    return cmp * dir;
+  }).map(x => x.p);
 }
 
 // Dedup key = (SecurityID, calendar date, price) — matches the requirement
@@ -586,27 +640,32 @@ async function markUbsDuplicates(parsed){
 function ubsRowStatus(p){
   if (p.errors.length) return 'err';
   if (!p.secId) return 'unmatched';
+  if (p.conflict) return 'conflict';
   if (p.duplicate) return 'skip';
   return 'ok';
 }
 
 function renderUbsPreview(area, parsed, master){
   const sortedMaster = master.slice().sort((a, b) => a.SecurityName.localeCompare(b.SecurityName));
-  const masterOptionsHtml = '<option value="">— wählen —</option>' +
-    sortedMaster.map(m => `<option value="${m.SecurityID}">${m.SecurityName}</option>`).join('');
+  const optionsFor = (selectedId) => '<option value="">— wählen —</option>' +
+    sortedMaster.map(m => `<option value="${m.SecurityID}" ${String(m.SecurityID) === String(selectedId) ? 'selected' : ''}>${m.SecurityName}</option>`).join('');
 
-  const counts = { ok: 0, err: 0, unmatched: 0, skip: 0 };
+  const counts = { ok: 0, err: 0, unmatched: 0, conflict: 0, skip: 0 };
   parsed.forEach(p => counts[ubsRowStatus(p)]++);
   const summary = `${parsed.length} Zeilen · <span class="good">${counts.ok} bereit</span>` +
     (counts.unmatched ? ` · <span class="bad">${counts.unmatched} ohne Zuordnung</span>` : '') +
+    (counts.conflict ? ` · <span class="bad">${counts.conflict} Konflikt(e)</span>` : '') +
     (counts.err ? ` · <span class="bad">${counts.err} mit Fehler</span>` : '') +
     (counts.skip ? ` · ${counts.skip} bereits vorhanden (übersprungen)` : '');
 
-  const rowsHtml = parsed.map((p, i) => {
+  const arrow = key => ubsSort.key === key ? (ubsSort.dir === 1 ? ' ▲' : ' ▼') : '';
+  const rows = ubsSortedRows(parsed);
+  const rowsHtml = rows.map(p => {
+    const i = p._idx;
     const status = ubsRowStatus(p);
-    const secCell = p.secId
-      ? `${p.secName}${p.matchType === 'auto' ? ' <span title="automatisch per Namen erkannt, wird gelernt">🔎</span>' : (p.matchType === 'mapping' ? ' <span title="gelerntes Matching">✓</span>' : '')}`
-      : `<select data-i="${i}" class="ubs-sec-select">${masterOptionsHtml}</select>`;
+    const matchBadge = p.matchType === 'auto' ? ' <span title="automatisch per Namen erkannt, wird gelernt">🔎</span>'
+      : p.matchType === 'mapping' ? ' <span title="gelerntes Matching">✓</span>' : '';
+    const secCell = `<select data-i="${i}" class="ubs-sec-select">${optionsFor(p.secId)}</select>${p.secId ? matchBadge : ''}`;
     const priceCell = p.price !== null
       ? fmtDecimal(p.price, 4)
       : `<input type="text" data-i="${i}" class="ubs-price-input" value="${p.priceRaw ?? ''}" placeholder="Kurs">`;
@@ -616,10 +675,11 @@ function renderUbsPreview(area, parsed, master){
     const statusCell = {
       ok: '<td class="status-ok">OK</td>',
       unmatched: '<td class="status-err">Kein Match</td>',
+      conflict: `<td class="status-err">${p.conflict}</td>`,
       err: `<td class="status-err">${p.errors.join('; ')}</td>`,
       skip: '<td class="status-skip">Bereits vorhanden</td>',
     }[status];
-    return `<tr class="${status === 'err' || status === 'unmatched' ? 'row-error' : (status === 'skip' ? 'row-skip' : '')}">
+    return `<tr class="${status === 'err' || status === 'unmatched' || status === 'conflict' ? 'row-error' : (status === 'skip' ? 'row-skip' : '')}">
       <td>${p.sheet}</td><td>${p.excelName}</td><td>${secCell}</td><td class="num">${priceCell}</td><td>${dateCell}</td>${statusCell}
     </tr>`;
   }).join('');
@@ -627,7 +687,14 @@ function renderUbsPreview(area, parsed, master){
   area.innerHTML = `<div class="upload-box">
     <div class="upload-summary">${summary}</div>
     <div class="preview-table-wrap"><table class="preview-table">
-      <thead><tr><th>Sheet</th><th>Name (Excel)</th><th>Security</th><th>Kurs</th><th>Datum/Zeit</th><th>Status</th></tr></thead>
+      <thead><tr>
+        <th data-key="sheet">Sheet${arrow('sheet')}</th>
+        <th data-key="name">Name (Excel)${arrow('name')}</th>
+        <th data-key="security">Security${arrow('security')}</th>
+        <th class="num" data-key="price">Kurs${arrow('price')}</th>
+        <th data-key="date">Datum/Zeit${arrow('date')}</th>
+        <th>Status</th>
+      </tr></thead>
       <tbody>${rowsHtml || '<tr><td colspan="99">Keine Zeilen.</td></tr>'}</tbody>
     </table></div>
     <div class="upload-actions">
@@ -636,10 +703,19 @@ function renderUbsPreview(area, parsed, master){
     </div>
   </div>`;
 
-  const okCount = () => parsed.filter(p => !p.errors.length && p.secId && p.priceDateIso && p.price !== null && !p.duplicate).length;
+  const okCount = () => parsed.filter(p => !p.errors.length && p.secId && p.priceDateIso && p.price !== null && !p.duplicate && !p.conflict).length;
   const btn = area.querySelector('#ubsImportBtn');
   btn.textContent = `Import ${okCount()} Zeile(n)`;
   btn.disabled = okCount() === 0;
+
+  area.querySelectorAll('.preview-table th[data-key]').forEach(th => {
+    th.style.cursor = 'pointer';
+    th.addEventListener('click', () => {
+      const key = th.dataset.key;
+      if (ubsSort.key === key) ubsSort.dir *= -1; else { ubsSort = { key, dir: 1 }; }
+      renderUbsPreview(area, parsed, master);
+    });
+  });
 
   area.querySelectorAll('.ubs-sec-select').forEach(sel => {
     sel.addEventListener('change', async () => {
@@ -648,6 +724,7 @@ function renderUbsPreview(area, parsed, master){
       const m = master.find(x => x.SecurityID === secId);
       p.secId = secId; p.secName = m ? m.SecurityName : ''; p.matchType = secId ? 'manual' : 'unmatched';
       await markUbsDuplicates(parsed);
+      computeUbsConflicts(parsed);
       renderUbsPreview(area, parsed, master);
     });
   });
@@ -659,6 +736,7 @@ function renderUbsPreview(area, parsed, master){
       p.price = val; p.priceRaw = inp.value;
       p.errors = p.errors.filter(e => !e.startsWith('Kein Kurs'));
       await markUbsDuplicates(parsed);
+      computeUbsConflicts(parsed);
       renderUbsPreview(area, parsed, master);
     });
   });
@@ -670,6 +748,7 @@ function renderUbsPreview(area, parsed, master){
       p.priceDateIso = td.iso; p.priceDateDisplay = td.display;
       p.errors = p.errors.filter(e => !/Datum|Zeit|Format/.test(e));
       await markUbsDuplicates(parsed);
+      computeUbsConflicts(parsed);
       renderUbsPreview(area, parsed, master);
     });
   });
@@ -689,7 +768,7 @@ function renderUbsPreview(area, parsed, master){
 }
 
 async function importUbsQuotes(parsed){
-  const valid = parsed.filter(p => !p.errors.length && p.secId && p.priceDateIso && p.price !== null && !p.duplicate);
+  const valid = parsed.filter(p => !p.errors.length && p.secId && p.priceDateIso && p.price !== null && !p.duplicate && !p.conflict);
   const now = nowZurichString();
   const priceStmts = valid.map(p => ({
     sql: 'INSERT INTO security_prices (SecurityID, Price, PriceDate, Source, created_at) VALUES (?,?,?,?,?)',
