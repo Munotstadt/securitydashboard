@@ -53,6 +53,9 @@
   .preview-table tr.row-error td{background:rgba(192,41,61,0.06);}
   .preview-table td.status-ok{color:#1F8A6E;font-family:'IBM Plex Mono',monospace;font-size:11px;}
   .preview-table td.status-err{color:#C0293D;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+  .preview-table td.status-skip{color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px;}
+  .preview-table select, .preview-table input[type=text]{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 5px;border:1px solid var(--line);border-radius:3px;background:#fff;max-width:170px;}
+  .preview-table tr.row-skip td{opacity:.55;}
   .upload-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:10px;}
   .upload-actions button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 16px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
   .upload-actions button:disabled{opacity:.4;cursor:not-allowed;}
@@ -104,6 +107,11 @@
   <input type="file" id="distFile" accept=".csv,text/csv">
   <div id="distUploadArea"></div>
 
+  <div class="section-title">UBS Quotes Import (Excel)</div>
+  <p class="note">UBS-Kursliste (.xlsx) mit mehreren Sheets (Indizes, Aktien, Anlagefonds, Forex, Edelmetalle, Rohstoffe, Geldmarkt, Münzen …). Spalten: <code>Name</code>, <code>Price</code>, <code>Time</code> (Uhrzeit hh:mm:ss → heutiges Datum + Zeit, Datum dd.mm.yy → Schlusskurs an diesem Tag). Nicht zuordenbare Namen können manuell einer Security zugewiesen werden – das Matching wird gelernt und beim nächsten Import automatisch wiederverwendet.</p>
+  <input type="file" id="ubsFile" accept=".xlsx">
+  <div id="ubsUploadArea"></div>
+
   <div class="footer">
     <button id="clearCacheBtn">🗑 Clear Cache</button>
     <button id="settingsBtn">⚙ Repo/Token</button>
@@ -111,6 +119,7 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="assets/turso-data.js"></script>
 <script>
 function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); return d; }
@@ -442,8 +451,269 @@ async function importDistributions(parsed){
   load();
 }
 
+// ============ UBS Quotes Import (Excel, multi-sheet) ============
+const UBS_SOURCE = 'UBS Quotes Import (Uploader)';
+
+// Learned Name->SecurityID matching lives in its own table so it survives
+// across uploads and keeps getting smarter. Created lazily (no separate
+// migration step in this repo) — idempotent, safe to call every time.
+let ubsMappingTableReady = false;
+async function ensureNameMappingTable(){
+  if (ubsMappingTableReady) return;
+  await tursoRun(`CREATE TABLE IF NOT EXISTS security_name_mapping (
+    ExternalName TEXT PRIMARY KEY,
+    SecurityID INTEGER NOT NULL,
+    Source TEXT,
+    created_at TEXT,
+    updated_at TEXT
+  )`);
+  ubsMappingTableReady = true;
+}
+let nameMappingCache = null;
+async function ensureNameMapping(){
+  await ensureNameMappingTable();
+  if (!nameMappingCache) {
+    const rows = await tursoQuery('SELECT ExternalName, SecurityID FROM security_name_mapping');
+    nameMappingCache = new Map(rows.map(r => [r.ExternalName, r.SecurityID]));
+  }
+  return nameMappingCache;
+}
+
+// Excel "Time" column: "hh:mm[:ss]" -> today (Zurich) + that time (intraday quote).
+// "dd.mm.yy[yy]" -> that calendar date, no time (end-of-day close).
+function parseUbsTimeOrDate(raw){
+  const s = (raw ?? '').toString().trim();
+  if (!s) return { iso: null, display: null, error: 'Kein Datum/Zeit' };
+  let m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (m) {
+    const [, h, mi, se = '00'] = m;
+    if (Number(h) > 23 || Number(mi) > 59) return { iso: null, display: null, error: `Ungültige Zeit "${s}"` };
+    const p = zurichParts(new Date());
+    const dt = new Date(Number(p.year), Number(p.month) - 1, Number(p.day), Number(h), Number(mi), Number(se));
+    return { iso: toIsoDateTime(dt), display: toSwissDateTime(dt), error: null };
+  }
+  m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
+  if (m) {
+    let [, d, mo, y] = m;
+    if (y.length === 2) y = (Number(y) <= 68 ? '20' : '19') + y; // 2-digit year pivot
+    const dt = new Date(Number(y), Number(mo) - 1, Number(d));
+    if (isNaN(dt) || dt.getDate() !== Number(d)) return { iso: null, display: null, error: `Ungültiges Datum "${s}"` };
+    return { iso: toIsoDate(dt), display: toSwissDate(dt), error: null };
+  }
+  return { iso: null, display: null, error: `Unbekanntes Zeit/Datum-Format "${s}"` };
+}
+
+// Matching priority: learned mapping table -> exact/case-insensitive name in
+// security_master -> unmatched (needs manual dropdown selection).
+function resolveUbsSecurity(name, master, mapping){
+  const key = (name || '').trim();
+  if (!key) return { secId: null, secName: '', matchType: 'none' };
+  if (mapping.has(key)) {
+    const secId = mapping.get(key);
+    const m = master.find(x => String(x.SecurityID) === String(secId));
+    return { secId, secName: m ? m.SecurityName : `#${secId}`, matchType: 'mapping' };
+  }
+  let m = master.find(x => x.SecurityName === key);
+  if (!m) m = master.find(x => x.SecurityName.toLowerCase() === key.toLowerCase());
+  if (m) return { secId: m.SecurityID, secName: m.SecurityName, matchType: 'auto' };
+  return { secId: null, secName: '', matchType: 'unmatched' };
+}
+
+async function handleUbsFile(file){
+  const area = document.getElementById('ubsUploadArea');
+  area.innerHTML = '<div class="empty">Parsing…</div>';
+  try {
+    if (typeof XLSX === 'undefined') { area.innerHTML = '<div class="error">Excel-Bibliothek (SheetJS) konnte nicht geladen werden.</div>'; return; }
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const master = await ensureMasterForUpload();
+    const mapping = await ensureNameMapping();
+
+    const raw = [];
+    wb.SheetNames.forEach(sheetName => {
+      const json = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '', raw: true });
+      json.forEach(row => { if ((row.Name || '').toString().trim()) raw.push({ sheet: sheetName, row }); });
+    });
+    if (!raw.length) { area.innerHTML = '<div class="error">Keine Datenzeilen gefunden (Spalte "Name" fehlt oder Datei leer).</div>'; return; }
+
+    const parsed = raw.map(({ sheet, row }) => {
+      const name = (row.Name || '').toString().trim();
+      const priceRaw = row.Price;
+      const price = parseFloat(priceRaw);
+      const td = parseUbsTimeOrDate(row.Time);
+      const sec = resolveUbsSecurity(name, master, mapping);
+      const errors = [];
+      if (priceRaw === undefined || priceRaw === '' || isNaN(price)) errors.push(`Kein Kurs "${priceRaw ?? ''}"`);
+      if (td.error) errors.push(td.error);
+      return {
+        sheet, excelName: name, priceRaw, price: isNaN(price) ? null : price,
+        priceDateIso: td.iso, priceDateDisplay: td.display,
+        secId: sec.secId, secName: sec.secName, matchType: sec.matchType,
+        errors, duplicate: false,
+      };
+    });
+
+    await markUbsDuplicates(parsed);
+    renderUbsPreview(area, parsed, master);
+  } catch (e) {
+    console.error('UBS Excel upload failed:', e);
+    area.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+  }
+}
+
+// Dedup key = (SecurityID, calendar date, price) — matches the requirement
+// literally: same security+day+price already in security_prices -> skip.
+async function markUbsDuplicates(parsed){
+  const secIds = [...new Set(parsed.filter(p => p.secId).map(p => p.secId))];
+  if (!secIds.length) return;
+  const placeholders = secIds.map(() => '?').join(',');
+  const existing = await tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices WHERE SecurityID IN (${placeholders})`, secIds);
+  const existingKeys = new Set();
+  existing.forEach(r => {
+    const dt = parseSwissDateTime(r.PriceDate);
+    if (!dt || r.Price === null || r.Price === undefined) return;
+    existingKeys.add(`${r.SecurityID}|${toIsoDate(dt)}|${Number(r.Price).toFixed(6)}`);
+  });
+  parsed.forEach(p => {
+    p.duplicate = false;
+    if (p.secId && p.priceDateIso && p.price !== null && !p.errors.length) {
+      const key = `${p.secId}|${p.priceDateIso.slice(0, 10)}|${p.price.toFixed(6)}`;
+      p.duplicate = existingKeys.has(key);
+    }
+  });
+}
+
+function ubsRowStatus(p){
+  if (p.errors.length) return 'err';
+  if (!p.secId) return 'unmatched';
+  if (p.duplicate) return 'skip';
+  return 'ok';
+}
+
+function renderUbsPreview(area, parsed, master){
+  const sortedMaster = master.slice().sort((a, b) => a.SecurityName.localeCompare(b.SecurityName));
+  const masterOptionsHtml = '<option value="">— wählen —</option>' +
+    sortedMaster.map(m => `<option value="${m.SecurityID}">${m.SecurityName}</option>`).join('');
+
+  const counts = { ok: 0, err: 0, unmatched: 0, skip: 0 };
+  parsed.forEach(p => counts[ubsRowStatus(p)]++);
+  const summary = `${parsed.length} Zeilen · <span class="good">${counts.ok} bereit</span>` +
+    (counts.unmatched ? ` · <span class="bad">${counts.unmatched} ohne Zuordnung</span>` : '') +
+    (counts.err ? ` · <span class="bad">${counts.err} mit Fehler</span>` : '') +
+    (counts.skip ? ` · ${counts.skip} bereits vorhanden (übersprungen)` : '');
+
+  const rowsHtml = parsed.map((p, i) => {
+    const status = ubsRowStatus(p);
+    const secCell = p.secId
+      ? `${p.secName}${p.matchType === 'auto' ? ' <span title="automatisch per Namen erkannt, wird gelernt">🔎</span>' : (p.matchType === 'mapping' ? ' <span title="gelerntes Matching">✓</span>' : '')}`
+      : `<select data-i="${i}" class="ubs-sec-select">${masterOptionsHtml}</select>`;
+    const priceCell = p.price !== null
+      ? fmtDecimal(p.price, 4)
+      : `<input type="text" data-i="${i}" class="ubs-price-input" value="${p.priceRaw ?? ''}" placeholder="Kurs">`;
+    const dateCell = p.priceDateIso
+      ? p.priceDateDisplay
+      : `<input type="text" data-i="${i}" class="ubs-time-input" value="" placeholder="hh:mm oder dd.mm.yyyy">`;
+    const statusCell = {
+      ok: '<td class="status-ok">OK</td>',
+      unmatched: '<td class="status-err">Kein Match</td>',
+      err: `<td class="status-err">${p.errors.join('; ')}</td>`,
+      skip: '<td class="status-skip">Bereits vorhanden</td>',
+    }[status];
+    return `<tr class="${status === 'err' || status === 'unmatched' ? 'row-error' : (status === 'skip' ? 'row-skip' : '')}">
+      <td>${p.sheet}</td><td>${p.excelName}</td><td>${secCell}</td><td class="num">${priceCell}</td><td>${dateCell}</td>${statusCell}
+    </tr>`;
+  }).join('');
+
+  area.innerHTML = `<div class="upload-box">
+    <div class="upload-summary">${summary}</div>
+    <div class="preview-table-wrap"><table class="preview-table">
+      <thead><tr><th>Sheet</th><th>Name (Excel)</th><th>Security</th><th>Kurs</th><th>Datum/Zeit</th><th>Status</th></tr></thead>
+      <tbody>${rowsHtml || '<tr><td colspan="99">Keine Zeilen.</td></tr>'}</tbody>
+    </table></div>
+    <div class="upload-actions">
+      <span class="quick-status" id="ubsUploadStatus" style="align-self:center;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);"></span>
+      <button id="ubsImportBtn">Import</button>
+    </div>
+  </div>`;
+
+  const okCount = () => parsed.filter(p => !p.errors.length && p.secId && p.priceDateIso && p.price !== null && !p.duplicate).length;
+  const btn = area.querySelector('#ubsImportBtn');
+  btn.textContent = `Import ${okCount()} Zeile(n)`;
+  btn.disabled = okCount() === 0;
+
+  area.querySelectorAll('.ubs-sec-select').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      const p = parsed[Number(sel.dataset.i)];
+      const secId = sel.value ? Number(sel.value) : null;
+      const m = master.find(x => x.SecurityID === secId);
+      p.secId = secId; p.secName = m ? m.SecurityName : ''; p.matchType = secId ? 'manual' : 'unmatched';
+      await markUbsDuplicates(parsed);
+      renderUbsPreview(area, parsed, master);
+    });
+  });
+  area.querySelectorAll('.ubs-price-input').forEach(inp => {
+    inp.addEventListener('change', async () => {
+      const p = parsed[Number(inp.dataset.i)];
+      const val = parseFloat(inp.value);
+      if (inp.value === '' || isNaN(val)) return;
+      p.price = val; p.priceRaw = inp.value;
+      p.errors = p.errors.filter(e => !e.startsWith('Kein Kurs'));
+      await markUbsDuplicates(parsed);
+      renderUbsPreview(area, parsed, master);
+    });
+  });
+  area.querySelectorAll('.ubs-time-input').forEach(inp => {
+    inp.addEventListener('change', async () => {
+      const p = parsed[Number(inp.dataset.i)];
+      const td = parseUbsTimeOrDate(inp.value);
+      if (td.error) { alert(td.error); return; }
+      p.priceDateIso = td.iso; p.priceDateDisplay = td.display;
+      p.errors = p.errors.filter(e => !/Datum|Zeit|Format/.test(e));
+      await markUbsDuplicates(parsed);
+      renderUbsPreview(area, parsed, master);
+    });
+  });
+
+  const statusEl = area.querySelector('#ubsUploadStatus');
+  btn.addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    statusEl.textContent = 'Importiere…';
+    try {
+      await importUbsQuotes(parsed);
+      statusEl.textContent = 'Importiert ✓ ' + nowZurichString();
+    } catch (err) {
+      statusEl.textContent = 'Error: ' + err.message;
+      e.target.disabled = false;
+    }
+  });
+}
+
+async function importUbsQuotes(parsed){
+  const valid = parsed.filter(p => !p.errors.length && p.secId && p.priceDateIso && p.price !== null && !p.duplicate);
+  const now = nowZurichString();
+  const priceStmts = valid.map(p => ({
+    sql: 'INSERT INTO security_prices (SecurityID, Price, PriceDate, Source, created_at) VALUES (?,?,?,?,?)',
+    args: [p.secId, p.price, p.priceDateIso, UBS_SOURCE, now],
+  }));
+
+  // Learn/refresh Name -> SecurityID mapping for every row matched this run
+  // (manually or automatically by exact name), so future uploads skip the dropdown.
+  const learn = new Map();
+  parsed.forEach(p => { if (p.secId && p.excelName && (p.matchType === 'manual' || p.matchType === 'auto')) learn.set(p.excelName, p.secId); });
+  const mapStmts = [...learn.entries()].map(([name, secId]) => ({
+    sql: `INSERT INTO security_name_mapping (ExternalName, SecurityID, Source, created_at, updated_at) VALUES (?,?,?,?,?)
+          ON CONFLICT(ExternalName) DO UPDATE SET SecurityID=excluded.SecurityID, updated_at=excluded.updated_at`,
+    args: [name, secId, UBS_SOURCE, now, now],
+  }));
+
+  await batchInChunks([...priceStmts, ...mapStmts]);
+  nameMappingCache = null; // reload learned mappings next time
+  load();
+}
+
 document.getElementById('priceFile').addEventListener('change', (e) => { if (e.target.files[0]) handlePriceFile(e.target.files[0]); });
 document.getElementById('distFile').addEventListener('change', (e) => { if (e.target.files[0]) handleDistFile(e.target.files[0]); });
+document.getElementById('ubsFile').addEventListener('change', (e) => { if (e.target.files[0]) handleUbsFile(e.target.files[0]); });
 document.getElementById('settingsBtn').addEventListener('click', () => {
   document.getElementById('cfgUrl').value = TURSO.url;
   document.getElementById('cfgToken').value = TURSO.token;
