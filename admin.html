@@ -604,6 +604,7 @@ function ubsSortedRows(parsed){
       case 'security': return p.secName || '';
       case 'price': return p.price === null ? -Infinity : p.price;
       case 'date': return p.priceDateIso || '';
+      case 'status': return UBS_STATUS_ORDER[ubsRowStatus(p)] ?? 99;
       default: return '';
     }
   };
@@ -636,6 +637,9 @@ async function markUbsDuplicates(parsed){
     }
   });
 }
+
+// Sort order when sorting by Status: problems first, then skipped, then ok.
+const UBS_STATUS_ORDER = { err: 0, unmatched: 1, conflict: 2, skip: 3, ok: 4 };
 
 function ubsRowStatus(p){
   if (p.errors.length) return 'err';
@@ -693,7 +697,7 @@ function renderUbsPreview(area, parsed, master){
         <th data-key="security">Security${arrow('security')}</th>
         <th class="num" data-key="price">Kurs${arrow('price')}</th>
         <th data-key="date">Datum/Zeit${arrow('date')}</th>
-        <th>Status</th>
+        <th data-key="status">Status${arrow('status')}</th>
       </tr></thead>
       <tbody>${rowsHtml || '<tr><td colspan="99">Keine Zeilen.</td></tr>'}</tbody>
     </table></div>
