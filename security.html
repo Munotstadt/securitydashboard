@@ -13,6 +13,15 @@
   .topnav::-webkit-scrollbar{display:none;}
   .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
   .topnav a:hover{color:var(--text);border-color:var(--line);}
+  .nav-dropdown{position:relative;}
+  .nav-dropdown>.dd-toggle{background:none;color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:12px;cursor:pointer;}
+  .nav-dropdown>.dd-toggle:hover,.nav-dropdown.open>.dd-toggle{color:var(--text);border-color:var(--line);}
+  .nav-dropdown.active-group>.dd-toggle{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
+  .dd-menu{position:fixed;background:#fff;border:1px solid var(--line);border-radius:4px;min-width:180px;display:none;flex-direction:column;box-shadow:0 6px 16px rgba(0,0,0,.09);z-index:1000;padding:4px;}
+  .dd-menu.show{display:flex;}
+  .dd-menu a{padding:8px 10px;border-radius:3px;color:var(--muted);text-decoration:none;white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  .dd-menu a:hover{background:var(--panel);color:var(--text);}
+  .dd-menu a.active{color:var(--text);font-weight:600;background:rgba(227,6,19,0.06);}
   .board{width:100%;max-width:900px;}
   .toprow{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
   #securitySwitcher{background:var(--bg);border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 28px 6px 12px;border-radius:3px;cursor:pointer;min-width:220px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23767E8A'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;}
@@ -114,12 +123,49 @@
   <a href="dashboard.html">📊 Dashboard</a>
   <a href="portfolio.html">💼 Portfolio</a>
   <a href="analyser.html">🔬 Analyser</a>
-  <a href="master_editor.html">🗂 Master Data</a>
-  <a href="price_editor.html">✏️ Prices</a>
-  <a href="transactions_editor.html">📋 Transactions</a>
-  <a href="distribution_editor.html">💰 Distributions</a>
-  <a href="admin.html">⚙️ Admin</a>
+  <a href="asset_comparison.html">🆚 Comparison</a>
+  <div class="nav-dropdown" id="editorsDropdown">
+    <button type="button" class="dd-toggle" id="editorsToggle">🗂 Editors ▾</button>
+    <div class="dd-menu" id="editorsMenu">
+      <a href="master_editor.html">🗂 Master Data</a>
+      <a href="price_editor.html">✏️ Prices</a>
+      <a href="transactions_editor.html">📋 Transactions</a>
+      <a href="distribution_editor.html">💰 Distributions</a>
+      <a href="security_data.html">🔎 Security Data</a>
+      <a href="admin.html">⚙️ Admin</a>
+    </div>
+  </div>
 </nav>
+<script>
+(function(){
+  var dd = document.getElementById('editorsDropdown');
+  if(!dd) return;
+  var toggle = document.getElementById('editorsToggle');
+  var menu = document.getElementById('editorsMenu');
+  // Move the menu to <body> so it can never be trapped inside an ancestor's
+  // stacking/clipping context (e.g. the horizontally-scrolling topnav).
+  document.body.appendChild(menu);
+  function positionMenu(){
+    var r = toggle.getBoundingClientRect();
+    menu.style.top = (r.bottom + 4) + 'px';
+    menu.style.left = r.left + 'px';
+  }
+  function closeMenu(){ dd.classList.remove('open'); menu.classList.remove('show'); }
+  function openMenu(){ positionMenu(); dd.classList.add('open'); menu.classList.add('show'); }
+  toggle.addEventListener('click', function(e){
+    e.stopPropagation();
+    if(menu.classList.contains('show')) closeMenu(); else openMenu();
+  });
+  document.addEventListener('click', function(e){
+    if(!dd.contains(e.target) && !menu.contains(e.target)) closeMenu();
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') closeMenu();
+  });
+  window.addEventListener('resize', function(){ if(menu.classList.contains('show')) positionMenu(); });
+  window.addEventListener('scroll', function(){ if(menu.classList.contains('show')) positionMenu(); }, true);
+})();
+</script>
 <div class="board">
   <div class="toprow">
     <select id="securitySwitcher"></select>
