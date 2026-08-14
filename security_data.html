@@ -41,6 +41,28 @@
   .settings label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
   .settings input{width:100%;font-family:'Inter',sans-serif;font-size:14px;padding:8px 9px;border:1px solid var(--line);border-radius:3px;background:var(--bg);color:var(--text);}
   .settings button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
+
+  .manual-form{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:16px 0;display:none;gap:10px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));}
+  .manual-form.show{display:grid;}
+  .manual-form label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
+  .manual-form select,.manual-form input{width:100%;font-family:'Inter',sans-serif;font-size:14px;padding:8px 9px;border:1px solid var(--line);border-radius:3px;background:var(--bg);color:var(--text);}
+  .manual-form .full{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .manual-form button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
+  .manual-form .msg{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+  .manual-form .msg.ok{color:var(--gain);}
+  .manual-form .msg.error{color:var(--loss);}
+
+  .section-title-row{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;}
+  .section-title-row .section-title{margin:28px 0 4px;flex:1;}
+
+  .chart-flex{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin-top:8px;}
+  .chart-flex .table-wrap{flex:1;min-width:240px;margin-top:0;}
+  .pie-legend{list-style:none;margin:0;padding:0;font-family:'IBM Plex Mono',monospace;font-size:12px;display:flex;flex-direction:column;gap:5px;min-width:150px;}
+  .pie-legend li{display:flex;align-items:center;gap:6px;}
+  .pie-swatch{width:10px;height:10px;border-radius:2px;flex:none;}
+  .pie-legend .p-name{flex:1;color:var(--text);}
+  .pie-legend .p-val{color:var(--muted);}
+  .total-row td{font-weight:600;border-top:2px solid var(--line);}
 </style>
 </head>
 <body>
@@ -58,7 +80,11 @@
 <div class="board">
   <div class="toprow">
     <select id="securitySwitcher"></select>
-    <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
+    <div style="display:flex;gap:6px;">
+      <a class="toggle-btn" id="linkBackToSecurity" href="security.html">← Back to Security</a>
+      <button class="toggle-btn" id="addDataBtn">➕ Add Data Point</button>
+      <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
+    </div>
   </div>
 
   <div class="settings" id="settingsPanel">
@@ -67,6 +93,45 @@
       <div><label>Auth Token</label><input type="password" id="cfgToken" name="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…"></div>
       <div style="align-self:end;"><button id="cfgSave" type="submit">Apply</button></div>
     </form>
+  </div>
+
+  <div class="manual-form" id="manualForm">
+    <div>
+      <label>Section</label>
+      <select id="mfSection"></select>
+    </div>
+    <div id="mfCustomSectionWrap" style="display:none;">
+      <label>Section (freitext)</label>
+      <input type="text" id="mfCustomSection" placeholder="z.B. Fundamentals">
+    </div>
+    <div>
+      <label>Parameter</label>
+      <select id="mfParameter"></select>
+    </div>
+    <div id="mfCustomParamWrap" style="display:none;">
+      <label>Parameter (freitext)</label>
+      <input type="text" id="mfCustomParam" placeholder="z.B. Sector">
+    </div>
+    <div>
+      <label>Value</label>
+      <input type="text" id="mfValue" placeholder="z.B. 12.5 oder Technology">
+    </div>
+    <div>
+      <label>Unit (optional)</label>
+      <input type="text" id="mfUnit" placeholder="%, CHF, …">
+    </div>
+    <div>
+      <label>Date</label>
+      <input type="date" id="mfDate">
+    </div>
+    <div>
+      <label>Source</label>
+      <input type="text" id="mfSource" placeholder="Manual Entry">
+    </div>
+    <div class="full">
+      <button id="mfSave" type="button">Save</button>
+      <span class="msg" id="mfMsg"></span>
+    </div>
   </div>
 
   <div class="detail-header">
@@ -81,18 +146,22 @@
 <script>
 let masterAll = [];
 let curSecId = null;
+let curData = [];
 
 // DataTypes rendered in this order, each as its own section.
 const SECTION_DEFS = [
   { dataType: 'FundOverview',   title: 'Fund Overview',    nameLabel: 'Field',  valueLabel: 'Value',  sortDesc: false },
   { dataType: 'FundOperations', title: 'Fund Operations',  nameLabel: 'Field',  valueLabel: 'Value',  sortDesc: false },
-  { dataType: 'AssetClass',     title: 'Asset Allocation', nameLabel: 'Asset Class', valueLabel: 'Weight', sortDesc: true },
-  { dataType: 'SectorWeight',   title: 'Sector Weights',   nameLabel: 'Sector', valueLabel: 'Weight', sortDesc: true },
+  { dataType: 'Fundamentals',   title: 'Fundamentals',     nameLabel: 'Field',  valueLabel: 'Value',  sortDesc: false },
+  { dataType: 'AssetClass',     title: 'Asset Allocation', nameLabel: 'Asset Class', valueLabel: 'Weight', sortDesc: true, pie: true },
+  { dataType: 'SectorWeight',   title: 'Sector Weights',   nameLabel: 'Sector', valueLabel: 'Weight', sortDesc: true, pie: true },
   { dataType: 'BondRating',     title: 'Bond Ratings',     nameLabel: 'Rating', valueLabel: 'Weight', sortDesc: true },
-  { dataType: 'TopHolding',     title: 'Top Holdings',     nameLabel: 'Holding', valueLabel: 'Weight', sortDesc: true },
+  { dataType: 'TopHolding',     title: 'Top Holdings',     nameLabel: 'Holding', valueLabel: 'Weight', sortDesc: true, total: true },
   { dataType: 'EquityHolding',  title: 'Equity Holdings',  nameLabel: 'Holding', valueLabel: 'Weight', sortDesc: true },
   { dataType: 'BondHolding',    title: 'Bond Holdings',    nameLabel: 'Holding', valueLabel: 'Weight', sortDesc: true },
 ];
+
+const PIE_PALETTE = ['#E30613','#1F8A6E','#2C6FBB','#D9A441','#7A5FC0','#C0293D','#3FA7A0','#B5793A','#6F7B8C','#9C4F96','#4C8B3B','#B0A03F'];
 
 function fmtValue(row){
   if(row.NumericValue !== null && row.NumericValue !== undefined){
@@ -104,6 +173,33 @@ function fmtValue(row){
   return '—';
 }
 
+function describeArcPath(cx, cy, r, startAngle, endAngle){
+  const toXY = (angle) => { const rad=(angle-90)*Math.PI/180; return { x:cx+r*Math.cos(rad), y:cy+r*Math.sin(rad) }; };
+  const start = toXY(endAngle), end = toXY(startAngle);
+  const largeArc = (endAngle-startAngle) <= 180 ? 0 : 1;
+  if(endAngle-startAngle >= 359.999) return `M ${cx-r} ${cy} A ${r} ${r} 0 1 1 ${cx+r} ${cy} A ${r} ${r} 0 1 1 ${cx-r} ${cy} Z`;
+  return `M ${cx} ${cy} L ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 ${largeArc} 0 ${end.x.toFixed(2)} ${end.y.toFixed(2)} Z`;
+}
+
+function renderPieSvg(entries){
+  // entries: [{name, value}], already positive, sorted desc.
+  const total = entries.reduce((s,e) => s + (e.value||0), 0);
+  if(!total) return { svg:'', legend:'' };
+  const size=160, r=70, cx=size/2, cy=size/2;
+  let angle=0, slices='';
+  entries.forEach((e,i) => {
+    const share = e.value/total, endAngle = angle+share*360;
+    slices += `<path d="${describeArcPath(cx,cy,r,angle,endAngle)}" fill="${PIE_PALETTE[i % PIE_PALETTE.length]}" />`;
+    angle = endAngle;
+  });
+  const legend = entries.map((e,i) => {
+    const pct = (e.value/total)*100;
+    return `<li><span class="pie-swatch" style="background:${PIE_PALETTE[i % PIE_PALETTE.length]}"></span><span class="p-name">${e.name}</span><span class="p-val">${pct.toFixed(1)}%</span></li>`;
+  }).join('');
+  const svg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${slices}</svg>`;
+  return { svg, legend };
+}
+
 function renderSection(def, rows){
   if(!rows.length) return '';
   // Keep only the latest snapshot for this DataType.
@@ -112,19 +208,38 @@ function renderSection(def, rows){
   if(def.sortDesc){
     latest = [...latest].sort((a,b) => (b.NumericValue ?? -Infinity) - (a.NumericValue ?? -Infinity));
   }
+  const hasSource = latest.some(r => r.Source);
   const rowsHtml = latest.map(r => {
     const name = r.ParameterName || r.FieldName || '—';
-    return `<tr><td>${name}</td><td class="num">${fmtValue(r)}</td></tr>`;
+    return `<tr><td>${name}</td><td class="num">${fmtValue(r)}</td>${hasSource ? `<td class="desc">${r.Source||''}</td>` : ''}</tr>`;
   }).join('');
-  return `
-    <div class="section-title">${def.title}</div>
-    <div class="section-meta">Stand: ${maxDate}${latest.length !== rows.length ? ` · ${latest.length} von ${rows.length} Zeilen (ältere Snapshots ausgeblendet)` : ''}</div>
+  let totalRowHtml = '';
+  if(def.total){
+    const sum = latest.reduce((s,r) => s + (r.NumericValue || 0), 0);
+    const unit = latest.find(r => r.Unit)?.Unit || '';
+    totalRowHtml = `<tr class="total-row"><td>Total</td><td class="num">${fmtDecimal(sum,2)}${unit?` ${unit}`:''}</td>${hasSource ? '<td></td>' : ''}</tr>`;
+  }
+  const tableHtml = `
     <div class="table-wrap">
     <table>
-      <thead><tr><th>${def.nameLabel}</th><th class="num">${def.valueLabel}</th></tr></thead>
-      <tbody>${rowsHtml}</tbody>
+      <thead><tr><th>${def.nameLabel}</th><th class="num">${def.valueLabel}</th>${hasSource ? '<th>Source</th>' : ''}</tr></thead>
+      <tbody>${rowsHtml}${totalRowHtml}</tbody>
     </table>
     </div>
+  `;
+  let bodyHtml = tableHtml;
+  if(def.pie){
+    const entries = latest.filter(r => r.NumericValue !== null && r.NumericValue !== undefined && r.NumericValue > 0)
+      .map(r => ({ name: r.ParameterName || r.FieldName || '—', value: r.NumericValue }));
+    const { svg, legend } = renderPieSvg(entries);
+    if(svg){
+      bodyHtml = `<div class="chart-flex"><div style="flex:none;">${svg}<ul class="pie-legend">${legend}</ul></div>${tableHtml}</div>`;
+    }
+  }
+  return `
+    <div class="section-title-row"><div class="section-title">${def.title}</div></div>
+    <div class="section-meta">Stand: ${maxDate}${latest.length !== rows.length ? ` · ${latest.length} von ${rows.length} Zeilen (ältere Snapshots ausgeblendet)` : ''}</div>
+    ${bodyHtml}
   `;
 }
 
@@ -136,15 +251,17 @@ async function loadSecurity(secId){
   document.getElementById('detailName').textContent = master.SecurityName;
   document.title = `${master.SecurityName} · Security Data`;
   document.getElementById('sectionsWrap').innerHTML = '<div class="empty">Loading…</div>';
+  document.getElementById('linkBackToSecurity').href = `security.html?id=${encodeURIComponent(secId)}`;
 
   try {
     const data = await tursoQuery(
-      `SELECT sd.DataType, sd.FieldName, sd.FieldValue, sd.NumericValue, sd.Unit, sd.AsOfDate, sp.ParameterName
+      `SELECT sd.DataType, sd.FieldName, sd.FieldValue, sd.NumericValue, sd.Unit, sd.AsOfDate, sd.Source, sp.ParameterName
        FROM security_data sd
        LEFT JOIN security_parameter sp ON sp.ParameterID = sd.FieldNameID
        WHERE sd.SecurityID = ?`,
       [secId]
     );
+    curData = data;
 
     document.getElementById('detailMeta').textContent = data.length
       ? `${data.length} Datenpunkt(e) über ${new Set(data.map(r=>r.DataType)).size} Kategorie(n)`
@@ -207,6 +324,108 @@ document.getElementById('cfgSave').addEventListener('click', () => {
   tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
   document.getElementById('settingsPanel').classList.remove('show');
   load();
+});
+
+// ============ Manual data entry ============
+let sourceColumnEnsured = false;
+async function ensureSourceColumn(){
+  if(sourceColumnEnsured) return;
+  try { await tursoRun('ALTER TABLE security_data ADD COLUMN Source TEXT'); } catch(e) { /* column likely already exists */ }
+  sourceColumnEnsured = true;
+}
+
+function populateSectionSelect(){
+  const sel = document.getElementById('mfSection');
+  sel.innerHTML = SECTION_DEFS.map(d => `<option value="${d.dataType}">${d.title}</option>`).join('')
+    + `<option value="__custom__">Other (freitext) …</option>`;
+}
+
+async function populateParameterSelect(dataType){
+  const sel = document.getElementById('mfParameter');
+  const customWrap = document.getElementById('mfCustomParamWrap');
+  sel.innerHTML = `<option>Loading…</option>`;
+  let opts = [];
+  try { opts = await tursoParameterOptions('security_data', dataType, 0); } catch(e) { opts = []; }
+  if(opts.length){
+    sel.innerHTML = opts.map(o => `<option value="${o.ParameterID}">${o.ParameterName}</option>`).join('')
+      + `<option value="__custom__">Other (freitext) …</option>`;
+    sel.style.display = '';
+    customWrap.style.display = 'none';
+  } else {
+    sel.innerHTML = `<option value="__custom__">Other (freitext) …</option>`;
+    customWrap.style.display = '';
+  }
+}
+
+document.getElementById('mfSection').addEventListener('change', (e) => {
+  const isCustom = e.target.value === '__custom__';
+  document.getElementById('mfCustomSectionWrap').style.display = isCustom ? '' : 'none';
+  if(!isCustom) populateParameterSelect(e.target.value);
+  else {
+    document.getElementById('mfParameter').innerHTML = `<option value="__custom__">Other (freitext) …</option>`;
+    document.getElementById('mfCustomParamWrap').style.display = '';
+  }
+});
+document.getElementById('mfParameter').addEventListener('change', (e) => {
+  document.getElementById('mfCustomParamWrap').style.display = (e.target.value === '__custom__') ? '' : 'none';
+});
+
+document.getElementById('addDataBtn').addEventListener('click', async () => {
+  const panel = document.getElementById('manualForm');
+  const willShow = !panel.classList.contains('show');
+  panel.classList.toggle('show');
+  if(willShow){
+    populateSectionSelect();
+    document.getElementById('mfDate').value = nowZurichDateString ? nowZurichDateString() : new Date().toISOString().slice(0,10);
+    await populateParameterSelect(document.getElementById('mfSection').value);
+  }
+});
+
+document.getElementById('mfSave').addEventListener('click', async () => {
+  const msg = document.getElementById('mfMsg');
+  msg.textContent = ''; msg.className = 'msg';
+  if(!curSecId){ msg.textContent = 'Keine Security ausgewählt.'; msg.className = 'msg error'; return; }
+
+  const sectionSel = document.getElementById('mfSection').value;
+  const dataType = sectionSel === '__custom__' ? document.getElementById('mfCustomSection').value.trim() : sectionSel;
+  if(!dataType){ msg.textContent = 'Bitte Section angeben.'; msg.className = 'msg error'; return; }
+
+  const paramSel = document.getElementById('mfParameter').value;
+  let fieldNameId = null, fieldName = '';
+  if(paramSel === '__custom__' || !paramSel){
+    fieldName = document.getElementById('mfCustomParam').value.trim();
+    if(!fieldName){ msg.textContent = 'Bitte Parameter angeben.'; msg.className = 'msg error'; return; }
+  } else {
+    fieldNameId = Number(paramSel);
+    fieldName = document.getElementById('mfParameter').selectedOptions[0]?.textContent || '';
+  }
+
+  const rawValue = document.getElementById('mfValue').value.trim();
+  if(!rawValue){ msg.textContent = 'Bitte Value angeben.'; msg.className = 'msg error'; return; }
+  const isNumeric = /^-?\d+(\.\d+)?$/.test(rawValue);
+  const numericValue = isNumeric ? Number(rawValue) : null;
+  const fieldValue = isNumeric ? null : rawValue;
+
+  const unit = document.getElementById('mfUnit').value.trim() || null;
+  const asOfDate = document.getElementById('mfDate').value || (nowZurichDateString ? nowZurichDateString() : new Date().toISOString().slice(0,10));
+  const source = document.getElementById('mfSource').value.trim() || 'Manual Entry';
+
+  try {
+    await ensureSourceColumn();
+    await tursoRun(
+      `INSERT INTO security_data (SecurityID, DataType, FieldName, FieldNameID, FieldValue, NumericValue, Unit, AsOfDate, Source, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [curSecId, dataType, fieldName, fieldNameId, fieldValue, numericValue, unit, asOfDate, source, nowZurichString ? nowZurichString() : new Date().toISOString()]
+    );
+    tursoClearCache();
+    msg.textContent = 'Gespeichert.'; msg.className = 'msg ok';
+    document.getElementById('mfValue').value = '';
+    document.getElementById('mfUnit').value = '';
+    document.getElementById('mfSource').value = '';
+    await loadSecurity(curSecId);
+  } catch (e) {
+    msg.textContent = 'Fehler: ' + e.message; msg.className = 'msg error';
+  }
 });
 
 load();
