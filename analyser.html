@@ -216,8 +216,9 @@ async function load(){
       const periods = periodsBySecId.get(m.SecurityID);
       const parts = (m.PortfolioGroupingName || '').split(' - ').map(s=>s.trim());
 
-      if(parts.length >= 2 && (parts[1] === 'Switzerland' || parts[1] === 'USA' || parts[1] === 'Europe')){
-        swissCandidates.push({ name:m.SecurityName, secId:m.SecurityID, currency:m.Currency, country:parts[1], subGroup: parts[2] || 'Other', periods });
+      if(parts.length >= 2 && (parts[1] === 'Switzerland' || parts[1] === 'USA' || parts[1] === 'EMU' || parts[1] === 'UK')){
+        const region = (parts[1] === 'EMU' || parts[1] === 'UK') ? 'Europe' : parts[1];
+        swissCandidates.push({ name:m.SecurityName, secId:m.SecurityID, currency:m.Currency, country:region, subGroup: parts[2] || 'Other', periods });
       }
 
       if(Math.abs(qty) < 1e-9 || !periods || !periods.last) continue;
