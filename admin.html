@@ -470,6 +470,10 @@ async function ensureNameMappingTable(){
     created_at TEXT,
     updated_at TEXT
   )`);
+  // Speeds up the SecurityID IN (...) duplicate lookup (and any other page
+  // filtering security_prices by SecurityID/date) — idempotent, safe on an
+  // existing table.
+  await tursoRun(`CREATE INDEX IF NOT EXISTS idx_security_prices_secid_date ON security_prices(SecurityID, PriceDate)`);
   ubsMappingTableReady = true;
 }
 let nameMappingCache = null;        // ExternalName -> SecurityID
@@ -616,24 +620,40 @@ function ubsSortedRows(parsed){
   }).map(x => x.p);
 }
 
-// Dedup key = (SecurityID, calendar date, price) — matches the requirement
-// literally: same security+day+price already in security_prices -> skip.
-async function markUbsDuplicates(parsed){
-  const secIds = [...new Set(parsed.filter(p => p.secId).map(p => p.secId))];
-  if (!secIds.length) return;
-  const placeholders = secIds.map(() => '?').join(',');
-  const existing = await tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices WHERE SecurityID IN (${placeholders})`, secIds);
-  const existingKeys = new Set();
+// Per-SecurityID cache of "date|price" keys already in security_prices.
+// Populated lazily and only extended for SecurityIDs not seen yet this
+// session — avoids refetching a security's whole price history on every
+// dropdown/price/date edit in the preview table.
+let ubsPriceKeyCache = new Map(); // SecurityID -> Set("YYYY-MM-DD|price")
+async function ensureUbsPriceKeys(secIds){
+  const missing = secIds.filter(id => !ubsPriceKeyCache.has(id));
+  if (!missing.length) return;
+  const placeholders = missing.map(() => '?').join(',');
+  const existing = await tursoQuery(
+    `SELECT SecurityID, Price, PriceDate FROM security_prices WHERE SecurityID IN (${placeholders})`,
+    missing
+  );
+  missing.forEach(id => ubsPriceKeyCache.set(id, new Set()));
   existing.forEach(r => {
     const dt = parseSwissDateTime(r.PriceDate);
     if (!dt || r.Price === null || r.Price === undefined) return;
-    existingKeys.add(`${r.SecurityID}|${toIsoDate(dt)}|${Number(r.Price).toFixed(6)}`);
+    ubsPriceKeyCache.get(r.SecurityID).add(`${toIsoDate(dt)}|${Number(r.Price).toFixed(6)}`);
   });
+}
+
+// Dedup key = (SecurityID, calendar date, price) — matches the requirement
+// literally: same security+day+price already in security_prices -> skip.
+// Only hits the DB for SecurityIDs not already cached (see ensureUbsPriceKeys).
+async function markUbsDuplicates(parsed){
+  const secIds = [...new Set(parsed.filter(p => p.secId).map(p => p.secId))];
+  if (!secIds.length) return;
+  await ensureUbsPriceKeys(secIds);
   parsed.forEach(p => {
     p.duplicate = false;
     if (p.secId && p.priceDateIso && p.price !== null && !p.errors.length) {
-      const key = `${p.secId}|${p.priceDateIso.slice(0, 10)}|${p.price.toFixed(6)}`;
-      p.duplicate = existingKeys.has(key);
+      const key = `${p.priceDateIso.slice(0, 10)}|${p.price.toFixed(6)}`;
+      const set = ubsPriceKeyCache.get(p.secId);
+      p.duplicate = !!(set && set.has(key));
     }
   });
 }
@@ -790,6 +810,10 @@ async function importUbsQuotes(parsed){
   }));
 
   await batchInChunks([...priceStmts, ...mapStmts]);
+  valid.forEach(p => {
+    if (!ubsPriceKeyCache.has(p.secId)) ubsPriceKeyCache.set(p.secId, new Set());
+    ubsPriceKeyCache.get(p.secId).add(`${p.priceDateIso.slice(0, 10)}|${p.price.toFixed(6)}`);
+  });
   nameMappingCache = null; // reload learned mappings next time
   load();
 }
