@@ -70,6 +70,24 @@
   .risk-flex{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;margin-top:8px;}
   .risk-flex-col{flex:1;min-width:240px;}
   .risk-flex-col .chart-wrap{margin:0;}
+
+  .hidden{display:none !important;}
+  .pie-row{display:flex;gap:32px;flex-wrap:wrap;margin-top:10px;}
+  .pie-block{flex:1;min-width:260px;}
+  .pie-block-title{font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px;}
+  .ccy-chart-wrap{display:flex;gap:24px;align-items:center;flex-wrap:wrap;}
+  .ccy-legend{list-style:none;padding:0;margin:0;font-family:'IBM Plex Mono',monospace;font-size:12px;flex:1;min-width:140px;}
+  .ccy-legend li{display:flex;align-items:center;gap:8px;padding:5px 0;}
+  .ccy-swatch{width:11px;height:11px;border-radius:2px;flex-shrink:0;}
+  .ccy-legend .ccy-name{flex:0 0 auto;min-width:60px;}
+  .ccy-legend .ccy-val{flex:1;text-align:right;}
+
+  #holdingsTable td.rank{color:var(--muted);font-family:'IBM Plex Mono',monospace;}
+
+  .fundamentals-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:10px;}
+  .fund-stat{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px 12px;}
+  .fund-stat-label{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+  .fund-stat-value{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;margin-top:3px;}
   .toggle-btn.active{background:var(--text);border-color:var(--text);color:#fff;font-weight:600;}
 
   .chart-wrap{margin:10px 0;background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:16px 12px 8px;position:relative;}
@@ -291,6 +309,33 @@
         <a class="chart-icon-btn" id="linkDividendAdd" href="distribution_editor.html" title="Add Dividend">+</a>
       </div>
     </div>
+    <div class="fundamentals-grid" id="dividendYieldStats" style="margin-top:14px;"></div>
+  </div>
+
+  <div id="fundSection" class="hidden">
+    <div class="section-title">Sector Allocation</div>
+    <div class="pie-row">
+      <div class="pie-block">
+        <div class="ccy-chart-wrap" id="assetAllocationChart"></div>
+      </div>
+    </div>
+    <div class="section-title" style="margin-top:20px;">Top 10 Holdings</div>
+    <div class="table-wrap">
+    <table id="holdingsTable">
+      <thead><tr><th>#</th><th>Holding</th><th class="num">% of Assets</th></tr></thead>
+      <tbody id="holdingsBody"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody>
+    </table>
+    </div>
+    <div class="detail-meta" id="fundDataAsOf" style="margin-top:8px;"></div>
+  </div>
+
+  <div id="sharesSection" class="hidden">
+    <div class="section-title">Fundamentals</div>
+    <div class="fundamentals-grid" id="sharesFundamentalsGrid"></div>
+    <div class="detail-meta" id="sharesDataAsOf" style="margin-top:8px;"></div>
+
+    <div class="section-title" style="margin-top:24px;">Analyst Targets</div>
+    <div class="chart-wrap" id="analystChartWrap"></div>
   </div>
 
   <div id="transactionsSection">
@@ -886,6 +931,16 @@ async function loadSecurity(secId){
   const dist12m = distRows.filter(d => d.exDate > oneYearAgo && d.exDate <= now).reduce((s,d)=>s+d.amount,0);
   const yieldPct = last.Price ? (dist12m/last.Price)*100 : null;
 
+  // Dividend Change: Wachstum der Ausschüttungssumme selbst (letzte 12 Monate vs.
+  // die 12 Monate davor), nicht die Differenz der Rendite in Prozentpunkten.
+  const twoYearsAgo = daysAgo(now,730);
+  const dist12mPrior = distRows.filter(d => d.exDate > twoYearsAgo && d.exDate <= oneYearAgo).reduce((s,d)=>s+d.amount,0);
+  const dividendChangePct = dist12mPrior ? ((dist12m-dist12mPrior)/dist12mPrior)*100 : null;
+  document.getElementById('dividendYieldStats').innerHTML = [
+    fundStat('Yield (12M)', yieldPct ? yieldPct.toFixed(2)+'%' : '-'),
+    fundStat('Dividend Change (vs. 12M ago)', dividendChangePct!==null ? `${dividendChangePct>0?'+':''}${dividendChangePct.toFixed(2)}%` : '-'),
+  ].join('');
+
   const returns = [
     {label:'Day', ref:prev}, {label:'WTD', ref:refWtd}, {label:'10D', ref:refTen},
     {label:'MTD', ref:refMtd}, {label:'90D', ref:refNinety}, {label:'360D', ref:ref360},
@@ -898,6 +953,7 @@ async function loadSecurity(secId){
   document.getElementById('returnsBoxes').innerHTML = returnsHtml;
 
   renderRange52w(high52wRow, low52wRow, last, decimals);
+  loadInstrumentSpecificData(master, last, decimals, high52wRow, low52wRow).catch(e => console.error('Fundamentals load error:', e));
 
   document.getElementById('thPriceLc').textContent = `Price Return ${master.Currency||''}`;
   document.getElementById('thTotalLc').textContent = `Total Return ${master.Currency||''}`;
@@ -1100,6 +1156,196 @@ async function load(){
   } catch (e) {
     document.getElementById('detailName').textContent = 'Fehler: ' + e.message;
   }
+}
+
+// ============ Fund / Shares instrument-specific data (security_data table) ============
+function fundStat(label, value){
+  return `<div class="fund-stat"><div class="fund-stat-label">${label}</div><div class="fund-stat-value">${value}</div></div>`;
+}
+
+const FUND_PIE_PALETTE = ['#5B4B8A','#1F6FA8','#B08D57','#2E9E76','#D98E04','#8A5B4B','#C0293D','#767E8A','#4B4B8A','#A3A9B0','#1F8A6E','#9C4F96'];
+
+function describeArcPathSec(cx, cy, r, startAngle, endAngle){
+  const toXY = (angle) => { const rad=(angle-90)*Math.PI/180; return {x:cx+r*Math.cos(rad), y:cy+r*Math.sin(rad)}; };
+  const start = toXY(endAngle), end = toXY(startAngle);
+  const largeArc = (endAngle-startAngle) <= 180 ? 0 : 1;
+  if(endAngle-startAngle >= 359.999) return `M ${cx-r} ${cy} A ${r} ${r} 0 1 1 ${cx+r} ${cy} A ${r} ${r} 0 1 1 ${cx-r} ${cy} Z`;
+  return `M ${cx} ${cy} L ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 ${largeArc} 0 ${end.x.toFixed(2)} ${end.y.toFixed(2)} Z`;
+}
+
+// Collapse security_data rows to the latest snapshot per parameter (same
+// approach as security_data.html - different fields may have been captured
+// on different dates, e.g. a manually-corrected value vs. the bulk import).
+function latestByParameter(rows){
+  const byKey = new Map();
+  for(const r of rows){
+    const key = r.ParameterName || r.FieldName || '—';
+    const existing = byKey.get(key);
+    if(!existing || r.AsOfDate > existing.AsOfDate) byKey.set(key, r);
+  }
+  return [...byKey.values()];
+}
+
+async function loadInstrumentSpecificData(master, last, decimals, high52wRow, low52wRow){
+  const instrumentName = (instrumentOpts.find(o => String(o.ParameterID)===String(master.Instrument)) || {}).ParameterName || '';
+  document.getElementById('fundSection').classList.add('hidden');
+  document.getElementById('sharesSection').classList.add('hidden');
+
+  const data = await tursoQuery(
+    `SELECT sd.DataType, sd.FieldName, sd.NumericValue, sd.FieldValue, sd.Unit, sd.AsOfDate, sd.Source, sp.ParameterName
+     FROM security_data sd
+     LEFT JOIN security_parameter sp ON sp.ParameterID = sd.FieldNameID
+     WHERE sd.SecurityID = ? AND sd.DataType IN ('SectorWeight','TopHolding','Fundamentals')`,
+    [master.SecurityID]
+  );
+
+  const isFund = /etf|fund/i.test(instrumentName);
+  const isShares = /share/i.test(instrumentName);
+
+  if(isFund){
+    document.getElementById('fundSection').classList.remove('hidden');
+    renderFundSection(data.filter(r => r.DataType === 'SectorWeight'), data.filter(r => r.DataType === 'TopHolding'));
+  }
+  if(isShares){
+    document.getElementById('sharesSection').classList.remove('hidden');
+    renderSharesSection(data.filter(r => r.DataType === 'Fundamentals'), last, decimals, high52wRow, low52wRow);
+  }
+}
+
+function renderFundSection(sectorRows, holdingRows){
+  const el = document.getElementById('assetAllocationChart');
+  const asOfEl = document.getElementById('fundDataAsOf');
+  const sectors = latestByParameter(sectorRows).filter(r => r.NumericValue !== null && r.NumericValue !== undefined && r.NumericValue > 0);
+
+  if(!sectors.length){
+    el.innerHTML = '<div class="chart-empty">No sector allocation collected yet for this security.</div>';
+  } else {
+    const sorted = [...sectors].sort((a,b) => b.NumericValue - a.NumericValue);
+    const total = sorted.reduce((s,r) => s+r.NumericValue, 0);
+    const size=160, r=70, cx=size/2, cy=size/2;
+    let angle=0, slices='';
+    sorted.forEach((row,i) => {
+      const endAngle = angle + (row.NumericValue/total)*360;
+      slices += `<path d="${describeArcPathSec(cx,cy,r,angle,endAngle)}" fill="${FUND_PIE_PALETTE[i % FUND_PIE_PALETTE.length]}"/>`;
+      angle = endAngle;
+    });
+    const legend = sorted.map((row,i) => {
+      const name = row.ParameterName || row.FieldName || '—';
+      const pct = (row.NumericValue/total)*100;
+      return `<li><span class="ccy-swatch" style="background:${FUND_PIE_PALETTE[i % FUND_PIE_PALETTE.length]}"></span><span class="ccy-name">${name}</span><span class="ccy-val">${pct.toFixed(1)}%</span></li>`;
+    }).join('');
+    el.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${slices}</svg><ul class="ccy-legend">${legend}</ul>`;
+  }
+
+  const holdings = latestByParameter(holdingRows).sort((a,b) => (b.NumericValue||0) - (a.NumericValue||0));
+  const body = document.getElementById('holdingsBody');
+  body.innerHTML = holdings.length
+    ? holdings.slice(0,10).map((h,i) => `<tr>
+        <td class="rank">${i+1}</td>
+        <td>${h.ParameterName || h.FieldName || '—'}</td>
+        <td class="num">${h.NumericValue!==null&&h.NumericValue!==undefined ? h.NumericValue.toFixed(2)+'%' : '—'}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="3" class="empty">No holdings collected yet for this security.</td></tr>';
+
+  const newestDate = [...sectors, ...holdings].reduce((max,r) => (r.AsOfDate>max?r.AsOfDate:max), '');
+  const src = (sectors[0]||holdings[0]||{}).Source;
+  asOfEl.textContent = newestDate ? `Fund data as of ${fmtIsoDateDDMM(newestDate)}${src?` · Source: ${src}`:''}` : '';
+}
+
+function findFundamental(rows, ...aliases){
+  const lower = aliases.map(a => a.toLowerCase());
+  return rows.find(r => { const n = (r.ParameterName || r.FieldName || '').toLowerCase(); return lower.some(a => n.includes(a)); });
+}
+
+function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52wRow){
+  const rows = latestByParameter(fundamentalsRows);
+  const grid = document.getElementById('sharesFundamentalsGrid');
+  const asOfEl = document.getElementById('sharesDataAsOf');
+
+  if(!rows.length){
+    grid.innerHTML = '<div class="empty">No fundamentals collected yet for this security.</div>';
+    asOfEl.textContent = '';
+    document.getElementById('analystChartWrap').innerHTML = '<div class="chart-empty">No fundamentals collected yet for this security.</div>';
+    return;
+  }
+
+  const sorted = [...rows].sort((a,b) => (a.ParameterName||a.FieldName||'').localeCompare(b.ParameterName||b.FieldName||''));
+  grid.innerHTML = sorted.map(r => {
+    const name = r.ParameterName || r.FieldName || '—';
+    const value = (r.NumericValue !== null && r.NumericValue !== undefined)
+      ? `${fmtDecimal(r.NumericValue,2)}${r.Unit?` ${r.Unit}`:''}`
+      : (r.FieldValue || '—');
+    return fundStat(name, value);
+  }).join('');
+
+  const newestDate = rows.reduce((max,r) => (r.AsOfDate>max?r.AsOfDate:max), rows[0].AsOfDate);
+  asOfEl.textContent = `Fundamentals as of ${fmtIsoDateDDMM(newestDate)} · Source: ${rows[0].Source||'—'}`;
+
+  const targetLow = findFundamental(rows, 'target low', 'pricetargetlow');
+  const targetHigh = findFundamental(rows, 'target high', 'pricetargethigh');
+  const targetMean = findFundamental(rows, 'target mean', 'pricetargetmean');
+  const targetMedian = findFundamental(rows, 'target median', 'pricetargetmedian');
+
+  renderAnalystRangeChart(document.getElementById('analystChartWrap'), {
+    currentPrice: last ? last.Price : null,
+    analystLow: targetLow ? targetLow.NumericValue : null,
+    analystHigh: targetHigh ? targetHigh.NumericValue : null,
+    analystMean: targetMean ? targetMean.NumericValue : null,
+    analystMedian: targetMedian ? targetMedian.NumericValue : null,
+    yearLow: low52wRow ? low52wRow.Price : null,
+    yearHigh: high52wRow ? high52wRow.Price : null,
+  }, decimals);
+}
+
+/* Vergleichs-Chart: aktueller Kurs (Milestone) + Analysten-Range (Low-High,
+ * farbiges Band) + Analysten-Mean/Median (Milestones) + 12-Monats-Range
+ * (Low-High, farbiges Band) - Skala beginnt bewusst bei 0. */
+function renderAnalystRangeChart(container, data, decimals){
+  const { currentPrice, analystLow, analystHigh, analystMean, analystMedian, yearLow, yearHigh } = data;
+  const values = [currentPrice, analystLow, analystHigh, analystMean, analystMedian, yearLow, yearHigh]
+    .filter(v => v!==null && v!==undefined && !isNaN(v));
+  if(values.length < 2){
+    container.innerHTML = '<div class="chart-empty">Not enough data for an analyst range chart.</div>';
+    return;
+  }
+
+  const width = 800, height = 190;
+  const padLeft = 16, padRight = 16;
+  const innerW = width - padLeft - padRight;
+  const maxVal = Math.max(...values) * 1.08;
+  const xScale = v => padLeft + (v/maxVal) * innerW;
+
+  const barY1 = 78, barY2 = 128, barH = 16;
+  const milestoneTop = barY1 - 4, milestoneBottom = barY2 + barH + 4;
+
+  let svg = '';
+  svg += `<line x1="${padLeft}" y1="${milestoneBottom+18}" x2="${width-padRight}" y2="${milestoneBottom+18}" stroke="#E3E6EA" stroke-width="1"/>`;
+  svg += `<text x="${padLeft}" y="${milestoneBottom+32}" font-family="IBM Plex Mono, monospace" font-size="10" fill="#767E8A">0</text>`;
+  svg += `<text x="${width-padRight}" y="${milestoneBottom+32}" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="10" fill="#767E8A">${fmtDecimal(maxVal,0)}</text>`;
+
+  function rangeBar(lo, hi, y, color, label){
+    if(lo==null || hi==null || isNaN(lo) || isNaN(hi)) return '';
+    const x0 = xScale(0), x1 = xScale(lo), x2 = xScale(Math.max(hi,lo));
+    return `<text x="${padLeft}" y="${y-6}" font-family="IBM Plex Mono, monospace" font-size="10" fill="#767E8A">${label}</text>
+      <rect x="${x0.toFixed(1)}" y="${y}" width="${Math.max(0,x1-x0).toFixed(1)}" height="${barH}" rx="3" fill="#A3A9B0" opacity="0.25"/>
+      <rect x="${x1.toFixed(1)}" y="${y}" width="${Math.max(2,x2-x1).toFixed(1)}" height="${barH}" rx="3" fill="${color}" opacity="0.35"/>
+      <text x="${x1.toFixed(1)}" y="${y+barH+13}" text-anchor="start" font-family="IBM Plex Mono, monospace" font-size="9" fill="#767E8A">${fmtDecimal(lo,decimals)}</text>
+      <text x="${x2.toFixed(1)}" y="${y+barH+13}" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="9" fill="#767E8A">${fmtDecimal(hi,decimals)}</text>`;
+  }
+  svg += rangeBar(analystLow, analystHigh, barY1, '#1F6FA8', 'Analyst Low – High');
+  svg += rangeBar(yearLow, yearHigh, barY2, '#2E9E76', '12-Month Low – High');
+
+  function milestone(v, color, dash, label, labelY){
+    if(v==null || isNaN(v)) return '';
+    const x = xScale(v);
+    return `<line x1="${x.toFixed(1)}" y1="${milestoneTop}" x2="${x.toFixed(1)}" y2="${milestoneBottom}" stroke="${color}" stroke-width="1.5" ${dash?`stroke-dasharray="${dash}"`:''}/>
+      <text x="${x.toFixed(1)}" y="${labelY}" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" font-weight="600" fill="${color}">${label}</text>`;
+  }
+  svg += milestone(analystMedian, '#8A5B4B', '1,2', `Median ${fmtDecimal(analystMedian,decimals)}`, milestoneTop-32);
+  svg += milestone(analystMean, '#1F6FA8', '3,2', `Mean ${fmtDecimal(analystMean,decimals)}`, milestoneTop-18);
+  svg += milestone(currentPrice, '#E30613', null, `Current ${fmtDecimal(currentPrice,decimals)}`, milestoneTop-4);
+
+  container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Analyst range chart">${svg}</svg>`;
 }
 
 document.getElementById('settingsBtn').addEventListener('click', () => {
