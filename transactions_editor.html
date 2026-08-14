@@ -135,6 +135,58 @@
 
 <script src="assets/turso-data.js"></script>
 <script>
+// Safety net: define the shared schema-guard helpers locally if the loaded
+// assets/turso-data.js doesn't have them yet (e.g. stale cached copy). Avoids
+// a hard "X is not defined" crash; the real versions in turso-data.js take
+// over automatically once that file is up to date (session-cached there).
+if (typeof ensureSecurityMasterSchema === 'undefined') {
+  window.ensureSecurityMasterSchema = async function(){
+    try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateLaunch TEXT'); } catch(e) {}
+    try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateTerminated TEXT'); } catch(e) {}
+    try { await tursoRun('ALTER TABLE security_master ADD COLUMN Status INTEGER'); } catch(e) {}
+    try { await tursoRun('ALTER TABLE security_master ADD COLUMN Comments TEXT'); } catch(e) {}
+  };
+}
+if (typeof ensureSecurityTasksSchema === 'undefined') {
+  window.ensureSecurityTasksSchema = async function(){
+    try {
+      await tursoRun(`CREATE TABLE IF NOT EXISTS security_tasks (
+        TaskID INTEGER PRIMARY KEY AUTOINCREMENT,
+        TaskName TEXT NOT NULL,
+        TaskDescription TEXT,
+        SecurityID INTEGER,
+        DateDue TEXT,
+        Recurring TEXT,
+        Completed INTEGER DEFAULT 0,
+        CompletedAt TEXT,
+        created_at TEXT
+      )`);
+    } catch(e) {}
+    try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
+  };
+}
+if (typeof ensureSecurityDataSchema === 'undefined') {
+  window.ensureSecurityDataSchema = async function(){
+    try { await tursoRun('ALTER TABLE security_data ADD COLUMN Source TEXT'); } catch(e) {}
+  };
+}
+if (typeof ensureAssetComparisonSchema === 'undefined') {
+  window.ensureAssetComparisonSchema = async function(){
+    try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_group (
+      GroupID INTEGER PRIMARY KEY AUTOINCREMENT,
+      GroupName TEXT NOT NULL,
+      created_at TEXT
+    )`); } catch(e) {}
+    try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_member (
+      GroupID INTEGER NOT NULL,
+      SecurityID INTEGER NOT NULL,
+      created_at TEXT,
+      PRIMARY KEY (GroupID, SecurityID)
+    )`); } catch(e) {}
+  };
+}
+</script>
+<script>
 let rows = [];
 let masterRows = [];
 let trxArtOpts = [];
