@@ -39,13 +39,16 @@
   .settings input{font-family:'Inter',sans-serif;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;width:100%;}
   .settings button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
 
-  .group-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:20px 0 8px;}
-  .group-bar select,.group-bar input{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:7px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;color:var(--text);}
-  .group-bar select{min-width:200px;}
+  .group-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0 16px;}
+  .group-tab{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 16px;border-radius:20px;border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer;}
+  .group-tab:hover{border-color:var(--muted);color:var(--text);}
+  .group-tab.active{border-color:var(--accent);color:var(--text);font-weight:600;background:rgba(227,6,19,0.06);}
 
-  .member-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 20px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:4px;}
-  .member-bar select{flex:1;min-width:220px;font-family:'Inter',sans-serif;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:3px;background:#fff;}
-  .member-bar button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:7px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
+  .group-manage{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin-top:8px;display:flex;flex-direction:column;gap:10px;}
+  .group-manage-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .group-manage-row select{flex:1;min-width:220px;font-family:'Inter',sans-serif;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:3px;background:#fff;}
+  .group-manage-row input{min-width:160px;font-family:'IBM Plex Mono',monospace;font-size:12px;padding:7px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;color:var(--text);}
+  .group-manage-row button:not(.toggle-btn){font-family:'IBM Plex Mono',monospace;font-size:12px;padding:7px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
 
   .section-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;margin:28px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--line);}
   .table-wrap{overflow-x:auto;}
@@ -138,21 +141,24 @@
     </form>
   </div>
 
-  <div class="group-bar">
-    <select id="groupSelect"></select>
-    <button class="toggle-btn" id="renameGroupBtn">✏️ Rename</button>
-    <button class="toggle-btn" id="deleteGroupBtn">🗑 Delete</button>
-    <input type="text" id="newGroupName" placeholder="Neue Gruppe…" style="min-width:160px;">
-    <button class="toggle-btn" id="newGroupBtn">➕ Create Group</button>
-  </div>
-
-  <div class="member-bar">
-    <select id="addSecuritySelect"></select>
-    <button id="addSecurityBtn">➕ Add to Group</button>
-  </div>
+  <div class="group-tabs" id="groupTabs"></div>
 
   <div id="comparisonWrap"><div class="empty">Loading…</div></div>
   <p class="note">TER (tiefster Wert grün / höchster Wert rot) und Spread (tief grün / hoch rot) werden pro Gruppe farblich hervorgehoben. Yield = Ausschüttungen der letzten 12 Monate / aktueller Preis. Total Returns berücksichtigen Kursveränderung inkl. Ausschüttungen im jeweiligen Zeitraum.</p>
+
+  <div class="section-title">Manage Group</div>
+  <div class="group-manage">
+    <div class="group-manage-row">
+      <select id="addSecuritySelect"></select>
+      <button id="addSecurityBtn">➕ Add to Group</button>
+    </div>
+    <div class="group-manage-row">
+      <input type="text" id="newGroupName" placeholder="Neue Gruppe…">
+      <button class="toggle-btn" id="newGroupBtn">➕ Create Group</button>
+      <button class="toggle-btn" id="renameGroupBtn">✏️ Rename Current</button>
+      <button class="toggle-btn" id="deleteGroupBtn">🗑 Delete Current</button>
+    </div>
+  </div>
 
   <div class="footer">
     <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
@@ -251,15 +257,29 @@ function shadeStyle(val, min, max, invert){
 
 async function loadGroups(){
   groups = await tursoQuery('SELECT GroupID, GroupName FROM asset_comparison_group ORDER BY GroupName COLLATE NOCASE ASC', [], 0);
-  const sel = document.getElementById('groupSelect');
   if(!groups.length){
-    sel.innerHTML = `<option value="">Keine Gruppen — bitte erstellen</option>`;
     curGroupId = null;
+    renderGroupTabs();
     return;
   }
-  sel.innerHTML = groups.map(g => `<option value="${g.GroupID}">${g.GroupName}</option>`).join('');
   if(!curGroupId || !groups.some(g => String(g.GroupID)===String(curGroupId))) curGroupId = groups[0].GroupID;
-  sel.value = curGroupId;
+  renderGroupTabs();
+}
+
+function renderGroupTabs(){
+  const wrap = document.getElementById('groupTabs');
+  if(!groups.length){
+    wrap.innerHTML = '<span class="empty" style="padding:0;">Keine Gruppen — unten erstellen.</span>';
+    return;
+  }
+  wrap.innerHTML = groups.map(g => `<button type="button" class="group-tab ${String(g.GroupID)===String(curGroupId)?'active':''}" data-group-id="${g.GroupID}">${g.GroupName}</button>`).join('');
+  wrap.querySelectorAll('[data-group-id]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      curGroupId = btn.dataset.groupId;
+      renderGroupTabs();
+      await renderComparison();
+    });
+  });
 }
 
 function populateAddSecuritySelect(memberIds){
@@ -444,7 +464,18 @@ async function load(){
   }
   try {
     await ensureComparisonTables();
-    masterAll = await tursoQuery('SELECT SecurityID, SecurityName FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC', [], 3600000);
+    masterAll = await tursoQuery(
+      `SELECT sm.SecurityID, sm.SecurityName, sm.DateTerminated, sp.ParameterName AS StatusName
+       FROM security_master sm
+       LEFT JOIN security_parameter sp ON sp.ParameterID = sm.Status
+       ORDER BY sm.SecurityName COLLATE NOCASE ASC`, [], 3600000);
+    const todayIso = nowZurichDateString ? nowZurichDateString() : new Date().toISOString().slice(0,10);
+    masterAll = masterAll.filter(m => {
+      const statusName = (m.StatusName || '').trim().toLowerCase();
+      const isTerminated = statusName === 'terminated' || (m.DateTerminated && m.DateTerminated < todayIso);
+      const isInactive = statusName === 'inactive';
+      return !isTerminated && !isInactive;
+    });
     await loadGroups();
     document.getElementById('statusText').textContent = `${masterAll.length} Securities verfügbar`;
     await renderComparison();
@@ -454,11 +485,6 @@ async function load(){
   }
 }
 
-document.getElementById('groupSelect').addEventListener('change', async (e) => {
-  curGroupId = e.target.value;
-  await renderComparison();
-});
-
 document.getElementById('newGroupBtn').addEventListener('click', async () => {
   const input = document.getElementById('newGroupName');
   const name = input.value.trim();
@@ -467,8 +493,8 @@ document.getElementById('newGroupBtn').addEventListener('click', async () => {
   const result = await tursoRun('INSERT INTO asset_comparison_group (GroupName, created_at) VALUES (?,?)', [name, nowIso]);
   tursoClearCache();
   input.value = '';
+  if(result && result.lastInsertRowid){ curGroupId = result.lastInsertRowid; }
   await loadGroups();
-  if(result && result.lastInsertRowid){ curGroupId = result.lastInsertRowid; document.getElementById('groupSelect').value = curGroupId; }
   await renderComparison();
 });
 
@@ -480,7 +506,6 @@ document.getElementById('renameGroupBtn').addEventListener('click', async () => 
   await tursoRun('UPDATE asset_comparison_group SET GroupName = ? WHERE GroupID = ?', [name.trim(), curGroupId]);
   tursoClearCache();
   await loadGroups();
-  document.getElementById('groupSelect').value = curGroupId;
 });
 
 document.getElementById('deleteGroupBtn').addEventListener('click', async () => {

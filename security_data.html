@@ -512,7 +512,7 @@ function resetManualForm(){
   document.getElementById('mfValue').value = '';
   document.getElementById('mfUnit').value = '';
   document.getElementById('mfSource').value = '';
-  document.getElementById('mfDate').value = nowZurichDateString ? nowZurichDateString() : new Date().toISOString().slice(0,10);
+  document.getElementById('mfDate').value = nowZurichIsoDateString ? nowZurichIsoDateString() : new Date().toISOString().slice(0,10);
 }
 
 async function openEditForm(rowId){
@@ -624,7 +624,7 @@ document.getElementById('mfSave').addEventListener('click', async () => {
   const fieldValue = isNumeric ? null : rawValue;
 
   const unit = document.getElementById('mfUnit').value.trim() || null;
-  const asOfDate = document.getElementById('mfDate').value || (nowZurichDateString ? nowZurichDateString() : new Date().toISOString().slice(0,10));
+  const asOfDate = document.getElementById('mfDate').value || (nowZurichIsoDateString ? nowZurichIsoDateString() : new Date().toISOString().slice(0,10));
   const source = document.getElementById('mfSource').value.trim() || 'Manual Entry';
 
   try {

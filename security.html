@@ -27,7 +27,9 @@
   #securitySwitcher{background:var(--bg);border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 28px 6px 12px;border-radius:3px;cursor:pointer;min-width:220px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23767E8A'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;}
   .detail-header{padding-bottom:18px;border-bottom:2px solid var(--accent);position:relative;}
   .detail-header h2{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;margin:0 0 12px;padding-right:130px;}
-  .status-badge{position:absolute;top:0;right:0;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#fff;background:var(--loss);padding:5px 10px;border-radius:3px;}
+  .status-badge{position:absolute;top:0;right:0;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#fff;background:var(--muted);padding:5px 10px;border-radius:3px;}
+  .status-badge.status-active{background:var(--gain);}
+  .status-badge.status-inactive,.status-badge.status-terminated{background:var(--loss);}
   .detail-stats{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
   .detail-price{font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:600;}
   .ccy{color:var(--muted);font-size:13px;}
@@ -69,9 +71,6 @@
   .toggle-btn.active{background:var(--text);border-color:var(--text);color:#fff;font-weight:600;}
 
   .chart-wrap{margin:10px 0;background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:16px 12px 8px;position:relative;}
-  .chart-outer{position:relative;margin:10px 0;}
-  .chart-outer .chart-wrap{margin:0;}
-  .chart-actions{position:absolute;bottom:8px;right:8px;display:flex;gap:6px;}
   .chart-icon-btn{width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid var(--line);border-radius:3px;color:var(--muted);text-decoration:none;font-size:14px;cursor:pointer;}
   .chart-icon-btn:hover{border-color:var(--accent);color:var(--accent);}
   .chart-wrap svg{display:block;width:100%;height:auto;}
@@ -95,6 +94,7 @@
   .history-links{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;}
   .chart-controls-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin:18px 0 4px;}
   .chart-controls-row .toggle-row{margin:0;}
+  .chart-actions-inline{display:flex;gap:6px;flex:none;}
 
   .quick-form{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin-top:8px;}
   .quick-form .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;}
@@ -140,7 +140,7 @@
   <a href="portfolio.html">💼 Portfolio</a>
   <a href="analyser.html">🔬 Analyser</a>
   <a href="asset_comparison.html">🆚 Comparison</a>
-  <a href="security_task_manager.html">✅ Tasks</a>
+  <a href="tasks.html">✅ Tasks</a>
   <div class="nav-dropdown" id="editorsDropdown">
     <button type="button" class="dd-toggle" id="editorsToggle">🗂 Editors ▾</button>
     <div class="dd-menu" id="editorsMenu">
@@ -210,20 +210,20 @@
   </div>
 
   <div class="section-title-row"><span class="section-title-text">Price Chart</span></div>
-  <div class="chart-outer">
-    <div class="chart-wrap" id="priceChartWrap"><div class="chart-empty">Loading chart…</div></div>
-    <div class="chart-actions">
+  <div class="chart-wrap" id="priceChartWrap"><div class="chart-empty">Loading chart…</div></div>
+  <div class="chart-controls-row">
+    <div class="toggle-row" id="priceRangeRow">
+      <button type="button" class="toggle-btn" data-range="10D">10 Days</button>
+      <button type="button" class="toggle-btn" data-range="30D">30 Days</button>
+      <button type="button" class="toggle-btn active" data-range="90D">90 Days</button>
+      <button type="button" class="toggle-btn" data-range="YTD">YTD</button>
+      <button type="button" class="toggle-btn" data-range="12M">12 Months</button>
+      <button type="button" class="toggle-btn" data-range="ALL">All</button>
+    </div>
+    <div class="chart-actions-inline">
       <a class="chart-icon-btn" id="linkPriceHistory" href="price_editor.html" title="View Price History">👁</a>
       <a class="chart-icon-btn" id="linkPriceAdd" href="price_editor.html" title="Add Price">+</a>
     </div>
-  </div>
-  <div class="toggle-row" id="priceRangeRow">
-    <button type="button" class="toggle-btn" data-range="10D">10 Days</button>
-    <button type="button" class="toggle-btn" data-range="30D">30 Days</button>
-    <button type="button" class="toggle-btn active" data-range="90D">90 Days</button>
-    <button type="button" class="toggle-btn" data-range="YTD">YTD</button>
-    <button type="button" class="toggle-btn" data-range="12M">12 Months</button>
-    <button type="button" class="toggle-btn" data-range="ALL">All</button>
   </div>
 
   <div class="section-title">Returns</div>
@@ -275,17 +275,17 @@
 
   <div id="dividendSection">
     <div class="section-title-row"><span class="section-title-text">Dividend Chart</span></div>
-    <div class="chart-outer">
-      <div class="chart-wrap" id="distChartWrap"><div class="chart-empty">Loading chart…</div></div>
-      <div class="chart-actions">
+    <div class="chart-wrap" id="distChartWrap"><div class="chart-empty">Loading chart…</div></div>
+    <div class="chart-controls-row">
+      <div class="toggle-row" id="distRangeRow">
+        <button type="button" class="toggle-btn" data-range="12M">12 Months</button>
+        <button type="button" class="toggle-btn active" data-range="24M">24 Months</button>
+        <button type="button" class="toggle-btn" data-range="ALL">All</button>
+      </div>
+      <div class="chart-actions-inline">
         <a class="chart-icon-btn" id="linkDividendHistory" href="distribution_editor.html" title="View Dividend History">👁</a>
         <a class="chart-icon-btn" id="linkDividendAdd" href="distribution_editor.html" title="Add Dividend">+</a>
       </div>
-    </div>
-    <div class="toggle-row" id="distRangeRow">
-      <button type="button" class="toggle-btn" data-range="12M">12 Months</button>
-      <button type="button" class="toggle-btn active" data-range="24M">24 Months</button>
-      <button type="button" class="toggle-btn" data-range="ALL">All</button>
     </div>
   </div>
 
@@ -756,11 +756,14 @@ async function loadSecurity(secId){
   const badge = document.getElementById('statusBadge');
   const statusName = (master.StatusName || '').trim().toLowerCase();
   const todayIso = nowZurichDateString ? nowZurichDateString() : new Date().toISOString().slice(0,10);
-  const isTerminated = statusName === 'terminated' || (master.DateTerminated && master.DateTerminated < todayIso);
-  const isInactive = !isTerminated && statusName === 'inactive';
-  if(isTerminated){ badge.textContent = 'Terminated'; badge.style.display = ''; }
-  else if(isInactive){ badge.textContent = 'Inactive'; badge.style.display = ''; }
-  else { badge.style.display = 'none'; }
+  const isTerminatedByDate = !!(master.DateTerminated && master.DateTerminated < todayIso);
+  const isInactive = statusName === 'inactive';
+  const isTerminated = statusName === 'terminated' || isTerminatedByDate;
+  badge.classList.remove('status-active','status-inactive','status-terminated');
+  if(isTerminated){ badge.textContent = 'Terminated'; badge.classList.add('status-terminated'); }
+  else if(isInactive){ badge.textContent = 'Inactive'; badge.classList.add('status-inactive'); }
+  else { badge.textContent = 'Active'; badge.classList.add('status-active'); }
+  badge.style.display = '';
 
   const [prices, dists, txns] = await Promise.all([
     tursoQuery('SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices WHERE SecurityID = ?', [secId]),
