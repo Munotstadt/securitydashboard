@@ -108,7 +108,10 @@
   <div id="distUploadArea"></div>
 
   <div class="section-title">UBS Quotes Import (Excel)</div>
-  <p class="note">UBS-Kursliste (.xlsx) mit mehreren Sheets (Indizes, Aktien, Anlagefonds, Forex, Edelmetalle, Rohstoffe, Geldmarkt, Münzen …). Spalten: <code>Name</code>, <code>Price</code>, <code>Time</code> (Uhrzeit hh:mm:ss → heutiges Datum + Zeit, Datum dd.mm.yy → Schlusskurs an diesem Tag). Nicht zuordenbare Namen können manuell einer Security zugewiesen werden – das Matching wird gelernt und beim nächsten Import automatisch wiederverwendet.</p>
+  <p class="note">UBS-Kursliste (.xlsx) mit mehreren Sheets (Indizes, Aktien, Anlagefonds, Forex, Edelmetalle, Rohstoffe, Geldmarkt, Münzen …). Spalten: <code>Name</code>, <code>Price</code>, <code>Time</code> (Uhrzeit hh:mm:ss → Datum des Files + Zeit, Datum dd.mm.yy → Schlusskurs an diesem Tag). Nicht zuordenbare Namen können manuell einer Security zugewiesen werden – das Matching wird gelernt und beim nächsten Import automatisch wiederverwendet.</p>
+  <label style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);display:inline-block;margin-bottom:6px;">
+    Datum des Files: <input type="date" id="ubsFileDate">
+  </label><br>
   <input type="file" id="ubsFile" accept=".xlsx">
   <div id="ubsUploadArea"></div>
 
@@ -453,6 +456,8 @@ async function importDistributions(parsed){
 
 // ============ UBS Quotes Import (Excel, multi-sheet) ============
 const UBS_SOURCE = 'UBS Quotes Import (Uploader)';
+let ubsCurrentParsed = null; // last parsed rows, kept for re-derivation when the file date changes
+let ubsCurrentMaster = null;
 
 // Learned Name->SecurityID matching lives in its own table so it survives
 // across uploads and keeps getting smarter. Created lazily (no separate
@@ -488,17 +493,30 @@ async function ensureNameMapping(){
   return nameMappingCache;
 }
 
-// Excel "Time" column: "hh:mm[:ss]" -> today (Zurich) + that time (intraday quote).
-// "dd.mm.yy[yy]" -> that calendar date, no time (end-of-day close).
-function parseUbsTimeOrDate(raw){
+// Value of the "Datum des Files" input as a local Date (midnight), used as
+// the day for "Time" cells that are a plain clock time (hh:mm:ss).
+function getUbsFileDate(){
+  const val = document.getElementById('ubsFileDate')?.value; // 'YYYY-MM-DD'
+  if (val) {
+    const [y, m, d] = val.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    if (!isNaN(dt)) return dt;
+  }
+  const p = zurichParts(new Date());
+  return new Date(Number(p.year), Number(p.month) - 1, Number(p.day));
+}
+
+// Excel "Time" column: "hh:mm[:ss]" -> refDate (the file's date) + that time
+// (intraday quote). "dd.mm.yy[yy]" -> that calendar date, no time (close price).
+function parseUbsTimeOrDate(raw, refDate){
   const s = (raw ?? '').toString().trim();
   if (!s) return { iso: null, display: null, error: 'Kein Datum/Zeit' };
   let m = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
   if (m) {
     const [, h, mi, se = '00'] = m;
     if (Number(h) > 23 || Number(mi) > 59) return { iso: null, display: null, error: `Ungültige Zeit "${s}"` };
-    const p = zurichParts(new Date());
-    const dt = new Date(Number(p.year), Number(p.month) - 1, Number(p.day), Number(h), Number(mi), Number(se));
+    const base = refDate || getUbsFileDate();
+    const dt = new Date(base.getFullYear(), base.getMonth(), base.getDate(), Number(h), Number(mi), Number(se));
     return { iso: toIsoDateTime(dt), display: toSwissDateTime(dt), error: null };
   }
   m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
@@ -537,6 +555,7 @@ async function handleUbsFile(file){
     const wb = XLSX.read(buf, { type: 'array' });
     const master = await ensureMasterForUpload();
     const mapping = await ensureNameMapping();
+    const refDate = getUbsFileDate();
 
     const raw = [];
     wb.SheetNames.forEach(sheetName => {
@@ -549,18 +568,22 @@ async function handleUbsFile(file){
       const name = (row.Name || '').toString().trim();
       const priceRaw = row.Price;
       const price = parseFloat(priceRaw);
-      const td = parseUbsTimeOrDate(row.Time);
+      const timeRaw = row.Time;
+      const td = parseUbsTimeOrDate(timeRaw, refDate);
       const sec = resolveUbsSecurity(name, master, mapping);
       const errors = [];
       if (priceRaw === undefined || priceRaw === '' || isNaN(price)) errors.push(`Kein Kurs "${priceRaw ?? ''}"`);
       if (td.error) errors.push(td.error);
       return {
         _idx: i, sheet, excelName: name, priceRaw, price: isNaN(price) ? null : price,
-        priceDateIso: td.iso, priceDateDisplay: td.display,
+        timeRaw, priceDateIso: td.iso, priceDateDisplay: td.display,
         secId: sec.secId, secName: sec.secName, matchType: sec.matchType,
         errors, conflict: null, duplicate: false,
       };
     });
+
+    ubsCurrentParsed = parsed;
+    ubsCurrentMaster = master;
 
     ubsSort = { key: null, dir: 1 };
     await markUbsDuplicates(parsed);
@@ -767,8 +790,9 @@ function renderUbsPreview(area, parsed, master){
   area.querySelectorAll('.ubs-time-input').forEach(inp => {
     inp.addEventListener('change', async () => {
       const p = parsed[Number(inp.dataset.i)];
-      const td = parseUbsTimeOrDate(inp.value);
+      const td = parseUbsTimeOrDate(inp.value, getUbsFileDate());
       if (td.error) { alert(td.error); return; }
+      p.timeRaw = inp.value;
       p.priceDateIso = td.iso; p.priceDateDisplay = td.display;
       p.errors = p.errors.filter(e => !/Datum|Zeit|Format/.test(e));
       await markUbsDuplicates(parsed);
@@ -821,6 +845,26 @@ async function importUbsQuotes(parsed){
 document.getElementById('priceFile').addEventListener('change', (e) => { if (e.target.files[0]) handlePriceFile(e.target.files[0]); });
 document.getElementById('distFile').addEventListener('change', (e) => { if (e.target.files[0]) handleDistFile(e.target.files[0]); });
 document.getElementById('ubsFile').addEventListener('change', (e) => { if (e.target.files[0]) handleUbsFile(e.target.files[0]); });
+(() => {
+  const p = zurichParts(new Date());
+  const pad = n => String(n).padStart(2, '0');
+  document.getElementById('ubsFileDate').value = `${p.year}-${pad(p.month)}-${pad(p.day)}`;
+})();
+document.getElementById('ubsFileDate').addEventListener('change', async () => {
+  if (!ubsCurrentParsed) return; // no file loaded yet — new date just applies on next upload
+  const refDate = getUbsFileDate();
+  const area = document.getElementById('ubsUploadArea');
+  ubsCurrentParsed.forEach(p => {
+    if (!/^\d{1,2}:\d{2}(:\d{2})?$/.test((p.timeRaw ?? '').toString().trim())) return; // only clock-time rows depend on the file date
+    const td = parseUbsTimeOrDate(p.timeRaw, refDate);
+    if (td.error) return;
+    p.priceDateIso = td.iso; p.priceDateDisplay = td.display;
+    p.errors = p.errors.filter(e => !/Datum|Zeit|Format/.test(e));
+  });
+  await markUbsDuplicates(ubsCurrentParsed);
+  computeUbsConflicts(ubsCurrentParsed);
+  renderUbsPreview(area, ubsCurrentParsed, ubsCurrentMaster);
+});
 document.getElementById('settingsBtn').addEventListener('click', () => {
   document.getElementById('cfgUrl').value = TURSO.url;
   document.getElementById('cfgToken').value = TURSO.token;
