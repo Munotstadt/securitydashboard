@@ -69,6 +69,74 @@ function tursoCacheCount() {
   } catch (e) { return 0; }
 }
 
+// ============ One-time schema guards (sessionStorage-persisted) ============
+// Several pages defensively run "ALTER TABLE ... ADD COLUMN" / "CREATE TABLE
+// IF NOT EXISTS" on load, in case a newer feature's column/table doesn't
+// exist yet. These are writes, and every write clears the whole query cache
+// (see tursoBatch above) - so without a guard, running them on EVERY page
+// load was silently defeating the 1h/5min caches used elsewhere (master
+// data, parameter dropdowns, etc. were being re-fetched from Turso on every
+// single navigation). These guards make each schema-check run at most once
+// per browser tab session; a hard refresh re-checks once, which is enough
+// since schema doesn't change during normal use.
+const TURSO_SCHEMA_GUARD_PREFIX = 'SECURITYDASHBOARD_SCHEMA_OK_';
+function schemaAlreadyEnsured(key){
+  try { return sessionStorage.getItem(TURSO_SCHEMA_GUARD_PREFIX + key) === '1'; } catch(e) { return false; }
+}
+function markSchemaEnsured(key){
+  try { sessionStorage.setItem(TURSO_SCHEMA_GUARD_PREFIX + key, '1'); } catch(e) {}
+}
+
+async function ensureSecurityMasterSchema(){
+  if (schemaAlreadyEnsured('security_master')) return;
+  try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateLaunch TEXT'); } catch(e) {}
+  try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateTerminated TEXT'); } catch(e) {}
+  try { await tursoRun('ALTER TABLE security_master ADD COLUMN Status INTEGER'); } catch(e) {}
+  try { await tursoRun('ALTER TABLE security_master ADD COLUMN Comments TEXT'); } catch(e) {}
+  markSchemaEnsured('security_master');
+}
+
+async function ensureSecurityTasksSchema(){
+  if (schemaAlreadyEnsured('security_tasks')) return;
+  try {
+    await tursoRun(`CREATE TABLE IF NOT EXISTS security_tasks (
+      TaskID INTEGER PRIMARY KEY AUTOINCREMENT,
+      TaskName TEXT NOT NULL,
+      TaskDescription TEXT,
+      SecurityID INTEGER,
+      DateDue TEXT,
+      Recurring TEXT,
+      Completed INTEGER DEFAULT 0,
+      CompletedAt TEXT,
+      created_at TEXT
+    )`);
+  } catch(e) {}
+  try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
+  markSchemaEnsured('security_tasks');
+}
+
+async function ensureSecurityDataSchema(){
+  if (schemaAlreadyEnsured('security_data')) return;
+  try { await tursoRun('ALTER TABLE security_data ADD COLUMN Source TEXT'); } catch(e) {}
+  markSchemaEnsured('security_data');
+}
+
+async function ensureAssetComparisonSchema(){
+  if (schemaAlreadyEnsured('asset_comparison')) return;
+  try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_group (
+    GroupID INTEGER PRIMARY KEY AUTOINCREMENT,
+    GroupName TEXT NOT NULL,
+    created_at TEXT
+  )`); } catch(e) {}
+  try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_member (
+    GroupID INTEGER NOT NULL,
+    SecurityID INTEGER NOT NULL,
+    created_at TEXT,
+    PRIMARY KEY (GroupID, SecurityID)
+  )`); } catch(e) {}
+  markSchemaEnsured('asset_comparison');
+}
+
 // ============ Core exec — pass several {sql, args} statements, executed in one round trip ============
 async function tursoBatch(statements) {
   if (!tursoConfigured()) throw new Error('Turso Datenbank-URL/Token nicht konfiguriert (⚙ Repo/Token).');
