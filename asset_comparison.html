@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asset Comparison</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613;--gain:#1F8A6E;--loss:#C0293D; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:32px 16px 80px;display:flex;flex-direction:column;align-items:center;}
+  .topnav{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;align-items:center;max-width:1200px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;scrollbar-width:none;}
+  .topnav::-webkit-scrollbar{display:none;}
+  .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
+  .topnav a:hover{color:var(--text);border-color:var(--line);}
+  .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
+
+  .board{width:100%;max-width:1200px;}
+  .eyebrow{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:2px solid var(--accent);flex-wrap:wrap;gap:8px;}
+  .brand h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:.02em;margin:0;}
+  .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+
+  .toggle-btn{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;}
+  .toggle-btn:hover{border-color:var(--muted);color:var(--text);}
+
+  .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:16px 0;display:none;gap:8px;}
+  .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
+  .settings label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
+  .settings input{font-family:'Inter',sans-serif;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;width:100%;}
+  .settings button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
+
+  .group-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:20px 0 8px;}
+  .group-bar select,.group-bar input{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:7px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;color:var(--text);}
+  .group-bar select{min-width:200px;}
+
+  .member-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 20px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:4px;}
+  .member-bar select{flex:1;min-width:220px;font-family:'Inter',sans-serif;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:3px;background:#fff;}
+  .member-bar button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:7px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
+
+  .section-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;margin:28px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  .table-wrap{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;margin-top:4px;}
+  thead th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:10px 8px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  thead th.num{text-align:right;}
+  tbody td{padding:9px 8px;border-bottom:1px solid var(--line);font-size:13px;white-space:nowrap;}
+  tbody td.num{font-family:'IBM Plex Mono',monospace;text-align:right;}
+  tbody tr.summary-row td{font-weight:600;background:var(--panel);border-top:1px solid var(--line);}
+  .name{font-weight:500;white-space:normal;min-width:160px;}
+  .name a{color:var(--text);text-decoration:none;border-bottom:1px dotted var(--muted);}
+  .name a:hover{color:var(--accent);border-bottom-color:var(--accent);}
+  .cell-good{color:var(--gain);font-weight:600;}
+  .cell-bad{color:var(--loss);font-weight:600;}
+  .rm-link{color:var(--muted);text-decoration:none;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+  .rm-link:hover{color:var(--loss);}
+  .edit-link{color:var(--muted);text-decoration:none;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+  .edit-link:hover{color:var(--accent);}
+  .empty,.error{padding:40px 10px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  .error{color:var(--loss);}
+  .note{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:10px;}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <a href="index.html">🏠 Home</a>
+  <a href="dashboard.html">📊 Dashboard</a>
+  <a href="portfolio.html">💼 Portfolio</a>
+  <a href="analyser.html">🔬 Analyser</a>
+  <a href="asset_comparison.html" class="active">🆚 Comparison</a>
+  <a href="master_editor.html">🗂 Master Data</a>
+  <a href="price_editor.html">✏️ Prices</a>
+  <a href="transactions_editor.html">📋 Transactions</a>
+  <a href="distribution_editor.html">💰 Distributions</a>
+  <a href="admin.html">⚙️ Admin</a>
+</nav>
+<div class="board">
+  <div class="eyebrow">
+    <div class="brand"><h1>Asset Comparison</h1></div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <div class="status" id="statusText">loading…</div>
+      <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
+    </div>
+  </div>
+
+  <div class="settings" id="settingsPanel">
+    <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
+      <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="https://…turso.io"></div>
+      <div><label>Auth Token</label><input type="password" id="cfgToken" name="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…"></div>
+      <div style="align-self:end;"><button id="cfgSave" type="submit">Apply</button></div>
+    </form>
+  </div>
+
+  <div class="group-bar">
+    <select id="groupSelect"></select>
+    <button class="toggle-btn" id="renameGroupBtn">✏️ Rename</button>
+    <button class="toggle-btn" id="deleteGroupBtn">🗑 Delete</button>
+    <input type="text" id="newGroupName" placeholder="Neue Gruppe…" style="min-width:160px;">
+    <button class="toggle-btn" id="newGroupBtn">➕ Create Group</button>
+  </div>
+
+  <div class="member-bar">
+    <select id="addSecuritySelect"></select>
+    <button id="addSecurityBtn">➕ Add to Group</button>
+  </div>
+
+  <div id="comparisonWrap"><div class="empty">Loading…</div></div>
+  <p class="note">TER (tiefster Wert grün / höchster Wert rot) und Spread (tief grün / hoch rot) werden pro Gruppe farblich hervorgehoben. Yield = Ausschüttungen der letzten 12 Monate / aktueller Preis. Total Returns berücksichtigen Kursveränderung inkl. Ausschüttungen im jeweiligen Zeitraum.</p>
+</div>
+
+<script src="assets/turso-data.js"></script>
+<script>
+let masterAll = [];
+let groups = [];
+let curGroupId = null;
+
+const TER_PARAM_ID = 133;
+const TRXCRY_PARAM_ID = 134;
+const SPREAD_PARAM_ID = 135;
+
+function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); return d; }
+function endOfYear(y){ return new Date(y, 11, 31, 23, 59, 59); }
+
+const TR_PERIODS = [
+  { key:'d360', label:'360D', type:'rolling', days:360 },
+  { key:'ytd',  label:'2026 YTD', type:'ytd' },
+  { key:'y2025',label:'2025', type:'year', year:2025 },
+  { key:'y2024',label:'2024', type:'year', year:2024 },
+  { key:'y2023',label:'2023', type:'year', year:2023 },
+  { key:'y2022',label:'2022', type:'year', year:2022 },
+  { key:'y2021',label:'2021', type:'year', year:2021 },
+];
+
+async function ensureComparisonTables(){
+  try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_group (
+    GroupID INTEGER PRIMARY KEY AUTOINCREMENT,
+    GroupName TEXT NOT NULL,
+    created_at TEXT
+  )`); } catch(e) {}
+  try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_member (
+    GroupID INTEGER NOT NULL,
+    SecurityID INTEGER NOT NULL,
+    created_at TEXT,
+    PRIMARY KEY (GroupID, SecurityID)
+  )`); } catch(e) {}
+}
+
+function distSumInRange(distList, fromExclusive, toInclusive){
+  if(!distList) return 0;
+  return distList.filter(d => d.exDate > fromExclusive && d.exDate <= toInclusive).reduce((s,d) => s + d.amount, 0);
+}
+
+function computeTotalReturn(closes, distList, today, period){
+  let startCutoff, endCutoff;
+  if(period.type === 'rolling'){ startCutoff = daysAgo(today, period.days); endCutoff = today; }
+  else if(period.type === 'ytd'){ startCutoff = endOfYear(today.getFullYear()-1); endCutoff = today; }
+  else { startCutoff = endOfYear(period.year-1); endCutoff = endOfYear(period.year); }
+
+  const startClose = latestOnOrBefore(closes, startCutoff);
+  const endClose = latestOnOrBefore(closes, endCutoff);
+  if(!startClose || !endClose || !startClose.Price) return null;
+  const distSum = distSumInRange(distList, startCutoff, endCutoff);
+  return ((endClose.Price + distSum) / startClose.Price - 1) * 100;
+}
+
+function computeYield(closes, distList, today){
+  const last = closes.length ? closes[closes.length-1] : null;
+  if(!last || !last.Price) return null;
+  const distSum = distSumInRange(distList, daysAgo(today,365), today);
+  return (distSum / last.Price) * 100;
+}
+
+function fmtPctCell(v){ return (v===null||v===undefined||isNaN(v)) ? '—' : `${v.toFixed(2)}%`; }
+function fmtIntPctCell(v){ return (v===null||v===undefined||isNaN(v)) ? '—' : `${Math.round(v)}%`; }
+
+function minMaxClass(val, min, max){
+  if(val===null||val===undefined||isNaN(val)||min===max) return '';
+  if(val === min) return 'cell-good';
+  if(val === max) return 'cell-bad';
+  return '';
+}
+
+async function loadGroups(){
+  groups = await tursoQuery('SELECT GroupID, GroupName FROM asset_comparison_group ORDER BY GroupName COLLATE NOCASE ASC', [], 0);
+  const sel = document.getElementById('groupSelect');
+  if(!groups.length){
+    sel.innerHTML = `<option value="">Keine Gruppen — bitte erstellen</option>`;
+    curGroupId = null;
+    return;
+  }
+  sel.innerHTML = groups.map(g => `<option value="${g.GroupID}">${g.GroupName}</option>`).join('');
+  if(!curGroupId || !groups.some(g => String(g.GroupID)===String(curGroupId))) curGroupId = groups[0].GroupID;
+  sel.value = curGroupId;
+}
+
+function populateAddSecuritySelect(memberIds){
+  const sel = document.getElementById('addSecuritySelect');
+  const avail = masterAll.filter(m => !memberIds.has(m.SecurityID));
+  sel.innerHTML = avail.map(m => `<option value="${m.SecurityID}">${m.SecurityName} · ${m.SecurityID}</option>`).join('')
+    || `<option value="">Alle Securities bereits in der Gruppe</option>`;
+}
+
+async function renderComparison(){
+  const wrap = document.getElementById('comparisonWrap');
+  if(!curGroupId){
+    wrap.innerHTML = '<div class="empty">Bitte zuerst eine Gruppe erstellen.</div>';
+    populateAddSecuritySelect(new Set());
+    return;
+  }
+  wrap.innerHTML = '<div class="empty">Loading…</div>';
+
+  const members = await tursoQuery('SELECT SecurityID FROM asset_comparison_member WHERE GroupID = ?', [curGroupId], 0);
+  const secIds = members.map(m => m.SecurityID);
+  populateAddSecuritySelect(new Set(secIds));
+
+  if(!secIds.length){
+    wrap.innerHTML = '<div class="empty">Diese Gruppe hat noch keine Securities. Oben hinzufügen.</div>';
+    return;
+  }
+
+  const placeholders = secIds.map(() => '?').join(',');
+  const [mastersRaw, prices, distRows, dataRows] = await Promise.all([
+    tursoQuery(`SELECT SecurityID, SecurityName, Currency FROM security_master WHERE SecurityID IN (${placeholders})`, secIds),
+    tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices WHERE SecurityID IN (${placeholders})`, secIds),
+    tursoQuery(`SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions WHERE SecurityID IN (${placeholders})`, secIds),
+    tursoQuery(`SELECT sd.SecurityID, sd.DataType, sd.FieldNameID, sd.FieldValue, sd.NumericValue, sd.AsOfDate, sp.ParameterName
+                FROM security_data sd LEFT JOIN security_parameter sp ON sp.ParameterID = sd.FieldNameID
+                WHERE sd.SecurityID IN (${placeholders}) AND (sd.DataType = 'SectorWeight' OR sd.FieldNameID IN (${TER_PARAM_ID},${TRXCRY_PARAM_ID},${SPREAD_PARAM_ID}))`, secIds),
+  ]);
+
+  // Preserve the order securities were added to the group.
+  const mastersById = new Map(mastersRaw.map(m => [m.SecurityID, m]));
+  const orderedMasters = secIds.map(id => mastersById.get(id)).filter(Boolean);
+
+  const pricesBySecId = new Map();
+  for(const p of prices){ if(!pricesBySecId.has(p.SecurityID)) pricesBySecId.set(p.SecurityID, []); pricesBySecId.get(p.SecurityID).push(p); }
+  const distBySecId = new Map();
+  for(const d of distRows){
+    const amount = parseFloat(d.DistributionAmount), exDate = parseSwissDate(d.ExDate);
+    if(isNaN(amount) || !exDate) continue;
+    if(!distBySecId.has(d.SecurityID)) distBySecId.set(d.SecurityID, []);
+    distBySecId.get(d.SecurityID).push({ amount, exDate });
+  }
+
+  // Single-value params (TER/Spread/TrxCry): keep only the latest AsOfDate per SecurityID+FieldNameID.
+  const singleParams = new Map(); // secId -> { 133: row, 134: row, 135: row }
+  const sectorRows = new Map(); // secId -> [{name, weight, asOfDate}]
+  for(const row of dataRows){
+    if(row.DataType === 'SectorWeight'){
+      if(!sectorRows.has(row.SecurityID)) sectorRows.set(row.SecurityID, []);
+      sectorRows.get(row.SecurityID).push(row);
+      continue;
+    }
+    if(!singleParams.has(row.SecurityID)) singleParams.set(row.SecurityID, {});
+    const bucket = singleParams.get(row.SecurityID);
+    const existing = bucket[row.FieldNameID];
+    if(!existing || row.AsOfDate > existing.AsOfDate) bucket[row.FieldNameID] = row;
+  }
+  // Reduce sector rows to latest snapshot per security.
+  const sectorsBySecId = new Map();
+  for(const [secId, rows] of sectorRows.entries()){
+    const maxDate = rows.reduce((max,r) => r.AsOfDate > max ? r.AsOfDate : max, rows[0].AsOfDate);
+    const latest = rows.filter(r => r.AsOfDate === maxDate);
+    sectorsBySecId.set(secId, latest.map(r => ({ name: r.ParameterName || r.FieldValue || '—', weight: r.NumericValue })));
+  }
+
+  const today = new Date();
+  const allSectorNames = [...new Set([...sectorsBySecId.values()].flat().map(s => s.name))].sort((a,b) => a.localeCompare(b));
+
+  const perSecurity = orderedMasters.map(m => {
+    const closes = dailyCloses(pricesBySecId.get(m.SecurityID) || []);
+    const distList = distBySecId.get(m.SecurityID) || [];
+    const params = singleParams.get(m.SecurityID) || {};
+    const ter = params[TER_PARAM_ID] ? params[TER_PARAM_ID].NumericValue : null;
+    const spread = params[SPREAD_PARAM_ID] ? params[SPREAD_PARAM_ID].NumericValue : null;
+    const trxCryRow = params[TRXCRY_PARAM_ID];
+    const trxCry = trxCryRow ? (trxCryRow.FieldValue || trxCryRow.ParameterName || (trxCryRow.NumericValue!==null?String(trxCryRow.NumericValue):null)) : null;
+    const yieldPct = computeYield(closes, distList, today);
+    const trByPeriod = {};
+    for(const p of TR_PERIODS) trByPeriod[p.key] = computeTotalReturn(closes, distList, today, p);
+    const sectorMap = {};
+    for(const s of (sectorsBySecId.get(m.SecurityID) || [])) sectorMap[s.name] = s.weight;
+    return { secId:m.SecurityID, name:m.SecurityName, ter, spread, trxCry, yieldPct, trByPeriod, sectorMap };
+  });
+
+  // min/max for color coding (ignoring nulls)
+  function minMaxOf(field){
+    const vals = perSecurity.map(r => r[field]).filter(v => v!==null && v!==undefined && !isNaN(v));
+    return vals.length ? { min: Math.min(...vals), max: Math.max(...vals) } : { min:null, max:null };
+  }
+  const terRange = minMaxOf('ter');
+  const spreadRange = minMaxOf('spread');
+
+  function avgOf(arr){
+    const vals = arr.filter(v => v!==null && v!==undefined && !isNaN(v));
+    return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null;
+  }
+  function sumOf(arr){
+    const vals = arr.filter(v => v!==null && v!==undefined && !isNaN(v));
+    return vals.length ? vals.reduce((s,v)=>s+v,0) : null;
+  }
+
+  const trHeaders = TR_PERIODS.map(p => `<th class="num">${p.label}</th>`).join('');
+  const sectorHeaders = allSectorNames.map(s => `<th class="num">${s}</th>`).join('');
+
+  const bodyRows = perSecurity.map(r => {
+    const terCls = minMaxClass(r.ter, terRange.min, terRange.max);
+    const spreadCls = minMaxClass(r.spread, spreadRange.min, spreadRange.max);
+    const trCells = TR_PERIODS.map(p => `<td class="num">${fmtPctCell(r.trByPeriod[p.key])}</td>`).join('');
+    const sectorCells = allSectorNames.map(s => `<td class="num">${fmtIntPctCell(r.sectorMap[s])}</td>`).join('');
+    return `<tr>
+      <td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>
+      <td class="num ${terCls}">${fmtPctCell(r.ter)}</td>
+      <td class="num ${spreadCls}">${fmtPctCell(r.spread)}</td>
+      <td class="num">${r.trxCry || '—'}</td>
+      <td class="num">${fmtPctCell(r.yieldPct)}</td>
+      ${trCells}
+      ${sectorCells}
+      <td class="num">
+        <a class="edit-link" href="security_data.html?id=${encodeURIComponent(r.secId)}">✏️ Edit</a>
+        &nbsp;<a class="rm-link" href="#" data-remove-secid="${r.secId}">✕ Remove</a>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const totalRow = `<tr class="summary-row">
+    <td class="name">Total</td>
+    <td class="num">${fmtPctCell(sumOf(perSecurity.map(r=>r.ter)))}</td>
+    <td class="num">${fmtPctCell(sumOf(perSecurity.map(r=>r.spread)))}</td>
+    <td class="num">—</td>
+    <td class="num">${fmtPctCell(sumOf(perSecurity.map(r=>r.yieldPct)))}</td>
+    ${TR_PERIODS.map(p => `<td class="num">${fmtPctCell(sumOf(perSecurity.map(r=>r.trByPeriod[p.key])))}</td>`).join('')}
+    ${allSectorNames.map(s => `<td class="num">${fmtIntPctCell(sumOf(perSecurity.map(r=>r.sectorMap[s])))}</td>`).join('')}
+    <td></td>
+  </tr>`;
+  const avgRow = `<tr class="summary-row">
+    <td class="name">Average</td>
+    <td class="num">${fmtPctCell(avgOf(perSecurity.map(r=>r.ter)))}</td>
+    <td class="num">${fmtPctCell(avgOf(perSecurity.map(r=>r.spread)))}</td>
+    <td class="num">—</td>
+    <td class="num">${fmtPctCell(avgOf(perSecurity.map(r=>r.yieldPct)))}</td>
+    ${TR_PERIODS.map(p => `<td class="num">${fmtPctCell(avgOf(perSecurity.map(r=>r.trByPeriod[p.key])))}</td>`).join('')}
+    ${allSectorNames.map(s => `<td class="num">${fmtIntPctCell(avgOf(perSecurity.map(r=>r.sectorMap[s])))}</td>`).join('')}
+    <td></td>
+  </tr>`;
+
+  wrap.innerHTML = `
+    <div class="section-title">Comparison</div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>SecurityName</th><th class="num">TER</th><th class="num">Spread</th><th class="num">TrxCry</th><th class="num">Yield</th>
+        ${trHeaders}${sectorHeaders}<th></th>
+      </tr></thead>
+      <tbody>${bodyRows}${totalRow}${avgRow}</tbody>
+    </table>
+    </div>
+  `;
+
+  wrap.querySelectorAll('[data-remove-secid]').forEach(a => {
+    a.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const secId = e.target.dataset.removeSecid;
+      await tursoRun('DELETE FROM asset_comparison_member WHERE GroupID = ? AND SecurityID = ?', [curGroupId, secId]);
+      tursoClearCache();
+      await renderComparison();
+    });
+  });
+}
+
+async function load(){
+  if (!tursoConfigured()) {
+    document.getElementById('statusText').textContent = 'Bitte Repo/Token setzen.';
+    document.getElementById('settingsPanel').classList.add('show');
+    return;
+  }
+  try {
+    await ensureComparisonTables();
+    masterAll = await tursoQuery('SELECT SecurityID, SecurityName FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC', [], 3600000);
+    await loadGroups();
+    document.getElementById('statusText').textContent = `${masterAll.length} Securities verfügbar`;
+    await renderComparison();
+  } catch (e) {
+    document.getElementById('comparisonWrap').innerHTML = `<div class="error">Fehler: ${e.message}</div>`;
+    document.getElementById('statusText').textContent = 'Fehler';
+  }
+}
+
+document.getElementById('groupSelect').addEventListener('change', async (e) => {
+  curGroupId = e.target.value;
+  await renderComparison();
+});
+
+document.getElementById('newGroupBtn').addEventListener('click', async () => {
+  const input = document.getElementById('newGroupName');
+  const name = input.value.trim();
+  if(!name) return;
+  const nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
+  const result = await tursoRun('INSERT INTO asset_comparison_group (GroupName, created_at) VALUES (?,?)', [name, nowIso]);
+  tursoClearCache();
+  input.value = '';
+  await loadGroups();
+  if(result && result.lastInsertRowid){ curGroupId = result.lastInsertRowid; document.getElementById('groupSelect').value = curGroupId; }
+  await renderComparison();
+});
+
+document.getElementById('renameGroupBtn').addEventListener('click', async () => {
+  if(!curGroupId) return;
+  const current = groups.find(g => String(g.GroupID)===String(curGroupId));
+  const name = prompt('Neuer Gruppenname:', current ? current.GroupName : '');
+  if(!name || !name.trim()) return;
+  await tursoRun('UPDATE asset_comparison_group SET GroupName = ? WHERE GroupID = ?', [name.trim(), curGroupId]);
+  tursoClearCache();
+  await loadGroups();
+  document.getElementById('groupSelect').value = curGroupId;
+});
+
+document.getElementById('deleteGroupBtn').addEventListener('click', async () => {
+  if(!curGroupId) return;
+  const current = groups.find(g => String(g.GroupID)===String(curGroupId));
+  if(!confirm(`Gruppe "${current ? current.GroupName : curGroupId}" inkl. aller Mitglieder löschen?`)) return;
+  await tursoRun('DELETE FROM asset_comparison_member WHERE GroupID = ?', [curGroupId]);
+  await tursoRun('DELETE FROM asset_comparison_group WHERE GroupID = ?', [curGroupId]);
+  tursoClearCache();
+  curGroupId = null;
+  await loadGroups();
+  await renderComparison();
+});
+
+document.getElementById('addSecurityBtn').addEventListener('click', async () => {
+  if(!curGroupId){ alert('Bitte zuerst eine Gruppe erstellen/wählen.'); return; }
+  const sel = document.getElementById('addSecuritySelect');
+  const secId = sel.value;
+  if(!secId) return;
+  const nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
+  await tursoRun('INSERT OR IGNORE INTO asset_comparison_member (GroupID, SecurityID, created_at) VALUES (?,?,?)', [curGroupId, secId, nowIso]);
+  tursoClearCache();
+  await renderComparison();
+});
+
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  document.getElementById('cfgUrl').value = TURSO.url;
+  document.getElementById('cfgToken').value = TURSO.token;
+  document.getElementById('settingsPanel').classList.toggle('show');
+});
+document.getElementById('cfgSave').addEventListener('click', () => {
+  tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
+  document.getElementById('settingsPanel').classList.remove('show');
+  load();
+});
+
+load();
+</script>
+</body>
+</html>
