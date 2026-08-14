@@ -17,8 +17,8 @@
   .nav-dropdown>.dd-toggle{background:none;color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:12px;cursor:pointer;}
   .nav-dropdown>.dd-toggle:hover,.nav-dropdown.open>.dd-toggle{color:var(--text);border-color:var(--line);}
   .nav-dropdown.active-group>.dd-toggle{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
-  .dd-menu{position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border:1px solid var(--line);border-radius:4px;min-width:180px;display:none;flex-direction:column;box-shadow:0 6px 16px rgba(0,0,0,.09);z-index:30;padding:4px;}
-  .nav-dropdown.open .dd-menu{display:flex;}
+  .dd-menu{position:fixed;background:#fff;border:1px solid var(--line);border-radius:4px;min-width:180px;display:none;flex-direction:column;box-shadow:0 6px 16px rgba(0,0,0,.09);z-index:1000;padding:4px;}
+  .dd-menu.show{display:flex;}
   .dd-menu a{padding:8px 10px;border-radius:3px;color:var(--muted);text-decoration:none;white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:12px;}
   .dd-menu a:hover{background:var(--panel);color:var(--text);}
   .dd-menu a.active{color:var(--text);font-weight:600;background:rgba(227,6,19,0.06);}
@@ -72,6 +72,9 @@
   .pie-legend .p-name{flex:1;color:var(--text);}
   .pie-legend .p-val{color:var(--muted);}
   .total-row td{font-weight:600;border-top:2px solid var(--line);}
+  .row-actions{white-space:nowrap;}
+  .row-actions a{text-decoration:none;font-size:12px;margin-left:6px;color:var(--muted);}
+  .row-actions a:hover{color:var(--accent);}
 </style>
 </head>
 <body>
@@ -98,16 +101,29 @@
   var dd = document.getElementById('editorsDropdown');
   if(!dd) return;
   var toggle = document.getElementById('editorsToggle');
+  var menu = document.getElementById('editorsMenu');
+  // Move the menu to <body> so it can never be trapped inside an ancestor's
+  // stacking/clipping context (e.g. the horizontally-scrolling topnav).
+  document.body.appendChild(menu);
+  function positionMenu(){
+    var r = toggle.getBoundingClientRect();
+    menu.style.top = (r.bottom + 4) + 'px';
+    menu.style.left = r.left + 'px';
+  }
+  function closeMenu(){ dd.classList.remove('open'); menu.classList.remove('show'); }
+  function openMenu(){ positionMenu(); dd.classList.add('open'); menu.classList.add('show'); }
   toggle.addEventListener('click', function(e){
     e.stopPropagation();
-    dd.classList.toggle('open');
+    if(menu.classList.contains('show')) closeMenu(); else openMenu();
   });
   document.addEventListener('click', function(e){
-    if(!dd.contains(e.target)) dd.classList.remove('open');
+    if(!dd.contains(e.target) && !menu.contains(e.target)) closeMenu();
   });
   document.addEventListener('keydown', function(e){
-    if(e.key === 'Escape') dd.classList.remove('open');
+    if(e.key === 'Escape') closeMenu();
   });
+  window.addEventListener('resize', function(){ if(menu.classList.contains('show')) positionMenu(); });
+  window.addEventListener('scroll', function(){ if(menu.classList.contains('show')) positionMenu(); }, true);
 })();
 </script>
 <div class="board">
@@ -163,6 +179,7 @@
     </div>
     <div class="full">
       <button id="mfSave" type="button">Save</button>
+      <button id="mfCancelEdit" type="button" class="toggle-btn" style="display:none;">Cancel Edit</button>
       <span class="msg" id="mfMsg"></span>
     </div>
   </div>
@@ -173,6 +190,10 @@
   </div>
 
   <div id="sectionsWrap"><div class="empty">Loading…</div></div>
+
+  <div class="section-title">Change Log</div>
+  <div class="section-meta">Letzte Änderungen an den Datenpunkten dieser Security.</div>
+  <div id="logWrap" class="table-wrap"><div class="empty">Loading…</div></div>
 </div>
 
 <script src="assets/turso-data.js"></script>
@@ -233,6 +254,13 @@ function renderPieSvg(entries){
   return { svg, legend };
 }
 
+function fmtDdMmYyyy(isoDate){
+  if(!isoDate) return '—';
+  const m = String(isoDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return isoDate;
+  return `${m[3]}.${m[2]}.${m[1]}`;
+}
+
 function renderSection(def, rows){
   if(!rows.length) return '';
   // Keep only the latest snapshot per parameter (not per whole section) —
@@ -245,27 +273,33 @@ function renderSection(def, rows){
     if(!existing || r.AsOfDate > existing.AsOfDate) byKey.set(key, r);
   }
   let latest = [...byKey.values()];
-  const maxDate = latest.reduce((max, r) => (r.AsOfDate > max ? r.AsOfDate : max), latest[0].AsOfDate);
   if(def.sortDesc){
     latest = [...latest].sort((a,b) => (b.NumericValue ?? -Infinity) - (a.NumericValue ?? -Infinity));
   }
   const hasSource = latest.some(r => r.Source);
-  const hasMixedDates = latest.some(r => r.AsOfDate !== maxDate);
   const rowsHtml = latest.map(r => {
     const name = r.ParameterName || r.FieldName || '—';
-    const dateNote = hasMixedDates ? ` <span class="desc">(${r.AsOfDate})</span>` : '';
-    return `<tr><td>${name}${dateNote}</td><td class="num">${fmtValue(r)}</td>${hasSource ? `<td class="desc">${r.Source||''}</td>` : ''}</tr>`;
+    return `<tr>
+      <td>${name}</td>
+      <td class="num">${fmtValue(r)}</td>
+      <td class="desc">${fmtDdMmYyyy(r.AsOfDate)}</td>
+      ${hasSource ? `<td class="desc">${r.Source||''}</td>` : ''}
+      <td class="num row-actions">
+        <a class="edit-link" href="#" data-edit-rowid="${r.RowId}">✏️</a>
+        <a class="rm-link" href="#" data-delete-rowid="${r.RowId}">✕</a>
+      </td>
+    </tr>`;
   }).join('');
   let totalRowHtml = '';
   if(def.total){
     const sum = latest.reduce((s,r) => s + (r.NumericValue || 0), 0);
     const unit = latest.find(r => r.Unit)?.Unit || '';
-    totalRowHtml = `<tr class="total-row"><td>Total</td><td class="num">${fmtDecimal(sum,2)}${unit?` ${unit}`:''}</td>${hasSource ? '<td></td>' : ''}</tr>`;
+    totalRowHtml = `<tr class="total-row"><td>Total</td><td class="num">${fmtDecimal(sum,2)}${unit?` ${unit}`:''}</td><td></td>${hasSource ? '<td></td>' : ''}<td></td></tr>`;
   }
   const tableHtml = `
     <div class="table-wrap">
     <table>
-      <thead><tr><th>${def.nameLabel}</th><th class="num">${def.valueLabel}</th>${hasSource ? '<th>Source</th>' : ''}</tr></thead>
+      <thead><tr><th>${def.nameLabel}</th><th class="num">${def.valueLabel}</th><th>Date</th>${hasSource ? '<th>Source</th>' : ''}<th></th></tr></thead>
       <tbody>${rowsHtml}${totalRowHtml}</tbody>
     </table>
     </div>
@@ -298,7 +332,7 @@ async function loadSecurity(secId){
 
   try {
     const data = await tursoQuery(
-      `SELECT sd.DataType, sd.FieldName, sd.FieldValue, sd.NumericValue, sd.Unit, sd.AsOfDate, sd.Source, sp.ParameterName
+      `SELECT sd.rowid AS RowId, sd.DataType, sd.FieldNameID, sd.FieldName, sd.FieldValue, sd.NumericValue, sd.Unit, sd.AsOfDate, sd.Source, sp.ParameterName
        FROM security_data sd
        LEFT JOIN security_parameter sp ON sp.ParameterID = sd.FieldNameID
        WHERE sd.SecurityID = ?`,
@@ -313,6 +347,7 @@ async function loadSecurity(secId){
     if(!data.length){
       document.getElementById('sectionsWrap').innerHTML = '<div class="empty">Keine Daten vorhanden — läuft der Fund-Data-Collector für diese Security?</div>';
       const url = new URL(location.href); url.searchParams.set('id', secId); history.replaceState(null,'',url);
+      await renderLog(secId);
       return;
     }
 
@@ -330,6 +365,7 @@ async function loadSecurity(secId){
 
     document.getElementById('sectionsWrap').innerHTML = html || '<div class="empty">Keine Daten vorhanden.</div>';
     const url = new URL(location.href); url.searchParams.set('id', secId); history.replaceState(null,'',url);
+    await renderLog(secId);
   } catch (e) {
     document.getElementById('sectionsWrap').innerHTML = `<div class="error">Fehler: ${e.message}</div>`;
   }
@@ -371,10 +407,72 @@ document.getElementById('cfgSave').addEventListener('click', () => {
 
 // ============ Manual data entry ============
 let sourceColumnEnsured = false;
+let logTableEnsured = false;
+let editingRowId = null;
+
 async function ensureSourceColumn(){
   if(sourceColumnEnsured) return;
   try { await tursoRun('ALTER TABLE security_data ADD COLUMN Source TEXT'); } catch(e) { /* column likely already exists */ }
   sourceColumnEnsured = true;
+}
+
+async function ensureLogTable(){
+  if(logTableEnsured) return;
+  try {
+    await tursoRun(`CREATE TABLE IF NOT EXISTS security_data_log (
+      LogID INTEGER PRIMARY KEY AUTOINCREMENT,
+      SecurityID INTEGER,
+      DataType TEXT,
+      FieldName TEXT,
+      Action TEXT,
+      OldValue TEXT,
+      NewValue TEXT,
+      ChangedAt TEXT
+    )`);
+  } catch(e) { /* table likely already exists */ }
+  logTableEnsured = true;
+}
+
+function fmtLogValue(fieldValue, numericValue, unit){
+  if(numericValue !== null && numericValue !== undefined){
+    return unit ? `${numericValue} ${unit}` : String(numericValue);
+  }
+  return fieldValue || '—';
+}
+
+async function logChange(secId, dataType, fieldName, action, oldValueStr, newValueStr){
+  await ensureLogTable();
+  try {
+    await tursoRun(
+      `INSERT INTO security_data_log (SecurityID, DataType, FieldName, Action, OldValue, NewValue, ChangedAt) VALUES (?,?,?,?,?,?,?)`,
+      [secId, dataType, fieldName, action, oldValueStr, newValueStr, nowZurichString ? nowZurichString() : new Date().toISOString()]
+    );
+  } catch(e) { /* logging must never block the actual data change */ }
+}
+
+async function renderLog(secId){
+  const wrap = document.getElementById('logWrap');
+  wrap.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    await ensureLogTable();
+    const rows = await tursoQuery(
+      `SELECT DataType, FieldName, Action, OldValue, NewValue, ChangedAt FROM security_data_log WHERE SecurityID = ? ORDER BY ChangedAt DESC, LogID DESC LIMIT 50`,
+      [secId], 0
+    );
+    if(!rows.length){ wrap.innerHTML = '<div class="empty">Noch keine Änderungen protokolliert.</div>'; return; }
+    const rowsHtml = rows.map(r => {
+      const change = r.Action === 'Insert' ? `→ ${r.NewValue}`
+        : r.Action === 'Delete' ? `${r.OldValue} → (gelöscht)`
+        : `${r.OldValue} → ${r.NewValue}`;
+      return `<tr><td class="desc">${r.ChangedAt||''}</td><td>${r.DataType}</td><td>${r.FieldName}</td><td>${r.Action}</td><td>${change}</td></tr>`;
+    }).join('');
+    wrap.innerHTML = `<table>
+      <thead><tr><th>When</th><th>Section</th><th>Parameter</th><th>Action</th><th>Change</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>`;
+  } catch(e) {
+    wrap.innerHTML = `<div class="error">Fehler: ${e.message}</div>`;
+  }
 }
 
 function populateSectionSelect(){
@@ -383,7 +481,7 @@ function populateSectionSelect(){
     + `<option value="__custom__">Other (freitext) …</option>`;
 }
 
-async function populateParameterSelect(dataType){
+async function populateParameterSelect(dataType, selectFieldNameId){
   const sel = document.getElementById('mfParameter');
   const customWrap = document.getElementById('mfCustomParamWrap');
   sel.innerHTML = `<option>Loading…</option>`;
@@ -394,11 +492,84 @@ async function populateParameterSelect(dataType){
       + `<option value="__custom__">Other (freitext) …</option>`;
     sel.style.display = '';
     customWrap.style.display = 'none';
+    if(selectFieldNameId && opts.some(o => String(o.ParameterID)===String(selectFieldNameId))){
+      sel.value = String(selectFieldNameId);
+    }
   } else {
     sel.innerHTML = `<option value="__custom__">Other (freitext) …</option>`;
     customWrap.style.display = '';
   }
 }
+
+function resetManualForm(){
+  editingRowId = null;
+  document.getElementById('mfSave').textContent = 'Save';
+  document.getElementById('mfCancelEdit').style.display = 'none';
+  document.getElementById('mfValue').value = '';
+  document.getElementById('mfUnit').value = '';
+  document.getElementById('mfSource').value = '';
+  document.getElementById('mfDate').value = nowZurichDateString ? nowZurichDateString() : new Date().toISOString().slice(0,10);
+}
+
+async function openEditForm(rowId){
+  const row = curData.find(r => String(r.RowId) === String(rowId));
+  if(!row) return;
+  editingRowId = rowId;
+  const panel = document.getElementById('manualForm');
+  panel.classList.add('show');
+  populateSectionSelect();
+  const sectionSel = document.getElementById('mfSection');
+  const knownTypes = new Set(SECTION_DEFS.map(d => d.dataType));
+  if(knownTypes.has(row.DataType)){
+    sectionSel.value = row.DataType;
+    document.getElementById('mfCustomSectionWrap').style.display = 'none';
+  } else {
+    sectionSel.value = '__custom__';
+    document.getElementById('mfCustomSectionWrap').style.display = '';
+    document.getElementById('mfCustomSection').value = row.DataType;
+  }
+  await populateParameterSelect(row.DataType, row.FieldNameID);
+  if(!row.FieldNameID){
+    document.getElementById('mfParameter').value = '__custom__';
+    document.getElementById('mfCustomParamWrap').style.display = '';
+    document.getElementById('mfCustomParam').value = row.FieldName || '';
+  }
+  document.getElementById('mfValue').value = (row.NumericValue !== null && row.NumericValue !== undefined) ? row.NumericValue : (row.FieldValue || '');
+  document.getElementById('mfUnit').value = row.Unit || '';
+  document.getElementById('mfDate').value = row.AsOfDate || '';
+  document.getElementById('mfSource').value = row.Source || '';
+  document.getElementById('mfSave').textContent = 'Update';
+  document.getElementById('mfCancelEdit').style.display = '';
+  document.getElementById('mfMsg').textContent = '';
+  panel.scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+async function deleteRow(rowId){
+  if(!confirm('Diesen Datenpunkt löschen?')) return;
+  const row = curData.find(r => String(r.RowId) === String(rowId));
+  try {
+    await tursoRun('DELETE FROM security_data WHERE rowid = ?', [rowId]);
+    tursoClearCache();
+    if(row){
+      const paramName = row.ParameterName || row.FieldName || '—';
+      await logChange(curSecId, row.DataType, paramName, 'Delete', fmtLogValue(row.FieldValue, row.NumericValue, row.Unit), null);
+    }
+    await loadSecurity(curSecId);
+  } catch(e) {
+    alert('Fehler beim Löschen: ' + e.message);
+  }
+}
+
+document.getElementById('sectionsWrap').addEventListener('click', (e) => {
+  const editA = e.target.closest('[data-edit-rowid]');
+  if(editA){ e.preventDefault(); openEditForm(editA.dataset.editRowid); return; }
+  const delA = e.target.closest('[data-delete-rowid]');
+  if(delA){ e.preventDefault(); deleteRow(delA.dataset.deleteRowid); return; }
+});
+
+document.getElementById('mfCancelEdit').addEventListener('click', () => {
+  resetManualForm();
+});
 
 document.getElementById('mfSection').addEventListener('change', (e) => {
   const isCustom = e.target.value === '__custom__';
@@ -416,12 +587,11 @@ document.getElementById('mfParameter').addEventListener('change', (e) => {
 document.getElementById('addDataBtn').addEventListener('click', async () => {
   const panel = document.getElementById('manualForm');
   const willShow = !panel.classList.contains('show');
-  panel.classList.toggle('show');
-  if(willShow){
-    populateSectionSelect();
-    document.getElementById('mfDate').value = nowZurichDateString ? nowZurichDateString() : new Date().toISOString().slice(0,10);
-    await populateParameterSelect(document.getElementById('mfSection').value);
-  }
+  if(!willShow){ panel.classList.remove('show'); resetManualForm(); return; }
+  resetManualForm();
+  panel.classList.add('show');
+  populateSectionSelect();
+  await populateParameterSelect(document.getElementById('mfSection').value);
 });
 
 document.getElementById('mfSave').addEventListener('click', async () => {
@@ -455,16 +625,28 @@ document.getElementById('mfSave').addEventListener('click', async () => {
 
   try {
     await ensureSourceColumn();
-    await tursoRun(
-      `INSERT INTO security_data (SecurityID, DataType, FieldName, FieldNameID, FieldValue, NumericValue, Unit, AsOfDate, Source, created_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [curSecId, dataType, fieldName, fieldNameId, fieldValue, numericValue, unit, asOfDate, source, nowZurichString ? nowZurichString() : new Date().toISOString()]
-    );
+    const newValueStr = fmtLogValue(fieldValue, numericValue, unit);
+    if(editingRowId){
+      const oldRow = curData.find(r => String(r.RowId) === String(editingRowId));
+      const oldValueStr = oldRow ? fmtLogValue(oldRow.FieldValue, oldRow.NumericValue, oldRow.Unit) : null;
+      await tursoRun(
+        `UPDATE security_data SET DataType=?, FieldName=?, FieldNameID=?, FieldValue=?, NumericValue=?, Unit=?, AsOfDate=?, Source=?
+         WHERE rowid = ?`,
+        [dataType, fieldName, fieldNameId, fieldValue, numericValue, unit, asOfDate, source, editingRowId]
+      );
+      await logChange(curSecId, dataType, fieldName, 'Update', oldValueStr, newValueStr);
+      msg.textContent = 'Aktualisiert.'; msg.className = 'msg ok';
+    } else {
+      await tursoRun(
+        `INSERT INTO security_data (SecurityID, DataType, FieldName, FieldNameID, FieldValue, NumericValue, Unit, AsOfDate, Source, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        [curSecId, dataType, fieldName, fieldNameId, fieldValue, numericValue, unit, asOfDate, source, nowZurichString ? nowZurichString() : new Date().toISOString()]
+      );
+      await logChange(curSecId, dataType, fieldName, 'Insert', null, newValueStr);
+      msg.textContent = 'Gespeichert.'; msg.className = 'msg ok';
+    }
     tursoClearCache();
-    msg.textContent = 'Gespeichert.'; msg.className = 'msg ok';
-    document.getElementById('mfValue').value = '';
-    document.getElementById('mfUnit').value = '';
-    document.getElementById('mfSource').value = '';
+    resetManualForm();
     await loadSecurity(curSecId);
   } catch (e) {
     msg.textContent = 'Fehler: ' + e.message; msg.className = 'msg error';
