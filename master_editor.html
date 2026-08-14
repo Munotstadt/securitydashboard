@@ -22,6 +22,8 @@
   button.danger:hover{background:#C0293D;color:#fff;}
   button:hover{border-color:var(--text);}
   .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;}
+  .improvement-input{{font-family:'Inter',sans-serif;font-size:13px;color:var(--text);background:#fff;border:1px solid var(--line);border-radius:3px;padding:6px 10px;min-width:200px;}}
+  .improvement-input::placeholder{{color:var(--muted);}}
   table{width:100%;min-width:1100px;border-collapse:collapse;font-size:12.5px;table-layout:fixed;}
   th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   th[data-sort]{cursor:pointer;user-select:none;}
@@ -142,6 +144,8 @@
   <div class="status" id="status"></div>
 
   <div class="footer">
+    <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
+    <button type="button" id="improvementSaveBtn">💡 Save</button>
     <button id="settingsBtn">⚙ Repo/Token</button>
   </div>
 </div>
@@ -381,6 +385,56 @@ document.getElementById('cfgSave').addEventListener('click', () => {
 });
 
 load();
+
+// ============ Improvement quick-capture (footer) ============
+async function ensureImprovementTaskTable(){{
+  try {{
+    await tursoRun(`CREATE TABLE IF NOT EXISTS security_tasks (
+      TaskID INTEGER PRIMARY KEY AUTOINCREMENT,
+      TaskName TEXT NOT NULL,
+      TaskDescription TEXT,
+      SecurityID INTEGER,
+      DateDue TEXT,
+      Recurring TEXT,
+      Completed INTEGER DEFAULT 0,
+      CompletedAt TEXT,
+      created_at TEXT
+    )`);
+  }} catch(e) {{ /* table likely already exists */ }}
+  try {{ await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); }} catch(e) {{ /* column likely already exists */ }}
+}}
+(function(){{
+  var btn = document.getElementById('improvementSaveBtn');
+  if(!btn) return;
+  btn.addEventListener('click', async function(){{
+    var input = document.getElementById('improvementInput');
+    var text = input.value.trim();
+    if(!text){{ return; }}
+    if(!tursoConfigured()){{ alert('Bitte zuerst ⚙ Repo/Token setzen.'); return; }}
+    var original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Speichere…';
+    try {{
+      await ensureImprovementTaskTable();
+      var pageName = (location.pathname.split('/').pop() || 'index.html');
+      var todayDate = (typeof nowZurichIsoDateString === 'function') ? new Date(nowZurichIsoDateString()+'T00:00:00')
+        : (typeof zurichParts === 'function' ? (function(){{ var p = zurichParts(new Date()); return new Date(p.year+'-'+p.month+'-'+p.day+'T00:00:00'); }})() : new Date());
+      var due = new Date(todayDate); due.setDate(due.getDate()+10);
+      var dueIso = due.toISOString().slice(0,10);
+      var nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
+      await tursoRun(
+        `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
+        ['Improvement ' + pageName, text, null, dueIso, 'n/a', 140, nowIso]
+      );
+      tursoClearCache();
+      input.value = '';
+      alert('Improvement-Task erstellt (fällig ' + dueIso.split('-').reverse().join('.') + ').');
+    }} catch(e) {{
+      alert('Fehler: ' + e.message);
+    }} finally {{
+      btn.disabled = false; btn.textContent = original;
+    }}
+  }});
+}})();
 </script>
 </body>
 </html>

@@ -32,6 +32,8 @@
   .toggle-btn{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;}
   .toggle-btn:hover{border-color:var(--muted);color:var(--text);}
   .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;}
+  .improvement-input{{font-family:'Inter',sans-serif;font-size:13px;color:var(--text);background:#fff;border:1px solid var(--line);border-radius:3px;padding:6px 10px;min-width:200px;}}
+  .improvement-input::placeholder{{color:var(--muted);}}
 
   .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:16px 0;display:none;gap:8px;}
   .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
@@ -203,6 +205,8 @@
 
   <div class="footer">
     <button class="toggle-btn" id="qualityCheckBtn">🔍 Run Security Quality Check Audit</button>
+    <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
+    <button type="button" id="improvementSaveBtn">💡 Save</button>
     <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
   </div>
 </div>
@@ -577,7 +581,7 @@ document.getElementById('qualityCheckBtn').addEventListener('click', async () =>
       [QC_TASKTYPE_ID, QC_TASK_NAME], 0
     );
 
-    const today = isoToday();
+    const today = todayIso();
     const windowEnd = (() => { const d = new Date(today + 'T00:00:00'); d.setFullYear(d.getFullYear() + 2); return d.toISOString().slice(0,10); })();
     const nextDue = (() => { const d = new Date(today + 'T00:00:00'); d.setFullYear(d.getFullYear() + 1); return d.toISOString().slice(0,10); })();
 
@@ -610,6 +614,56 @@ document.getElementById('qualityCheckBtn').addEventListener('click', async () =>
 });
 
 load();
+
+// ============ Improvement quick-capture (footer) ============
+async function ensureImprovementTaskTable(){{
+  try {{
+    await tursoRun(`CREATE TABLE IF NOT EXISTS security_tasks (
+      TaskID INTEGER PRIMARY KEY AUTOINCREMENT,
+      TaskName TEXT NOT NULL,
+      TaskDescription TEXT,
+      SecurityID INTEGER,
+      DateDue TEXT,
+      Recurring TEXT,
+      Completed INTEGER DEFAULT 0,
+      CompletedAt TEXT,
+      created_at TEXT
+    )`);
+  }} catch(e) {{ /* table likely already exists */ }}
+  try {{ await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); }} catch(e) {{ /* column likely already exists */ }}
+}}
+(function(){{
+  var btn = document.getElementById('improvementSaveBtn');
+  if(!btn) return;
+  btn.addEventListener('click', async function(){{
+    var input = document.getElementById('improvementInput');
+    var text = input.value.trim();
+    if(!text){{ return; }}
+    if(!tursoConfigured()){{ alert('Bitte zuerst ⚙ Repo/Token setzen.'); return; }}
+    var original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Speichere…';
+    try {{
+      await ensureImprovementTaskTable();
+      var pageName = (location.pathname.split('/').pop() || 'index.html');
+      var todayDate = (typeof nowZurichIsoDateString === 'function') ? new Date(nowZurichIsoDateString()+'T00:00:00')
+        : (typeof zurichParts === 'function' ? (function(){{ var p = zurichParts(new Date()); return new Date(p.year+'-'+p.month+'-'+p.day+'T00:00:00'); }})() : new Date());
+      var due = new Date(todayDate); due.setDate(due.getDate()+10);
+      var dueIso = due.toISOString().slice(0,10);
+      var nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
+      await tursoRun(
+        `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
+        ['Improvement ' + pageName, text, null, dueIso, 'n/a', 140, nowIso]
+      );
+      tursoClearCache();
+      input.value = '';
+      alert('Improvement-Task erstellt (fällig ' + dueIso.split('-').reverse().join('.') + ').');
+    }} catch(e) {{
+      alert('Fehler: ' + e.message);
+    }} finally {{
+      btn.disabled = false; btn.textContent = original;
+    }}
+  }});
+}})();
 </script>
 </body>
 </html>
