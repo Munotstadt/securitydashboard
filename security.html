@@ -1272,7 +1272,7 @@ async function loadInstrumentSpecificData(master, last, decimals, high52wRow, lo
       `SELECT sd.rowid AS RowId, sd.DataType, sd.FieldName, sd.NumericValue, sd.FieldValue, sd.Unit, sd.AsOfDate, sd.Source, sp.ParameterName
        FROM security_data sd
        LEFT JOIN security_parameter sp ON sp.ParameterID = sd.FieldNameID
-       WHERE sd.SecurityID = ? AND sd.DataType IN ('SectorWeight','TopHolding','Fundamentals')`,
+       WHERE sd.SecurityID = ?`,
       [master.SecurityID]
     );
   } catch(e) {
@@ -1282,9 +1282,15 @@ async function loadInstrumentSpecificData(master, last, decimals, high52wRow, lo
     return;
   }
 
-  const sectorRows = data.filter(r => r.DataType === 'SectorWeight');
-  const holdingRows = data.filter(r => r.DataType === 'TopHolding');
-  const fundamentalsRows = data.filter(r => r.DataType === 'Fundamentals');
+  // Case-/whitespace-tolerant DataType matching - the exact string stored by
+  // whatever entered the data (manual form, import script, etc.) may differ
+  // slightly in casing or singular/plural from what this page expects.
+  const norm = s => (s || '').trim().toLowerCase();
+  const sectorRows = data.filter(r => norm(r.DataType) === 'sectorweight' || norm(r.DataType) === 'sector weight');
+  const holdingRows = data.filter(r => norm(r.DataType).includes('holding') && !norm(r.DataType).includes('bond'));
+  const fundamentalsRows = data.filter(r => norm(r.DataType).startsWith('fundamental'));
+
+  console.log(`[loadInstrumentSpecificData] SecurityID=${master.SecurityID} · total security_data rows=${data.length} · SectorWeight=${sectorRows.length} · TopHolding=${holdingRows.length} · Fundamentals=${fundamentalsRows.length}`, data);
 
   // Visibility is driven purely by whether security_data actually holds rows for
   // this security - NOT by the security_master.Instrument label, which may not
@@ -1296,6 +1302,21 @@ async function loadInstrumentSpecificData(master, last, decimals, high52wRow, lo
   if(fundamentalsRows.length){
     document.getElementById('sharesSection').classList.remove('hidden');
     renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52wRow);
+  } else if(data.length){
+    // Diagnostic aid: security_data has rows for this security but none matched
+    // "fundamental*" - surface the DataTypes that WERE found so a mismatched
+    // DataType string can be spotted immediately.
+    const otherTypes = [...new Set(data.map(r => r.DataType))];
+    document.getElementById('sharesSection').classList.remove('hidden');
+    document.getElementById('sharesFundamentalsGrid').innerHTML =
+      `<div class="empty">Keine Zeilen mit DataType beginnend "Fundamental" gefunden. Vorhandene DataTypes für diese Security: ${otherTypes.join(', ') || '—'}.</div>`;
+    document.getElementById('analystChartWrap').innerHTML = '';
+  } else {
+    // No security_data rows at all for this SecurityID.
+    document.getElementById('sharesSection').classList.remove('hidden');
+    document.getElementById('sharesFundamentalsGrid').innerHTML =
+      `<div class="empty">Keine security_data-Einträge für SecurityID ${master.SecurityID} gefunden (0 Zeilen total).</div>`;
+    document.getElementById('analystChartWrap').innerHTML = '';
   }
 }
 
