@@ -1172,23 +1172,13 @@ document.getElementById('masterSave').addEventListener('click', async () => {
   const comments = document.getElementById('mfComments').value || null;
   try{
     setQuickStatus('masterStatus','Speichere…','');
-    await ensureMasterStatusColumns();
+    await ensureSecurityMasterSchema();
     await tursoRun('UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, DashboardGrouping=?, Instrument=?, PortfolioGrouping=?, DateLaunch=?, DateTerminated=?, Status=?, Comments=? WHERE SecurityID=?',
       [name, currency, ticker, isin, valor, collector, grouping, instrument, portfolioGrouping, dateLaunch, dateTerminated, status, comments, curSecId]);
     setQuickStatus('masterStatus','Gespeichert ✓','ok');
     await load();
   }catch(e){ setQuickStatus('masterStatus','Fehler: '+e.message,'err'); }
 });
-
-let masterStatusColumnsEnsured = false;
-async function ensureMasterStatusColumns(){
-  if(masterStatusColumnsEnsured) return;
-  try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateLaunch TEXT'); } catch(e) {}
-  try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateTerminated TEXT'); } catch(e) {}
-  try { await tursoRun('ALTER TABLE security_master ADD COLUMN Status INTEGER'); } catch(e) {}
-  try { await tursoRun('ALTER TABLE security_master ADD COLUMN Comments TEXT'); } catch(e) {}
-  masterStatusColumnsEnsured = true;
-}
 
 async function load(){
   if (!tursoConfigured()) {
@@ -1197,7 +1187,7 @@ async function load(){
     return;
   }
   try {
-    await ensureMasterStatusColumns();
+    await ensureSecurityMasterSchema();
     const [master, collectors, groupings, instruments, portfolioGroupings, statuses] = await Promise.all([
       tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.Ticker, sm.ID_ISIN, sm.ID_Valor, sm.Collector, sm.DashboardGrouping, sm.Instrument, sm.PortfolioGrouping,
                          sm.DateLaunch, sm.DateTerminated, sm.Status, sm.Comments,
@@ -1470,26 +1460,6 @@ function renderAnalystRangeChart(container, data, decimals){
 let securityTasksAll = [];
 let securityTaskTypeOpts = [];
 let editingSecurityTaskId = null;
-let taskTableEnsured = false;
-
-async function ensureSecurityTaskTable(){
-  if(taskTableEnsured) return;
-  try {
-    await tursoRun(`CREATE TABLE IF NOT EXISTS security_tasks (
-      TaskID INTEGER PRIMARY KEY AUTOINCREMENT,
-      TaskName TEXT NOT NULL,
-      TaskDescription TEXT,
-      SecurityID INTEGER,
-      DateDue TEXT,
-      Recurring TEXT,
-      Completed INTEGER DEFAULT 0,
-      CompletedAt TEXT,
-      created_at TEXT
-    )`);
-  } catch(e) { /* table likely already exists */ }
-  try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
-  taskTableEnsured = true;
-}
 
 function taskIsoToday(){
   if(typeof nowZurichIsoDateString === 'function') return nowZurichIsoDateString();
@@ -1613,7 +1583,7 @@ function renderSecurityTasksList(){
 }
 
 async function loadSecurityTasks(secId){
-  await ensureSecurityTaskTable();
+  await ensureSecurityTasksSchema();
   securityTasksAll = await tursoQuery(
     'SELECT TaskID, TaskName, TaskDescription, SecurityID, DateDue, Recurring, Completed, CompletedAt, TaskTypeID FROM security_tasks WHERE SecurityID = ?',
     [secId], 0
@@ -1699,37 +1669,21 @@ document.getElementById('cfgSave').addEventListener('click', () => {
 load();
 
 // ============ Improvement quick-capture (footer) ============
-async function ensureImprovementTaskTable(){{
-  try {{
-    await tursoRun(`CREATE TABLE IF NOT EXISTS security_tasks (
-      TaskID INTEGER PRIMARY KEY AUTOINCREMENT,
-      TaskName TEXT NOT NULL,
-      TaskDescription TEXT,
-      SecurityID INTEGER,
-      DateDue TEXT,
-      Recurring TEXT,
-      Completed INTEGER DEFAULT 0,
-      CompletedAt TEXT,
-      created_at TEXT
-    )`);
-  }} catch(e) {{ /* table likely already exists */ }}
-  try {{ await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); }} catch(e) {{ /* column likely already exists */ }}
-}}
-(function(){{
+(function(){
   var btn = document.getElementById('improvementSaveBtn');
   if(!btn) return;
-  btn.addEventListener('click', async function(){{
+  btn.addEventListener('click', async function(){
     var input = document.getElementById('improvementInput');
     var text = input.value.trim();
-    if(!text){{ return; }}
-    if(!tursoConfigured()){{ alert('Bitte zuerst ⚙ Repo/Token setzen.'); return; }}
+    if(!text){ return; }
+    if(!tursoConfigured()){ alert('Bitte zuerst ⚙ Repo/Token setzen.'); return; }
     var original = btn.textContent;
     btn.disabled = true; btn.textContent = 'Speichere…';
-    try {{
-      await ensureImprovementTaskTable();
+    try {
+      await ensureSecurityTasksSchema();
       var pageName = (location.pathname.split('/').pop() || 'index.html');
       var todayDate = (typeof nowZurichIsoDateString === 'function') ? new Date(nowZurichIsoDateString()+'T00:00:00')
-        : (typeof zurichParts === 'function' ? (function(){{ var p = zurichParts(new Date()); return new Date(p.year+'-'+p.month+'-'+p.day+'T00:00:00'); }})() : new Date());
+        : (typeof zurichParts === 'function' ? (function(){ var p = zurichParts(new Date()); return new Date(p.year+'-'+p.month+'-'+p.day+'T00:00:00'); })() : new Date());
       var due = new Date(todayDate); due.setDate(due.getDate()+10);
       var dueIso = due.toISOString().slice(0,10);
       var nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
@@ -1737,16 +1691,15 @@ async function ensureImprovementTaskTable(){{
         `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
         ['Improvement ' + pageName, text, null, dueIso, 'n/a', 140, nowIso]
       );
-      tursoClearCache();
       input.value = '';
       alert('Improvement-Task erstellt (fällig ' + dueIso.split('-').reverse().join('.') + ').');
-    }} catch(e) {{
+    } catch(e) {
       alert('Fehler: ' + e.message);
-    }} finally {{
+    } finally {
       btn.disabled = false; btn.textContent = original;
-    }}
-  }});
-}})();
+    }
+  });
+})();
 </script>
 </body>
 </html>
