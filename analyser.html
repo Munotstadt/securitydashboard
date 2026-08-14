@@ -166,9 +166,11 @@ async function load(){
   }
   try{
     const [master, txns, prices, distRows] = await Promise.all([
-      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.PortfolioGrouping, pg.ParameterName AS PortfolioGroupingName
+      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.PortfolioGrouping, pg.ParameterName AS PortfolioGroupingName,
+                         sm.Instrument, ip.ParameterName AS InstrumentName
                   FROM security_master sm
-                  LEFT JOIN security_parameter pg ON pg.ParameterID = sm.PortfolioGrouping`, [], 3600000),
+                  LEFT JOIN security_parameter pg ON pg.ParameterID = sm.PortfolioGrouping
+                  LEFT JOIN security_parameter ip ON ip.ParameterID = sm.Instrument`, [], 3600000),
       tursoQuery(`SELECT t.SecurityID, t.Quantity, ta.ParameterName AS TrxArtName
                   FROM security_transactions t LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt`),
       tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices`, [], 3600000),
@@ -216,9 +218,17 @@ async function load(){
       const periods = periodsBySecId.get(m.SecurityID);
       const parts = (m.PortfolioGroupingName || '').split(' - ').map(s=>s.trim());
 
-      if(parts.length >= 2 && (parts[1] === 'Switzerland' || parts[1] === 'USA' || parts[1] === 'EMU' || parts[1] === 'UK')){
-        const region = (parts[1] === 'EMU' || parts[1] === 'UK') ? 'Europe' : parts[1];
-        swissCandidates.push({ name:m.SecurityName, secId:m.SecurityID, currency:m.Currency, country:region, subGroup: parts[2] || 'Other', periods });
+      if(parts.length >= 2 && (parts[1] === 'Switzerland' || parts[1] === 'USA')){
+        swissCandidates.push({ name:m.SecurityName, secId:m.SecurityID, currency:m.Currency, country:parts[1], subGroup: parts[2] || 'Other', periods });
+      }
+
+      if(parts.length >= 2 && (parts[1] === 'EMU' || parts[1] === 'UK')){
+        const instrument = (m.InstrumentName || '').trim().toLowerCase();
+        if(instrument === 'index'){
+          swissCandidates.push({ name:m.SecurityName, secId:m.SecurityID, currency:m.Currency, country:'Europe', subGroup:'Index', periods });
+        } else if(instrument.includes('etf') || instrument.includes('fund')){
+          swissCandidates.push({ name:m.SecurityName, secId:m.SecurityID, currency:m.Currency, country:'Europe', subGroup:'Core', periods });
+        }
       }
 
       if(Math.abs(qty) < 1e-9 || !periods || !periods.last) continue;
@@ -242,7 +252,7 @@ async function load(){
     renderFxTable(byCurrency, totalChf, fxByCurrency, positions, fxSecurityId);
     renderMarketGroupsFor('marketGroupSectionsCH', swissCandidates.filter(c=>c.country==='Switzerland'), distBySecId, fxByCurrency);
     renderMarketGroupsFor('marketGroupSectionsUSA', swissCandidates.filter(c=>c.country==='USA'), distBySecId, fxByCurrency);
-    renderMarketGroupsFor('marketGroupSectionsEU', swissCandidates.filter(c=>c.country==='Europe' && (c.subGroup==='Index' || c.subGroup==='Core')), distBySecId, fxByCurrency);
+    renderMarketGroupsFor('marketGroupSectionsEU', swissCandidates.filter(c=>c.country==='Europe'), distBySecId, fxByCurrency);
     document.getElementById('statusText').textContent = 'live · ' + nowZurichString();
   }catch(e){
     document.getElementById('fxBody').innerHTML = `<tr><td colspan="8" class="error">Error: ${e.message}</td></tr>`;
