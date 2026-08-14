@@ -496,9 +496,11 @@ function renderBoard(positions, total){
   const tree = buildGroupTree(positions);
   let html = '';
   let keyCounter = 0;
+  const allRenderedGroupKeys = [];
 
   function renderNode(node, label, ancestors, depth){
     const key = `grp-${keyCounter++}`;
+    allRenderedGroupKeys.push(key);
     const nodePositions = collectPositions(node);
     html += groupRow(label, nodePositions, total, key, ancestors, depth);
     const childKeys = Object.keys(node.children).sort((a,b) => node.children[a].order - node.children[b].order);
@@ -511,13 +513,11 @@ function renderBoard(positions, total){
   }
 
   const topKeys = Object.keys(tree).sort((a,b) => tree[a].order - tree[b].order);
-  const topLevelRenderedKeys = [];
   for(const topKey of topKeys) {
-    topLevelRenderedKeys.push(`grp-${keyCounter}`);
     renderNode(tree[topKey], topKey, '', 0);
   }
   if(!collapsedInitialized){
-    topLevelRenderedKeys.forEach(k => collapsedKeys.add(k));
+    allRenderedGroupKeys.forEach(k => collapsedKeys.add(k));
     collapsedInitialized = true;
   }
 

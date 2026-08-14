@@ -143,6 +143,7 @@
     <div class="detail-meta" id="detailMeta"></div>
     <div class="returns" id="returnsBoxes"></div>
     <div class="range52w-wrap" id="range52wWrap"></div>
+    <a class="toggle-btn" id="linkSecurityData" href="security_data.html">🔎 View Security Data</a>
   </div>
 
   <div class="section-title-row"><span class="section-title-text">Price Chart</span><a class="toggle-btn" id="linkPriceHistory" href="price_editor.html">📈 View Price History</a></div>
@@ -671,6 +672,7 @@ async function loadSecurity(secId){
   document.getElementById('linkPriceHistory').href = `price_editor.html?id=${secId}`;
   document.getElementById('linkDividendHistory').href = `distribution_editor.html?id=${secId}`;
   document.getElementById('linkTransactionHistory').href = `transactions_editor.html?id=${secId}`;
+  document.getElementById('linkSecurityData').href = `security_data.html?id=${secId}`;
   document.getElementById('qpDate').value = nowZurichString();
   document.getElementById('qdCurrency').value = master.Currency || '';
 
