@@ -1434,9 +1434,19 @@ function renderAnalystRangeChart(container, data, decimals){
   function rangeBar(lo, hi, y, color, label){
     if(lo==null || hi==null || isNaN(lo) || isNaN(hi)) return '';
     const x0 = xScale(0), x1 = xScale(lo), x2 = xScale(Math.max(hi,lo));
-    return `<text x="${padLeft}" y="${y-6}" font-family="IBM Plex Mono, monospace" font-size="10" fill="#767E8A">${label}</text>
+    const barPart = `<text x="${padLeft}" y="${y-6}" font-family="IBM Plex Mono, monospace" font-size="10" fill="#767E8A">${label}</text>
       <rect x="${x0.toFixed(1)}" y="${y}" width="${Math.max(0,x1-x0).toFixed(1)}" height="${barH}" rx="3" fill="#A3A9B0" opacity="0.25"/>
-      <rect x="${x1.toFixed(1)}" y="${y}" width="${Math.max(2,x2-x1).toFixed(1)}" height="${barH}" rx="3" fill="${color}" opacity="0.35"/>
+      <rect x="${x1.toFixed(1)}" y="${y}" width="${Math.max(2,x2-x1).toFixed(1)}" height="${barH}" rx="3" fill="${color}" opacity="0.35"/>`;
+    // If the low/high labels would be too close to fit side-by-side without
+    // overlapping, show one combined centered label instead of two separate
+    // anchored ones.
+    const MIN_GAP_FOR_SEPARATE_LABELS = 70;
+    if((x2 - x1) < MIN_GAP_FOR_SEPARATE_LABELS){
+      const xMid = (x1 + x2) / 2;
+      return `${barPart}
+      <text x="${xMid.toFixed(1)}" y="${y+barH+13}" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" fill="#767E8A">${fmtDecimal(lo,decimals)} – ${fmtDecimal(hi,decimals)}</text>`;
+    }
+    return `${barPart}
       <text x="${x1.toFixed(1)}" y="${y+barH+13}" text-anchor="start" font-family="IBM Plex Mono, monospace" font-size="9" fill="#767E8A">${fmtDecimal(lo,decimals)}</text>
       <text x="${x2.toFixed(1)}" y="${y+barH+13}" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="9" fill="#767E8A">${fmtDecimal(hi,decimals)}</text>`;
   }
