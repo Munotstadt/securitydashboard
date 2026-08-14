@@ -121,6 +121,8 @@
   .master-form input, .master-form select{width:100%;font-family:'Inter',sans-serif;font-size:13px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:7px 8px;outline:none;}
   .master-form input:disabled{color:var(--muted);background:#EFF1F4;}
   .master-form input:focus, .master-form select:focus{border-color:var(--accent);}
+  .master-form textarea.mf-textarea{width:100%;font-family:'Inter',sans-serif;font-size:13px;line-height:1.4;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:7px 8px;outline:none;resize:none;overflow:hidden;min-height:34px;}
+  .master-form textarea.mf-textarea:focus{border-color:var(--accent);}
   @media (max-width:560px){
     .master-form .mf-row.cols-4{grid-template-columns:repeat(2,1fr);}
     .master-form .mf-row.cols-3{grid-template-columns:repeat(2,1fr);}
@@ -738,7 +740,17 @@ function renderMasterForm(master){
     <div class="mf-row cols-1">
       <div class="field"><label>Collector</label><select id="mfCollector">${optionList(collectorOpts, master.Collector, true)}</select></div>
     </div>
+    <div class="mf-row cols-1">
+      <div class="field"><label>Comments</label><textarea id="mfComments" class="mf-textarea" rows="1">${master.Comments||''}</textarea></div>
+    </div>
   `;
+  const commentsEl = document.getElementById('mfComments');
+  autoGrowTextarea(commentsEl);
+  commentsEl.addEventListener('input', () => autoGrowTextarea(commentsEl));
+}
+function autoGrowTextarea(el){
+  el.style.height = 'auto';
+  el.style.height = (el.scrollHeight + 2) + 'px';
 }
 
 async function loadSecurity(secId){
@@ -1021,11 +1033,12 @@ document.getElementById('masterSave').addEventListener('click', async () => {
   const dateLaunch = document.getElementById('mfDateLaunch').value || null;
   const dateTerminated = document.getElementById('mfDateTerminated').value || null;
   const status = document.getElementById('mfStatus').value || null;
+  const comments = document.getElementById('mfComments').value || null;
   try{
     setQuickStatus('masterStatus','Speichere…','');
     await ensureMasterStatusColumns();
-    await tursoRun('UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, DashboardGrouping=?, Instrument=?, PortfolioGrouping=?, DateLaunch=?, DateTerminated=?, Status=? WHERE SecurityID=?',
-      [name, currency, ticker, isin, valor, collector, grouping, instrument, portfolioGrouping, dateLaunch, dateTerminated, status, curSecId]);
+    await tursoRun('UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, DashboardGrouping=?, Instrument=?, PortfolioGrouping=?, DateLaunch=?, DateTerminated=?, Status=?, Comments=? WHERE SecurityID=?',
+      [name, currency, ticker, isin, valor, collector, grouping, instrument, portfolioGrouping, dateLaunch, dateTerminated, status, comments, curSecId]);
     setQuickStatus('masterStatus','Gespeichert ✓','ok');
     await load();
   }catch(e){ setQuickStatus('masterStatus','Fehler: '+e.message,'err'); }
@@ -1037,6 +1050,7 @@ async function ensureMasterStatusColumns(){
   try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateLaunch TEXT'); } catch(e) {}
   try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateTerminated TEXT'); } catch(e) {}
   try { await tursoRun('ALTER TABLE security_master ADD COLUMN Status INTEGER'); } catch(e) {}
+  try { await tursoRun('ALTER TABLE security_master ADD COLUMN Comments TEXT'); } catch(e) {}
   masterStatusColumnsEnsured = true;
 }
 
@@ -1050,7 +1064,7 @@ async function load(){
     await ensureMasterStatusColumns();
     const [master, collectors, groupings, instruments, portfolioGroupings, statuses] = await Promise.all([
       tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.Ticker, sm.ID_ISIN, sm.ID_Valor, sm.Collector, sm.DashboardGrouping, sm.Instrument, sm.PortfolioGrouping,
-                         sm.DateLaunch, sm.DateTerminated, sm.Status,
+                         sm.DateLaunch, sm.DateTerminated, sm.Status, sm.Comments,
                          gp.ParameterName AS GroupName, sp.ParameterName AS StatusName
                   FROM security_master sm
                   LEFT JOIN security_parameter gp ON gp.ParameterID = sm.DashboardGrouping
