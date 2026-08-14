@@ -154,6 +154,13 @@ function nowZurichDateString() {
   const p = zurichParts(new Date());
   return `${p.day}.${p.month}.${p.year}`;
 }
+// Same as nowZurichDateString() but ISO (yyyy-mm-dd), which is what
+// <input type="date"> requires - setting a dd.mm.yyyy value on such an
+// input is silently rejected by the browser and leaves the field empty.
+function nowZurichIsoDateString() {
+  const p = zurichParts(new Date());
+  return `${p.year}-${p.month}-${p.day}`;
+}
 // Parses "dd.mm.yyyy" OR ISO "yyyy-mm-dd" -> Date | null
 // (the collector writes ISO timestamps; manual entries use Swiss format)
 function parseSwissDate(str) {
