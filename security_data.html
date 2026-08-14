@@ -29,8 +29,9 @@
   .toggle-btn{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;}
   .toggle-btn:hover{border-color:var(--muted);color:var(--text);}
   .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;}
-  .improvement-input{{font-family:'Inter',sans-serif;font-size:13px;color:var(--text);background:#fff;border:1px solid var(--line);border-radius:3px;padding:6px 10px;min-width:200px;}}
-  .improvement-input::placeholder{{color:var(--muted);}}
+  .improvement-input{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);background:#fff;border:1px solid var(--line);border-radius:3px;padding:6px 10px;min-width:200px;vertical-align:middle;}
+  .improvement-input::placeholder{color:var(--muted);}
+  #improvementSaveBtn{font-family:'IBM Plex Mono',monospace;font-size:12px;}
 
   .detail-header{padding-bottom:14px;border-bottom:2px solid var(--accent);}
   .detail-header h2{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;margin:0 0 6px;}
@@ -200,7 +201,7 @@
 
   <div class="footer">
     <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
-    <button type="button" id="improvementSaveBtn">💡 Save</button>
+    <button type="button" class="toggle-btn" id="improvementSaveBtn">💡 Save</button>
     <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
   </div>
 </div>

@@ -32,8 +32,9 @@
   .toggle-btn{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;}
   .toggle-btn:hover{border-color:var(--muted);color:var(--text);}
   .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;}
-  .improvement-input{{font-family:'Inter',sans-serif;font-size:13px;color:var(--text);background:#fff;border:1px solid var(--line);border-radius:3px;padding:6px 10px;min-width:200px;}}
-  .improvement-input::placeholder{{color:var(--muted);}}
+  .improvement-input{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);background:#fff;border:1px solid var(--line);border-radius:3px;padding:6px 10px;min-width:200px;vertical-align:middle;}
+  .improvement-input::placeholder{color:var(--muted);}
+  #improvementSaveBtn{font-family:'IBM Plex Mono',monospace;font-size:12px;}
 
   .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:16px 0;display:none;gap:8px;}
   .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
@@ -206,7 +207,7 @@
   <div class="footer">
     <button class="toggle-btn" id="qualityCheckBtn">🔍 Run Security Quality Check Audit</button>
     <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
-    <button type="button" id="improvementSaveBtn">💡 Save</button>
+    <button type="button" class="toggle-btn" id="improvementSaveBtn">💡 Save</button>
     <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
   </div>
 </div>
