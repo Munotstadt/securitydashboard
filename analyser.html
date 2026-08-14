@@ -112,6 +112,9 @@
 
   <div class="section-title">USA</div>
   <div id="marketGroupSectionsUSA"></div>
+
+  <div class="section-title">Europe</div>
+  <div id="marketGroupSectionsEU"></div>
   <p class="note">Gruppierung nach dem dritten Segment von PortfolioGrouping (z.B. "Shares - Switzerland - Core" → Tabelle "Core") - unabhängig von der gehaltenen Quantity. "Yield" = Dividend Yield der letzten 12 Monate. Die Total-Zeile je Gruppe ist der arithmetische Durchschnitt (nicht wertgewichtet).</p>
 
   <div class="footer">
@@ -213,7 +216,7 @@ async function load(){
       const periods = periodsBySecId.get(m.SecurityID);
       const parts = (m.PortfolioGroupingName || '').split(' - ').map(s=>s.trim());
 
-      if(parts.length >= 2 && (parts[1] === 'Switzerland' || parts[1] === 'USA')){
+      if(parts.length >= 2 && (parts[1] === 'Switzerland' || parts[1] === 'USA' || parts[1] === 'Europe')){
         swissCandidates.push({ name:m.SecurityName, secId:m.SecurityID, currency:m.Currency, country:parts[1], subGroup: parts[2] || 'Other', periods });
       }
 
@@ -238,6 +241,7 @@ async function load(){
     renderFxTable(byCurrency, totalChf, fxByCurrency, positions, fxSecurityId);
     renderMarketGroupsFor('marketGroupSectionsCH', swissCandidates.filter(c=>c.country==='Switzerland'), distBySecId, fxByCurrency);
     renderMarketGroupsFor('marketGroupSectionsUSA', swissCandidates.filter(c=>c.country==='USA'), distBySecId, fxByCurrency);
+    renderMarketGroupsFor('marketGroupSectionsEU', swissCandidates.filter(c=>c.country==='Europe' && (c.subGroup==='Index' || c.subGroup==='Core')), distBySecId, fxByCurrency);
     document.getElementById('statusText').textContent = 'live · ' + nowZurichString();
   }catch(e){
     document.getElementById('fxBody').innerHTML = `<tr><td colspan="8" class="error">Error: ${e.message}</td></tr>`;
