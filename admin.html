@@ -78,6 +78,7 @@
   <a href="portfolio.html">💼 Portfolio</a>
   <a href="analyser.html">🔬 Analyser</a>
   <a href="asset_comparison.html">🆚 Comparison</a>
+  <a href="security_task_manager.html">✅ Tasks</a>
   <div class="nav-dropdown active-group" id="editorsDropdown">
     <button type="button" class="dd-toggle" id="editorsToggle">🗂 Editors ▾</button>
     <div class="dd-menu" id="editorsMenu">
@@ -143,14 +144,14 @@
   </table>
   </div>
 
-  <div class="section-title">Upload Prices (CSV)</div>
-  <p class="note">Columns: <code>SecurityID</code> or <code>SecurityName</code>, <code>Price</code>, <code>PriceDate</code> (dd.mm.yyyy or ISO), <code>Source</code> (optional).</p>
-  <input type="file" id="priceFile" accept=".csv,text/csv">
+  <div class="section-title">Upload Prices (CSV / Excel)</div>
+  <p class="note">Columns: <code>SecurityID</code> or <code>SecurityName</code>, <code>Price</code>, <code>PriceDate</code> (dd.mm.yyyy or ISO), <code>Source</code> (optional). Akzeptiert <code>.csv</code> oder <code>.xlsx</code> (erstes Sheet) mit denselben Spalten.</p>
+  <input type="file" id="priceFile" accept=".csv,text/csv,.xlsx">
   <div id="priceUploadArea"></div>
 
-  <div class="section-title">Upload Distributions (CSV)</div>
-  <p class="note">Columns: <code>SecurityID</code> or <code>SecurityName</code>, <code>DistributionAmount</code>, <code>Currency</code> (optional), <code>ExDate</code>, <code>PayDate</code> (optional), <code>Source</code> (optional).</p>
-  <input type="file" id="distFile" accept=".csv,text/csv">
+  <div class="section-title">Upload Distributions (CSV / Excel)</div>
+  <p class="note">Columns: <code>SecurityID</code> or <code>SecurityName</code>, <code>DistributionAmount</code>, <code>Currency</code> (optional), <code>ExDate</code>, <code>PayDate</code> (optional), <code>Source</code> (optional). Akzeptiert <code>.csv</code> oder <code>.xlsx</code> (erstes Sheet) mit denselben Spalten.</p>
+  <input type="file" id="distFile" accept=".csv,text/csv,.xlsx">
   <div id="distUploadArea"></div>
 
   <div class="section-title">UBS Quotes Import (Excel)</div>
@@ -341,6 +342,32 @@ function parseCSV(text){
   });
   return { header, rows };
 }
+function parseXLSX(buf){
+  if (typeof XLSX === 'undefined') throw new Error('Excel-Bibliothek (SheetJS) konnte nicht geladen werden.');
+  const wb = XLSX.read(buf, { type: 'array' });
+  const sheetName = wb.SheetNames[0];
+  if (!sheetName) return { header: [], rows: [] };
+  // defval:'' keeps missing cells as empty strings (matching CSV behaviour); raw:false
+  // stringifies numbers/dates the same way a CSV cell would read as text, so the
+  // same findCol/parse* helpers used for CSV uploads work unchanged on xlsx rows.
+  const json = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '', raw: false });
+  const header = json.length ? Object.keys(json[0]) : [];
+  const rows = json.map(r => {
+    const obj = {};
+    header.forEach(h => { obj[h] = (r[h] === undefined || r[h] === null) ? '' : String(r[h]).trim(); });
+    return obj;
+  });
+  return { header, rows };
+}
+async function parseUploadRows(file){
+  const isXlsx = /\.xlsx$/i.test(file.name);
+  if (isXlsx) {
+    const buf = await file.arrayBuffer();
+    return parseXLSX(buf);
+  }
+  const text = await file.text();
+  return parseCSV(text);
+}
 function findCol(row, ...names) {
   for (const n of names) { if (row[n] !== undefined) return row[n]; }
   const lowerMap = {}; Object.keys(row).forEach(k => lowerMap[k.toLowerCase()] = row[k]);
@@ -374,8 +401,7 @@ async function handlePriceFile(file){
   const area = document.getElementById('priceUploadArea');
   area.innerHTML = '<div class="empty">Parsing…</div>';
   try {
-    const text = await file.text();
-    const { rows } = parseCSV(text);
+    const { rows } = await parseUploadRows(file);
     if (!rows.length) { area.innerHTML = '<div class="error">No data rows found in file (check the file isn\'t empty and has a header row).</div>'; return; }
     const master = await ensureMasterForUpload();
 
@@ -383,7 +409,7 @@ async function handlePriceFile(file){
       const sec = resolveSecurity(row, master);
       const priceRaw = findCol(row, 'Price');
       const dateRaw = findCol(row, 'PriceDate');
-      const sourceRaw = findCol(row, 'Source') || 'CSV Upload';
+      const sourceRaw = findCol(row, 'Source') || (/\.xlsx$/i.test(file.name) ? 'Excel Upload' : 'CSV Upload');
       const price = parseFloat(priceRaw);
       const dt = parseSwissDateTime(dateRaw);
       const errors = [];
@@ -398,7 +424,7 @@ async function handlePriceFile(file){
     renderUploadPreview(area, parsed, ['secName','price','priceDate','source'],
       ['Security','Price','PriceDate','Source'], () => importPrices(parsed));
   } catch (e) {
-    console.error('CSV price upload failed:', e);
+    console.error('Price upload failed:', e);
     area.innerHTML = `<div class="error">Error: ${e.message}</div>`;
   }
 }
@@ -407,8 +433,7 @@ async function handleDistFile(file){
   const area = document.getElementById('distUploadArea');
   area.innerHTML = '<div class="empty">Parsing…</div>';
   try {
-    const text = await file.text();
-    const { rows } = parseCSV(text);
+    const { rows } = await parseUploadRows(file);
     if (!rows.length) { area.innerHTML = '<div class="error">No data rows found in file (check the file isn\'t empty and has a header row).</div>'; return; }
     const master = await ensureMasterForUpload();
 
@@ -418,7 +443,7 @@ async function handleDistFile(file){
       const exDateRaw = findCol(row, 'ExDate');
       const payDateRaw = findCol(row, 'PayDate');
       const currencyRaw = findCol(row, 'Currency');
-      const sourceRaw = findCol(row, 'Source') || 'CSV Upload';
+      const sourceRaw = findCol(row, 'Source') || (/\.xlsx$/i.test(file.name) ? 'Excel Upload' : 'CSV Upload');
       const amount = parseFloat(amountRaw);
       const exDt = parseSwissDate(exDateRaw);
       const payDt = payDateRaw ? parseSwissDate(payDateRaw) : null;
@@ -437,7 +462,7 @@ async function handleDistFile(file){
     renderUploadPreview(area, parsed, ['secName','amount','currency','exDate','payDate','source'],
       ['Security','Amount','Currency','ExDate','PayDate','Source'], () => importDistributions(parsed));
   } catch (e) {
-    console.error('CSV distribution upload failed:', e);
+    console.error('Distribution upload failed:', e);
     area.innerHTML = `<div class="error">Error: ${e.message}</div>`;
   }
 }
