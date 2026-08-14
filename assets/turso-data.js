@@ -131,7 +131,7 @@ async function tursoRun(sql, args = []) {
 // Instrument, PortfolioGrouping, TrxArt) change rarely.
 async function tursoParameterOptions(paraTable, paraField, ttlMs = 3600000) {
   return tursoQuery(
-    'SELECT ParameterID, ParameterName FROM security_parameter WHERE ParaTable = ? AND ParaField = ? ORDER BY ParameterID ASC',
+    'SELECT ParameterID, ParameterName FROM security_parameter WHERE ParaTable = ? AND ParaField = ? ORDER BY ParameterName COLLATE NOCASE ASC',
     [paraTable, paraField], ttlMs
   );
 }
