@@ -31,7 +31,7 @@
 
   .toggle-btn{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;}
   .toggle-btn:hover{border-color:var(--muted);color:var(--text);}
-  .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;}
+  .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;}
 
   .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:16px 0;display:none;gap:8px;}
   .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
@@ -202,6 +202,7 @@
   <p class="note">Bei wiederkehrenden Tasks (Month End / Annually) wird beim Erledigen automatisch das nächste Fälligkeitsdatum gesetzt. Überfällige Tasks sind rot, in den nächsten 7 Tagen fällige Tasks gelb markiert.</p>
 
   <div class="footer">
+    <button class="toggle-btn" id="qualityCheckBtn">🔍 Run Security Quality Check Audit</button>
     <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
   </div>
 </div>
@@ -231,7 +232,11 @@ async function ensureTaskTable(){
   try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) { /* column likely already exists */ }
 }
 
-function todayIso(){ return nowZurichIsoDateString ? nowZurichIsoDateString() : new Date().toISOString().slice(0,10); }
+function todayIso(){
+  if(typeof nowZurichIsoDateString === 'function') return nowZurichIsoDateString();
+  if(typeof zurichParts === 'function'){ const p = zurichParts(new Date()); return `${p.year}-${p.month}-${p.day}`; }
+  return new Date().toISOString().slice(0,10);
+}
 function daysUntil(dateIso){
   if(!dateIso) return null;
   const d = new Date(dateIso + 'T00:00:00');
@@ -554,6 +559,54 @@ document.getElementById('cfgSave').addEventListener('click', () => {
   tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
   document.getElementById('settingsPanel').classList.remove('show');
   load();
+});
+
+document.getElementById('qualityCheckBtn').addEventListener('click', async () => {
+  if(!tursoConfigured()){ alert('Bitte zuerst ⚙ Repo/Token setzen.'); return; }
+  const btn = document.getElementById('qualityCheckBtn');
+  const originalText = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Prüfe…';
+  try {
+    const QC_STATUS_ID = 136;
+    const QC_TASKTYPE_ID = 139;
+    const QC_TASK_NAME = 'Security Quality Check';
+
+    const activeSecurities = await tursoQuery('SELECT SecurityID FROM security_master WHERE Status = ?', [QC_STATUS_ID], 0);
+    const existingTasks = await tursoQuery(
+      'SELECT SecurityID, DateDue FROM security_tasks WHERE TaskTypeID = ? AND TaskName = ?',
+      [QC_TASKTYPE_ID, QC_TASK_NAME], 0
+    );
+
+    const today = isoToday();
+    const windowEnd = (() => { const d = new Date(today + 'T00:00:00'); d.setFullYear(d.getFullYear() + 2); return d.toISOString().slice(0,10); })();
+    const nextDue = (() => { const d = new Date(today + 'T00:00:00'); d.setFullYear(d.getFullYear() + 1); return d.toISOString().slice(0,10); })();
+
+    const coveredSecIds = new Set();
+    for(const t of existingTasks){
+      if(t.DateDue && t.DateDue >= today && t.DateDue <= windowEnd) coveredSecIds.add(String(t.SecurityID));
+    }
+
+    const missing = activeSecurities.filter(s => !coveredSecIds.has(String(s.SecurityID)));
+    if(!missing.length){
+      alert('Alle aktiven Securities (Status 136) haben bereits einen "Security Quality Check" Task mit Fälligkeit in den nächsten 2 Jahren.');
+      return;
+    }
+
+    const nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
+    for(const s of missing){
+      await tursoRun(
+        `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
+        [QC_TASK_NAME, null, s.SecurityID, nextDue, 'Annually', QC_TASKTYPE_ID, nowIso]
+      );
+    }
+    tursoClearCache();
+    await load();
+    alert(`${missing.length} neue "Security Quality Check" Task(s) erstellt (Fälligkeit: ${fmtDdMmYyyy(nextDue)}).`);
+  } catch(e) {
+    alert('Fehler beim Audit: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = originalText;
+  }
 });
 
 load();

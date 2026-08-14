@@ -41,6 +41,18 @@
   .empty,.error{padding:30px 10px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
   .error{color:var(--loss);}
   .missing{color:var(--muted);font-style:italic;font-size:12px;}
+
+  .task-teaser-list{display:flex;flex-direction:column;gap:0;margin-top:8px;}
+  .task-teaser-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line);}
+  .task-teaser-row:last-child{border-bottom:none;}
+  .task-teaser-name{font-size:14px;font-weight:500;}
+  .task-teaser-sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px;}
+  .task-teaser-due{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;white-space:nowrap;}
+  .task-teaser-due.overdue{color:var(--loss);}
+  .task-teaser-due.due-soon{color:#B5793A;}
+  .task-teaser-footer{margin-top:10px;text-align:right;}
+  .task-teaser-footer a{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);text-decoration:none;}
+  .task-teaser-footer a:hover{color:var(--accent);}
   @media (max-width:700px){ #boardTable thead th:nth-child(4), #boardTable tbody td:nth-child(4){display:none;} }
 
   .footer{margin-top:20px;display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
@@ -81,6 +93,7 @@
   <a href="portfolio.html">💼 Portfolio</a>
   <a href="analyser.html">🔬 Analyser</a>
   <a href="asset_comparison.html">🆚 Comparison</a>
+  <a href="tasks.html">✅ Tasks</a>
   <div class="nav-dropdown" id="editorsDropdown">
     <button type="button" class="dd-toggle" id="editorsToggle">🗂 Editors ▾</button>
     <div class="dd-menu" id="editorsMenu">
@@ -157,6 +170,9 @@
     </span>
   </div>
 
+  <div class="section-title">Tasks</div>
+  <div id="taskTeaserWrap"><div class="empty">Loading…</div></div>
+
   <div class="section-title">All Tools</div>
   <div class="grid">
     <a class="card" href="dashboard.html">
@@ -197,6 +213,7 @@
 <script src="assets/turso-data.js"></script>
 <script>
 const REFRESH_MS = 5 * 60 * 1000;
+let secListForTasks = [];
 
 function pctChange(now, ref){ return (ref===0||ref==null||now==null) ? null : ((now-ref)/ref)*100; }
 function fmtPct(v){
@@ -393,6 +410,8 @@ async function load(){
       });
     }
     renderPortfolioSummary(totalChf, positions);
+    secListForTasks = master;
+    loadTaskTeaser();
 
     // ---- Curated Markets table (Day/WTD/MTD/YTD — same definitions as dashboard.html) ----
     const groups = {};
@@ -412,6 +431,41 @@ async function load(){
     document.getElementById('boardBody').innerHTML = `<tr><td colspan="7" class="error">Fehler: ${e.message}</td></tr>`;
     document.getElementById('summaryBoxes').innerHTML = `<div class="error">Fehler: ${e.message}</div>`;
     document.getElementById('statusText').textContent = 'Fehler';
+  }
+}
+
+async function loadTaskTeaser(){
+  const wrap = document.getElementById('taskTeaserWrap');
+  try{
+    const rows = await tursoQuery(
+      `SELECT TaskID, TaskName, SecurityID, DateDue FROM security_tasks WHERE Completed = 0`, [], 0
+    );
+    const todayIso = (typeof nowZurichIsoDateString === 'function') ? nowZurichIsoDateString()
+      : (typeof zurichParts === 'function' ? (() => { const p = zurichParts(new Date()); return `${p.year}-${p.month}-${p.day}`; })() : new Date().toISOString().slice(0,10));
+    const cutoff = (() => { const d = new Date(todayIso + 'T00:00:00'); d.setDate(d.getDate()+10); return d.toISOString().slice(0,10); })();
+    const secNameById = new Map(secListForTasks.map(m => [String(m.SecurityID), m.SecurityName]));
+
+    const due = rows.filter(t => t.DateDue && t.DateDue <= cutoff).sort((a,b) => a.DateDue.localeCompare(b.DateDue));
+    if(!due.length){ wrap.innerHTML = '<div class="empty">Keine überfälligen oder in den nächsten 10 Tagen fälligen Tasks.</div>'; return; }
+
+    const rowsHtml = due.map(t => {
+      const overdue = t.DateDue < todayIso;
+      const dueCls = overdue ? 'overdue' : 'due-soon';
+      const secName = secNameById.get(String(t.SecurityID));
+      const m = String(t.DateDue).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      const dueFmt = m ? `${m[3]}.${m[2]}.${m[1]}` : t.DateDue;
+      return `<div class="task-teaser-row">
+        <div>
+          <div class="task-teaser-name">${t.TaskName || '—'}</div>
+          ${secName ? `<div class="task-teaser-sub">${secName}</div>` : ''}
+        </div>
+        <div class="task-teaser-due ${dueCls}">${overdue ? 'überfällig · ' : ''}${dueFmt}</div>
+      </div>`;
+    }).join('');
+
+    wrap.innerHTML = `<div class="task-teaser-list">${rowsHtml}</div><div class="task-teaser-footer"><a href="tasks.html">Alle Tasks ansehen →</a></div>`;
+  }catch(e){
+    wrap.innerHTML = `<div class="empty">Tasks konnten nicht geladen werden (${e.message}).</div>`;
   }
 }
 
