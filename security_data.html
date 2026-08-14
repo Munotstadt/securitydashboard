@@ -315,7 +315,6 @@ function renderSection(def, rows){
   }
   return `
     <div class="section-title-row"><div class="section-title">${def.title}</div></div>
-    <div class="section-meta">Stand: ${maxDate}${latest.length !== rows.length ? ` · ${latest.length} Parameter (ältere Snapshots je Parameter ausgeblendet)` : ''}</div>
     ${bodyHtml}
   `;
 }

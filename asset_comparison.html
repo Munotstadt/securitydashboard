@@ -225,15 +225,18 @@ function fmtYieldCell(v){
 }
 function fmtIntPctCell(v){ return (v===null||v===undefined||isNaN(v)) ? '—' : `${Math.round(v)}%`; }
 
-function minMaxClass(val, min, max){
+function minMaxClass(val, min, max, invert){
   if(val===null||val===undefined||isNaN(val)||min===max) return '';
-  if(val === min) return 'cell-good';
-  if(val === max) return 'cell-bad';
+  const goodVal = invert ? max : min;
+  const badVal = invert ? min : max;
+  if(val === goodVal) return 'cell-good';
+  if(val === badVal) return 'cell-bad';
   return '';
 }
-function shadeStyle(val, min, max){
+function shadeStyle(val, min, max, invert){
   if(val===null||val===undefined||isNaN(val)||min===null||max===null||min===max) return '';
   let t = (val-min)/(max-min); t = Math.max(0,Math.min(1,t));
+  if(invert) t = 1 - t;
   const good = [31,138,110], bad = [192,41,61];
   const r = Math.round(good[0]+(bad[0]-good[0])*t);
   const g = Math.round(good[1]+(bad[1]-good[1])*t);
@@ -349,8 +352,14 @@ async function renderComparison(){
     const vals = perSecurity.map(r => r[field]).filter(v => v!==null && v!==undefined && !isNaN(v));
     return vals.length ? { min: Math.min(...vals), max: Math.max(...vals) } : { min:null, max:null };
   }
+  function minMaxOfPeriod(key){
+    const vals = perSecurity.map(r => r.trByPeriod[key]).filter(v => v!==null && v!==undefined && !isNaN(v));
+    return vals.length ? { min: Math.min(...vals), max: Math.max(...vals) } : { min:null, max:null };
+  }
   const terRange = minMaxOf('ter');
   const spreadRange = minMaxOf('spread');
+  const trRanges = {};
+  for(const p of TR_PERIODS) trRanges[p.key] = minMaxOfPeriod(p.key);
 
   function avgOf(arr){
     const vals = arr.filter(v => v!==null && v!==undefined && !isNaN(v));
@@ -365,7 +374,12 @@ async function renderComparison(){
     const spreadCls = minMaxClass(r.spread, spreadRange.min, spreadRange.max);
     const terStyle = shadeStyle(r.ter, terRange.min, terRange.max);
     const spreadStyle = shadeStyle(r.spread, spreadRange.min, spreadRange.max);
-    const trCells = TR_PERIODS.map(p => `<td class="num">${fmtReturnCell(r.trByPeriod[p.key])}</td>`).join('');
+    const trCells = TR_PERIODS.map(p => {
+      const range = trRanges[p.key];
+      const cls = minMaxClass(r.trByPeriod[p.key], range.min, range.max, true);
+      const style = shadeStyle(r.trByPeriod[p.key], range.min, range.max, true);
+      return `<td class="num ${cls}"${style}>${fmtReturnCell(r.trByPeriod[p.key])}</td>`;
+    }).join('');
     const sectorCells = allSectorNames.map(s => `<td class="num">${fmtIntPctCell(r.sectorMap[s])}</td>`).join('');
     return `<tr>
       <td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>
