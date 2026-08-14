@@ -28,6 +28,7 @@
   #securitySwitcher{background:var(--bg);border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 28px 6px 12px;border-radius:3px;cursor:pointer;min-width:220px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23767E8A'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;}
   .toggle-btn{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;}
   .toggle-btn:hover{border-color:var(--muted);color:var(--text);}
+  .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;}
 
   .detail-header{padding-bottom:14px;border-bottom:2px solid var(--accent);}
   .detail-header h2{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;margin:0 0 6px;}
@@ -84,6 +85,7 @@
   <a href="portfolio.html">💼 Portfolio</a>
   <a href="analyser.html">🔬 Analyser</a>
   <a href="asset_comparison.html">🆚 Comparison</a>
+  <a href="security_task_manager.html">✅ Tasks</a>
   <div class="nav-dropdown active-group" id="editorsDropdown">
     <button type="button" class="dd-toggle" id="editorsToggle">🗂 Editors ▾</button>
     <div class="dd-menu" id="editorsMenu">
@@ -132,7 +134,6 @@
     <div style="display:flex;gap:6px;">
       <a class="toggle-btn" id="linkBackToSecurity" href="security.html">← Back to Security</a>
       <button class="toggle-btn" id="addDataBtn">➕ Add Data Point</button>
-      <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
     </div>
   </div>
 
@@ -194,6 +195,10 @@
   <div class="section-title">Change Log</div>
   <div class="section-meta">Letzte Änderungen an den Datenpunkten dieser Security.</div>
   <div id="logWrap" class="table-wrap"><div class="empty">Loading…</div></div>
+
+  <div class="footer">
+    <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
+  </div>
 </div>
 
 <script src="assets/turso-data.js"></script>

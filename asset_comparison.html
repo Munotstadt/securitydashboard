@@ -31,6 +31,7 @@
 
   .toggle-btn{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;}
   .toggle-btn:hover{border-color:var(--muted);color:var(--text);}
+  .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;}
 
   .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:16px 0;display:none;gap:8px;}
   .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
@@ -78,6 +79,7 @@
   <a href="portfolio.html">💼 Portfolio</a>
   <a href="analyser.html">🔬 Analyser</a>
   <a href="asset_comparison.html" class="active">🆚 Comparison</a>
+  <a href="security_task_manager.html">✅ Tasks</a>
   <div class="nav-dropdown" id="editorsDropdown">
     <button type="button" class="dd-toggle" id="editorsToggle">🗂 Editors ▾</button>
     <div class="dd-menu" id="editorsMenu">
@@ -125,7 +127,6 @@
     <div class="brand"><h1>Asset Comparison</h1></div>
     <div style="display:flex;gap:8px;align-items:center;">
       <div class="status" id="statusText">loading…</div>
-      <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
     </div>
   </div>
 
@@ -152,6 +153,10 @@
 
   <div id="comparisonWrap"><div class="empty">Loading…</div></div>
   <p class="note">TER (tiefster Wert grün / höchster Wert rot) und Spread (tief grün / hoch rot) werden pro Gruppe farblich hervorgehoben. Yield = Ausschüttungen der letzten 12 Monate / aktueller Preis. Total Returns berücksichtigen Kursveränderung inkl. Ausschüttungen im jeweiligen Zeitraum.</p>
+
+  <div class="footer">
+    <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
+  </div>
 </div>
 
 <script src="assets/turso-data.js"></script>

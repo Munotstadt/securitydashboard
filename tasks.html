@@ -31,6 +31,7 @@
 
   .toggle-btn{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;}
   .toggle-btn:hover{border-color:var(--muted);color:var(--text);}
+  .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;}
 
   .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:16px 0;display:none;gap:8px;}
   .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
@@ -134,7 +135,6 @@
     <div class="brand"><h1>Securities Task Manager</h1></div>
     <div style="display:flex;gap:8px;align-items:center;">
       <div class="status" id="statusText">loading…</div>
-      <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
     </div>
   </div>
 
@@ -191,6 +191,10 @@
   <div class="section-title">Tasks</div>
   <div id="tasksWrap"><div class="empty">Loading…</div></div>
   <p class="note">Bei wiederkehrenden Tasks (Month End / Annually) wird beim Erledigen automatisch das nächste Fälligkeitsdatum gesetzt. Überfällige Tasks sind rot, in den nächsten 7 Tagen fällige Tasks gelb markiert.</p>
+
+  <div class="footer">
+    <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
+  </div>
 </div>
 
 <script src="assets/turso-data.js"></script>

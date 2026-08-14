@@ -25,8 +25,9 @@
   .board{width:100%;max-width:900px;}
   .toprow{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
   #securitySwitcher{background:var(--bg);border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 28px 6px 12px;border-radius:3px;cursor:pointer;min-width:220px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23767E8A'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;}
-  .detail-header{padding-bottom:18px;border-bottom:2px solid var(--accent);}
-  .detail-header h2{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;margin:0 0 12px;}
+  .detail-header{padding-bottom:18px;border-bottom:2px solid var(--accent);position:relative;}
+  .detail-header h2{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;margin:0 0 12px;padding-right:130px;}
+  .status-badge{position:absolute;top:0;right:0;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#fff;background:var(--loss);padding:5px 10px;border-radius:3px;}
   .detail-stats{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
   .detail-price{font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:600;}
   .ccy{color:var(--muted);font-size:13px;}
@@ -61,9 +62,18 @@
   .toggle-row{display:flex;gap:6px;flex-wrap:wrap;margin:18px 0 4px;}
   .toggle-btn{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;}
   .toggle-btn:hover{border-color:var(--muted);color:var(--text);}
+  .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;}
+  .risk-flex{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;margin-top:8px;}
+  .risk-flex-col{flex:1;min-width:240px;}
+  .risk-flex-col .chart-wrap{margin:0;}
   .toggle-btn.active{background:var(--text);border-color:var(--text);color:#fff;font-weight:600;}
 
   .chart-wrap{margin:10px 0;background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:16px 12px 8px;position:relative;}
+  .chart-outer{position:relative;margin:10px 0;}
+  .chart-outer .chart-wrap{margin:0;}
+  .chart-actions{position:absolute;bottom:8px;right:8px;display:flex;gap:6px;}
+  .chart-icon-btn{width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid var(--line);border-radius:3px;color:var(--muted);text-decoration:none;font-size:14px;cursor:pointer;}
+  .chart-icon-btn:hover{border-color:var(--accent);color:var(--accent);}
   .chart-wrap svg{display:block;width:100%;height:auto;}
   .chart-empty,.empty{padding:30px 10px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
   .chart-legend{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:6px;}
@@ -75,6 +85,12 @@
   .heatmap-table td{text-align:center;padding:6px 2px;font-family:'IBM Plex Mono',monospace;border-radius:2px;}
   .heatmap-table td.year-col{text-align:left;font-weight:600;color:var(--text);padding-left:4px;}
   .heatmap-table td.empty-cell{color:var(--line);}
+
+  .returns-table{font-size:11px;}
+  .returns-table th{font-size:9px;padding:6px 4px;}
+  .returns-table td{padding:6px 4px;}
+  .returns-table td:first-child{font-weight:600;color:var(--text);}
+  .returns-table td.chg{font-size:11px;}
 
   .history-links{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;}
   .chart-controls-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin:18px 0 4px;}
@@ -124,6 +140,7 @@
   <a href="portfolio.html">💼 Portfolio</a>
   <a href="analyser.html">🔬 Analyser</a>
   <a href="asset_comparison.html">🆚 Comparison</a>
+  <a href="security_task_manager.html">✅ Tasks</a>
   <div class="nav-dropdown" id="editorsDropdown">
     <button type="button" class="dd-toggle" id="editorsToggle">🗂 Editors ▾</button>
     <div class="dd-menu" id="editorsMenu">
@@ -169,7 +186,6 @@
 <div class="board">
   <div class="toprow">
     <select id="securitySwitcher"></select>
-    <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
   </div>
 
   <div class="settings" id="settingsPanel">
@@ -182,6 +198,7 @@
 
   <div class="detail-header">
     <h2 id="detailName">Loading…</h2>
+    <span class="status-badge" id="statusBadge" style="display:none;"></span>
     <div class="detail-stats">
       <span class="detail-price" id="detailPrice">—</span>
       <span class="ccy" id="detailCcy"></span>
@@ -192,8 +209,14 @@
     <a class="toggle-btn" id="linkSecurityData" href="security_data.html">🔎 View Security Data</a>
   </div>
 
-  <div class="section-title-row"><span class="section-title-text">Price Chart</span><a class="toggle-btn" id="linkPriceHistory" href="price_editor.html">📈 View Price History</a></div>
-  <div class="chart-wrap" id="priceChartWrap"><div class="chart-empty">Loading chart…</div></div>
+  <div class="section-title-row"><span class="section-title-text">Price Chart</span></div>
+  <div class="chart-outer">
+    <div class="chart-wrap" id="priceChartWrap"><div class="chart-empty">Loading chart…</div></div>
+    <div class="chart-actions">
+      <a class="chart-icon-btn" id="linkPriceHistory" href="price_editor.html" title="View Price History">👁</a>
+      <a class="chart-icon-btn" id="linkPriceAdd" href="price_editor.html" title="Add Price">+</a>
+    </div>
+  </div>
   <div class="toggle-row" id="priceRangeRow">
     <button type="button" class="toggle-btn" data-range="10D">10 Days</button>
     <button type="button" class="toggle-btn" data-range="30D">30 Days</button>
@@ -205,7 +228,7 @@
 
   <div class="section-title">Returns</div>
   <div class="table-wrap">
-  <table id="perfTable">
+  <table id="perfTable" class="returns-table">
     <thead><tr>
       <th>Period</th><th class="num" id="thPriceLc">Price Return LC</th><th class="num" id="thTotalLc">Total Return LC</th>
       <th class="num">Cry</th><th class="num">Price Return CHF</th><th class="num">Total Return CHF</th>
@@ -216,7 +239,7 @@
 
   <div class="detail-meta" style="margin-top:18px;">Annual Returns</div>
   <div class="table-wrap">
-  <table id="annualTable">
+  <table id="annualTable" class="returns-table">
     <thead><tr>
       <th>Year</th><th class="num">Price Return LC</th><th class="num">Total Return LC</th>
       <th class="num">Cry</th><th class="num">Price Return CHF</th><th class="num">Total Return CHF</th>
@@ -234,19 +257,31 @@
   <div id="monthlyToggleWrap" style="margin-top:6px;"></div>
 
   <div class="section-title">Risk</div>
-  <div class="table-wrap">
-  <table id="riskTable">
-    <thead><tr><th></th><th class="num">1 Year</th><th class="num">3 Years</th><th class="num">5 Years</th></tr></thead>
-    <tbody id="riskBody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
-  </table>
+  <div class="risk-flex">
+    <div class="risk-flex-col">
+      <div class="table-wrap">
+      <table id="riskTable" class="returns-table">
+        <thead><tr><th></th><th class="num">1 Year</th><th class="num">3 Years</th><th class="num">5 Years</th></tr></thead>
+        <tbody id="riskBody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+      </table>
+      </div>
+      <div class="detail-meta" style="margin-top:10px;">Max Drawdown Since Inception: <span id="mddInception">—</span></div>
+    </div>
+    <div class="risk-flex-col">
+      <div class="detail-meta" style="margin-bottom:6px;">Rolling 1-Year Volatility (annualized)</div>
+      <div class="chart-wrap" id="volChartWrap"><div class="chart-empty">Loading chart…</div></div>
+    </div>
   </div>
-  <div class="detail-meta" style="margin-top:10px;">Max Drawdown Since Inception: <span id="mddInception">—</span></div>
-  <div class="detail-meta" style="margin-top:12px;">Rolling 1-Year Volatility (annualized)</div>
-  <div class="chart-wrap" id="volChartWrap"><div class="chart-empty">Loading chart…</div></div>
 
   <div id="dividendSection">
-    <div class="section-title-row"><span class="section-title-text">Dividend Chart</span><a class="toggle-btn" id="linkDividendHistory" href="distribution_editor.html">💰 View Dividend History</a></div>
-    <div class="chart-wrap" id="distChartWrap"><div class="chart-empty">Loading chart…</div></div>
+    <div class="section-title-row"><span class="section-title-text">Dividend Chart</span></div>
+    <div class="chart-outer">
+      <div class="chart-wrap" id="distChartWrap"><div class="chart-empty">Loading chart…</div></div>
+      <div class="chart-actions">
+        <a class="chart-icon-btn" id="linkDividendHistory" href="distribution_editor.html" title="View Dividend History">👁</a>
+        <a class="chart-icon-btn" id="linkDividendAdd" href="distribution_editor.html" title="Add Dividend">+</a>
+      </div>
+    </div>
     <div class="toggle-row" id="distRangeRow">
       <button type="button" class="toggle-btn" data-range="12M">12 Months</button>
       <button type="button" class="toggle-btn active" data-range="24M">24 Months</button>
@@ -264,30 +299,14 @@
     </div>
   </div>
 
-  <div class="section-title">Add Price / Dividend</div>
-  <div class="quick-form">
-    <div class="quick-form-row" id="quickPriceForm">
-      <div class="field"><label>Price</label><input type="number" step="any" id="qpPrice"></div>
-      <div class="field"><label>Date/Time</label><input type="text" id="qpDate" placeholder="dd.mm.yyyy hh:mm:ss"></div>
-      <div class="field"><label>Source</label><input type="text" id="qpSource" value="manual"></div>
-      <button type="button" id="qpSave">Save Price</button>
-      <span class="quick-status" id="qpStatus"></span>
-    </div>
-    <div class="quick-form-row" id="quickDistForm">
-      <div class="field"><label>Amount</label><input type="number" step="any" id="qdAmount"></div>
-      <div class="field"><label>Currency</label><input type="text" id="qdCurrency"></div>
-      <div class="field"><label>Ex-Date</label><input type="text" id="qdExDate" placeholder="dd.mm.yyyy"></div>
-      <div class="field"><label>Pay-Date</label><input type="text" id="qdPayDate" placeholder="dd.mm.yyyy"></div>
-      <div class="field"><label>Source</label><input type="text" id="qdSource" value="manual"></div>
-      <button type="button" id="qdSave">Save Dividend</button>
-      <span class="quick-status" id="qdStatus"></span>
-    </div>
-  </div>
-
   <div class="section-title">Master Data</div>
   <div class="quick-form">
     <div class="master-form" id="masterForm"></div>
     <div class="actions"><span class="quick-status" id="masterStatus"></span><button type="button" id="masterSave">Save Master Data</button></div>
+  </div>
+
+  <div class="footer">
+    <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
   </div>
 </div>
 
@@ -297,6 +316,12 @@ function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); r
 function fmtDateOnly(date){ const p = zurichParts(date); return `${p.day}.${p.month}.`; }
 function fmtMonthYear(date){ return `${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getFullYear()).slice(-2)}`; }
 function fmtDateDDMM(date){ const p = zurichParts(date); return `${p.day}.${p.month}.${p.year}`; }
+function fmtIsoDateDDMM(isoDate){
+  if(!isoDate) return '—';
+  const m = String(isoDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return isoDate;
+  return `${m[3]}.${m[2]}.${m[1]}`;
+}
 function fmtDateTimeDDMM(date){ const p = zurichParts(date); return `${p.day}.${p.month}.${p.year} ${p.hour}:${p.minute}`; }
 function fmtPct(v){ if(v===null||v===undefined||isNaN(v)) return {text:'—',dir:'flat'}; const r=Math.round(v*100)/100; const dir=r>0?'up':(r<0?'down':'flat'); return {text:`${r>0?'+':''}${r.toFixed(2)}%`, dir}; }
 function pctChange(now, ref){ return (ref===0||ref==null||now==null) ? null : ((now-ref)/ref)*100; }
@@ -316,6 +341,7 @@ let collectorOpts = [];
 let groupingOpts = [];
 let instrumentOpts = [];
 let portfolioGroupingOpts = [];
+let statusOpts = [];
 let currentPriceRange = '90D';
 let currentDistRange = '24M';
 
@@ -704,6 +730,11 @@ function renderMasterForm(master){
       <div class="field"><label>DashboardGrouping</label><select id="mfGrouping">${optionList(groupingOpts, master.DashboardGrouping, true)}</select></div>
       <div class="field"><label>PortfolioGrouping</label><select id="mfPortfolioGrouping">${optionList(portfolioGroupingOpts, master.PortfolioGrouping, true)}</select></div>
     </div>
+    <div class="mf-row cols-3">
+      <div class="field"><label>Date Launch</label><input type="date" id="mfDateLaunch" value="${master.DateLaunch||''}"></div>
+      <div class="field"><label>Date Terminated</label><input type="date" id="mfDateTerminated" value="${master.DateTerminated||''}"></div>
+      <div class="field"><label>Status</label><select id="mfStatus">${optionList(statusOpts, master.Status, true)}</select></div>
+    </div>
     <div class="mf-row cols-1">
       <div class="field"><label>Collector</label><select id="mfCollector">${optionList(collectorOpts, master.Collector, true)}</select></div>
     </div>
@@ -716,11 +747,20 @@ async function loadSecurity(secId){
   if(!master){ document.getElementById('detailName').textContent = 'Security nicht gefunden.'; return; }
 
   document.getElementById('linkPriceHistory').href = `price_editor.html?id=${secId}`;
+  document.getElementById('linkPriceAdd').href = `price_editor.html?id=${secId}&add=1`;
   document.getElementById('linkDividendHistory').href = `distribution_editor.html?id=${secId}`;
+  document.getElementById('linkDividendAdd').href = `distribution_editor.html?id=${secId}&add=1`;
   document.getElementById('linkTransactionHistory').href = `transactions_editor.html?id=${secId}`;
   document.getElementById('linkSecurityData').href = `security_data.html?id=${secId}`;
-  document.getElementById('qpDate').value = nowZurichString();
-  document.getElementById('qdCurrency').value = master.Currency || '';
+
+  const badge = document.getElementById('statusBadge');
+  const statusName = (master.StatusName || '').trim().toLowerCase();
+  const todayIso = nowZurichDateString ? nowZurichDateString() : new Date().toISOString().slice(0,10);
+  const isTerminated = statusName === 'terminated' || (master.DateTerminated && master.DateTerminated < todayIso);
+  const isInactive = !isTerminated && statusName === 'inactive';
+  if(isTerminated){ badge.textContent = 'Terminated'; badge.style.display = ''; }
+  else if(isInactive){ badge.textContent = 'Inactive'; badge.style.display = ''; }
+  else { badge.style.display = 'none'; }
 
   const [prices, dists, txns] = await Promise.all([
     tursoQuery('SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices WHERE SecurityID = ?', [secId]),
@@ -817,7 +857,11 @@ async function loadSecurity(secId){
 
   document.getElementById('detailPrice').textContent = fmtDecimal(last.Price, decimals);
   const valorLabel = master.ID_Valor ? `VN ${master.ID_Valor}` : `ID ${master.SecurityID}`;
-  document.getElementById('detailMeta').textContent = `Stand ${fmtDateTimeDDMM(last.dt)} · ${valorLabel} · Quelle: ${last.Source||'—'}`;
+  const launchTerm = [
+    master.DateLaunch ? `Launch: ${fmtIsoDateDDMM(master.DateLaunch)}` : null,
+    master.DateTerminated ? `Terminated: ${fmtIsoDateDDMM(master.DateTerminated)}` : null,
+  ].filter(Boolean).join(' · ');
+  document.getElementById('detailMeta').textContent = `Stand ${fmtDateTimeDDMM(last.dt)} · ${valorLabel} · Quelle: ${last.Source||'—'}${launchTerm ? ' · ' + launchTerm : ''}`;
 
   const oneYearAgo = daysAgo(now,365);
   const dist12m = distRows.filter(d => d.exDate > oneYearAgo && d.exDate <= now).reduce((s,d)=>s+d.amount,0);
@@ -961,35 +1005,6 @@ async function loadSecurity(secId){
 
 function setQuickStatus(id, msg, cls){ const el = document.getElementById(id); el.textContent = msg; el.className = 'quick-status ' + (cls||''); }
 
-document.getElementById('qpSave').addEventListener('click', async () => {
-  const price = document.getElementById('qpPrice').value;
-  const date = document.getElementById('qpDate').value.trim();
-  const source = document.getElementById('qpSource').value || 'manual';
-  if(!price || !parseSwissDateTime(date)){ setQuickStatus('qpStatus','Bitte Preis und gültiges Datum (dd.mm.yyyy hh:mm:ss) angeben.','err'); return; }
-  try{
-    setQuickStatus('qpStatus','Speichere…','');
-    await tursoRun('INSERT INTO security_prices (SecurityID, Price, PriceDate, Source, created_at) VALUES (?,?,?,?,?)', [curSecId, price, toIsoDateTime(parseSwissDateTime(date)), source, nowZurichString()]);
-    setQuickStatus('qpStatus','Gespeichert ✓','ok');
-    document.getElementById('qpPrice').value = '';
-    await loadSecurity(curSecId);
-  }catch(e){ setQuickStatus('qpStatus','Fehler: '+e.message,'err'); }
-});
-document.getElementById('qdSave').addEventListener('click', async () => {
-  const amount = document.getElementById('qdAmount').value;
-  const currency = document.getElementById('qdCurrency').value;
-  const exDate = document.getElementById('qdExDate').value.trim();
-  const payDate = document.getElementById('qdPayDate').value.trim();
-  const source = document.getElementById('qdSource').value || 'manual';
-  if(!amount || !parseSwissDate(exDate)){ setQuickStatus('qdStatus','Bitte Betrag und gültiges Ex-Date (dd.mm.yyyy) angeben.','err'); return; }
-  try{
-    setQuickStatus('qdStatus','Speichere…','');
-    await tursoRun('INSERT INTO security_distributions (SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source, created_at) VALUES (?,?,?,?,?,?,?)',
-      [curSecId, amount, currency, toIsoDate(parseSwissDate(exDate)), payDate ? toIsoDate(parseSwissDate(payDate)) : null, source, nowZurichString()]);
-    setQuickStatus('qdStatus','Gespeichert ✓','ok');
-    document.getElementById('qdAmount').value = ''; document.getElementById('qdExDate').value = ''; document.getElementById('qdPayDate').value = '';
-    await loadSecurity(curSecId);
-  }catch(e){ setQuickStatus('qdStatus','Fehler: '+e.message,'err'); }
-});
 document.getElementById('masterSave').addEventListener('click', async () => {
   const name = document.getElementById('mfName').value;
   const currency = document.getElementById('mfCurrency').value;
@@ -1000,14 +1015,27 @@ document.getElementById('masterSave').addEventListener('click', async () => {
   const grouping = document.getElementById('mfGrouping').value || null;
   const instrument = document.getElementById('mfInstrument').value || null;
   const portfolioGrouping = document.getElementById('mfPortfolioGrouping').value || null;
+  const dateLaunch = document.getElementById('mfDateLaunch').value || null;
+  const dateTerminated = document.getElementById('mfDateTerminated').value || null;
+  const status = document.getElementById('mfStatus').value || null;
   try{
     setQuickStatus('masterStatus','Speichere…','');
-    await tursoRun('UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, DashboardGrouping=?, Instrument=?, PortfolioGrouping=? WHERE SecurityID=?',
-      [name, currency, ticker, isin, valor, collector, grouping, instrument, portfolioGrouping, curSecId]);
+    await ensureMasterStatusColumns();
+    await tursoRun('UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, DashboardGrouping=?, Instrument=?, PortfolioGrouping=?, DateLaunch=?, DateTerminated=?, Status=? WHERE SecurityID=?',
+      [name, currency, ticker, isin, valor, collector, grouping, instrument, portfolioGrouping, dateLaunch, dateTerminated, status, curSecId]);
     setQuickStatus('masterStatus','Gespeichert ✓','ok');
     await load();
   }catch(e){ setQuickStatus('masterStatus','Fehler: '+e.message,'err'); }
 });
+
+let masterStatusColumnsEnsured = false;
+async function ensureMasterStatusColumns(){
+  if(masterStatusColumnsEnsured) return;
+  try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateLaunch TEXT'); } catch(e) {}
+  try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateTerminated TEXT'); } catch(e) {}
+  try { await tursoRun('ALTER TABLE security_master ADD COLUMN Status INTEGER'); } catch(e) {}
+  masterStatusColumnsEnsured = true;
+}
 
 async function load(){
   if (!tursoConfigured()) {
@@ -1016,22 +1044,27 @@ async function load(){
     return;
   }
   try {
-    const [master, collectors, groupings, instruments, portfolioGroupings] = await Promise.all([
+    await ensureMasterStatusColumns();
+    const [master, collectors, groupings, instruments, portfolioGroupings, statuses] = await Promise.all([
       tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.Ticker, sm.ID_ISIN, sm.ID_Valor, sm.Collector, sm.DashboardGrouping, sm.Instrument, sm.PortfolioGrouping,
-                         gp.ParameterName AS GroupName
+                         sm.DateLaunch, sm.DateTerminated, sm.Status,
+                         gp.ParameterName AS GroupName, sp.ParameterName AS StatusName
                   FROM security_master sm
                   LEFT JOIN security_parameter gp ON gp.ParameterID = sm.DashboardGrouping
+                  LEFT JOIN security_parameter sp ON sp.ParameterID = sm.Status
                   ORDER BY sm.SecurityName COLLATE NOCASE ASC`, [], 3600000),
       tursoParameterOptions('security_master','Collector'),
       tursoParameterOptions('security_master','DashboardGrouping'),
       tursoParameterOptions('security_master','Instrument'),
       tursoParameterOptions('security_master','PortfolioGrouping'),
+      tursoParameterOptions('security_master','Status'),
     ]);
     masterAll = master;
     collectorOpts = [...collectors].sort((a,b) => a.ParameterName.localeCompare(b.ParameterName));
     groupingOpts = groupings;
     instrumentOpts = instruments;
     portfolioGroupingOpts = portfolioGroupings;
+    statusOpts = statuses;
 
     const sel = document.getElementById('securitySwitcher');
     const keepSel = sel.value;
