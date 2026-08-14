@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Securities Task Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613;--gain:#1F8A6E;--loss:#C0293D;--warn:#B5793A; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:32px 16px 80px;display:flex;flex-direction:column;align-items:center;}
+  .topnav{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;align-items:center;max-width:1100px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;scrollbar-width:none;}
+  .topnav::-webkit-scrollbar{display:none;}
+  .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
+  .topnav a:hover{color:var(--text);border-color:var(--line);}
+  .nav-dropdown{position:relative;}
+  .nav-dropdown>.dd-toggle{background:none;color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:12px;cursor:pointer;}
+  .nav-dropdown>.dd-toggle:hover,.nav-dropdown.open>.dd-toggle{color:var(--text);border-color:var(--line);}
+  .nav-dropdown.active-group>.dd-toggle{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
+  .dd-menu{position:fixed;background:#fff;border:1px solid var(--line);border-radius:4px;min-width:180px;display:none;flex-direction:column;box-shadow:0 6px 16px rgba(0,0,0,.09);z-index:1000;padding:4px;}
+  .dd-menu.show{display:flex;}
+  .dd-menu a{padding:8px 10px;border-radius:3px;color:var(--muted);text-decoration:none;white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  .dd-menu a:hover{background:var(--panel);color:var(--text);}
+  .dd-menu a.active{color:var(--text);font-weight:600;background:rgba(227,6,19,0.06);}
+  .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
+
+  .board{width:100%;max-width:1100px;}
+  .eyebrow{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:2px solid var(--accent);flex-wrap:wrap;gap:8px;}
+  .brand h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:.02em;margin:0;}
+  .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+
+  .toggle-btn{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;}
+  .toggle-btn:hover{border-color:var(--muted);color:var(--text);}
+
+  .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:16px 0;display:none;gap:8px;}
+  .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
+  .settings label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
+  .settings input{font-family:'Inter',sans-serif;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;width:100%;}
+  .settings button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
+
+  .filter-bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:20px 0 8px;}
+  .filter-btn{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer;}
+  .filter-btn.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
+  .filter-bar .spacer{flex:1;}
+  .filter-bar select{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;color:var(--text);}
+
+  .task-form{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:12px 0 20px;display:none;gap:10px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
+  .task-form.show{display:grid;}
+  .task-form label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
+  .task-form select,.task-form input,.task-form textarea{width:100%;font-family:'Inter',sans-serif;font-size:14px;padding:8px 9px;border:1px solid var(--line);border-radius:3px;background:var(--bg);color:var(--text);}
+  .task-form textarea{resize:vertical;min-height:60px;}
+  .task-form .full{grid-column:1/-1;}
+  .task-form .actions{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .task-form button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
+  .task-form .msg{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+  .task-form .msg.ok{color:var(--gain);}
+  .task-form .msg.error{color:var(--loss);}
+
+  .section-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;margin:28px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  .table-wrap{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;margin-top:4px;}
+  thead th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:10px 8px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  tbody td{padding:10px 8px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:top;}
+  tbody tr.done td{color:var(--muted);}
+  tbody tr.done .task-name{text-decoration:line-through;}
+  tbody tr.overdue td.due{color:var(--loss);font-weight:600;}
+  tbody tr.due-soon td.due{color:var(--warn);font-weight:600;}
+  .task-name{font-weight:600;}
+  .task-desc{color:var(--muted);font-size:12px;margin-top:2px;}
+  .sec-link{color:var(--text);text-decoration:none;border-bottom:1px dotted var(--muted);white-space:nowrap;}
+  .sec-link:hover{color:var(--accent);border-bottom-color:var(--accent);}
+  .recurring-badge{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:2px 6px;white-space:nowrap;}
+  .row-actions{white-space:nowrap;text-align:right;}
+  .row-actions a{text-decoration:none;font-size:12px;margin-left:8px;color:var(--muted);}
+  .row-actions a:hover{color:var(--accent);}
+  .row-actions a.done-link:hover{color:var(--gain);}
+  .row-actions a.rm-link:hover{color:var(--loss);}
+  .done-checkbox{width:16px;height:16px;cursor:pointer;}
+  .empty,.error{padding:40px 10px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
+  .error{color:var(--loss);}
+  .note{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:10px;}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <a href="index.html">🏠 Home</a>
+  <a href="dashboard.html">📊 Dashboard</a>
+  <a href="portfolio.html">💼 Portfolio</a>
+  <a href="analyser.html">🔬 Analyser</a>
+  <a href="asset_comparison.html">🆚 Comparison</a>
+  <a href="tasks.html" class="active">✅ Tasks</a>
+  <div class="nav-dropdown" id="editorsDropdown">
+    <button type="button" class="dd-toggle" id="editorsToggle">🗂 Editors ▾</button>
+    <div class="dd-menu" id="editorsMenu">
+      <a href="master_editor.html">🗂 Master Data</a>
+      <a href="price_editor.html">✏️ Prices</a>
+      <a href="transactions_editor.html">📋 Transactions</a>
+      <a href="distribution_editor.html">💰 Distributions</a>
+      <a href="security_data.html">🔎 Security Data</a>
+      <a href="admin.html">⚙️ Admin</a>
+    </div>
+  </div>
+</nav>
+<script>
+(function(){
+  var dd = document.getElementById('editorsDropdown');
+  if(!dd) return;
+  var toggle = document.getElementById('editorsToggle');
+  var menu = document.getElementById('editorsMenu');
+  document.body.appendChild(menu);
+  function positionMenu(){
+    var r = toggle.getBoundingClientRect();
+    menu.style.top = (r.bottom + 4) + 'px';
+    menu.style.left = r.left + 'px';
+  }
+  function closeMenu(){ dd.classList.remove('open'); menu.classList.remove('show'); }
+  function openMenu(){ positionMenu(); dd.classList.add('open'); menu.classList.add('show'); }
+  toggle.addEventListener('click', function(e){
+    e.stopPropagation();
+    if(menu.classList.contains('show')) closeMenu(); else openMenu();
+  });
+  document.addEventListener('click', function(e){
+    if(!dd.contains(e.target) && !menu.contains(e.target)) closeMenu();
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') closeMenu();
+  });
+  window.addEventListener('resize', function(){ if(menu.classList.contains('show')) positionMenu(); });
+  window.addEventListener('scroll', function(){ if(menu.classList.contains('show')) positionMenu(); }, true);
+})();
+</script>
+<div class="board">
+  <div class="eyebrow">
+    <div class="brand"><h1>Securities Task Manager</h1></div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <div class="status" id="statusText">loading…</div>
+      <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
+    </div>
+  </div>
+
+  <div class="settings" id="settingsPanel">
+    <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
+      <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="https://…turso.io"></div>
+      <div><label>Auth Token</label><input type="password" id="cfgToken" name="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…"></div>
+      <div style="align-self:end;"><button id="cfgSave" type="submit">Apply</button></div>
+    </form>
+  </div>
+
+  <div class="filter-bar">
+    <button class="filter-btn active" data-filter="open">Open</button>
+    <button class="filter-btn" data-filter="done">Done</button>
+    <button class="filter-btn" data-filter="all">All</button>
+    <div class="spacer"></div>
+    <input type="text" id="taskSearch" placeholder="🔎 Task, Security oder Datum suchen…" style="min-width:220px;flex:1;max-width:320px;font-family:'Inter',sans-serif;font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;color:var(--text);">
+    <select id="securityFilter"><option value="">All Securities</option></select>
+    <button class="toggle-btn" id="addTaskBtn">➕ New Task</button>
+  </div>
+
+  <div class="task-form" id="taskForm">
+    <div class="full">
+      <label>Task Name</label>
+      <input type="text" id="tfName" placeholder="z.B. Jahresbericht prüfen">
+    </div>
+    <div class="full">
+      <label>Description</label>
+      <textarea id="tfDescription" placeholder="Details zur Aufgabe…"></textarea>
+    </div>
+    <div>
+      <label>Security</label>
+      <select id="tfSecurity"><option value="">— (kein Bezug) —</option></select>
+    </div>
+    <div>
+      <label>Date Due</label>
+      <input type="date" id="tfDateDue">
+    </div>
+    <div>
+      <label>Recurring</label>
+      <select id="tfRecurring">
+        <option value="n/a">n/a</option>
+        <option value="Month End">Month End</option>
+        <option value="Annually">Annually</option>
+      </select>
+    </div>
+    <div class="actions">
+      <button id="tfSave" type="button">Save</button>
+      <button id="tfCancel" type="button" class="toggle-btn">Cancel</button>
+      <span class="msg" id="tfMsg"></span>
+    </div>
+  </div>
+
+  <div class="section-title">Tasks</div>
+  <div id="tasksWrap"><div class="empty">Loading…</div></div>
+  <p class="note">Bei wiederkehrenden Tasks (Month End / Annually) wird beim Erledigen automatisch das nächste Fälligkeitsdatum gesetzt. Überfällige Tasks sind rot, in den nächsten 7 Tagen fällige Tasks gelb markiert.</p>
+</div>
+
+<script src="assets/turso-data.js"></script>
+<script>
+let masterAll = [];
+let tasksAll = [];
+let curFilter = 'open';
+let editingTaskId = null;
+
+async function ensureTaskTable(){
+  try {
+    await tursoRun(`CREATE TABLE IF NOT EXISTS security_tasks (
+      TaskID INTEGER PRIMARY KEY AUTOINCREMENT,
+      TaskName TEXT NOT NULL,
+      TaskDescription TEXT,
+      SecurityID INTEGER,
+      DateDue TEXT,
+      Recurring TEXT,
+      Completed INTEGER DEFAULT 0,
+      CompletedAt TEXT,
+      created_at TEXT
+    )`);
+  } catch(e) { /* table likely already exists */ }
+}
+
+function todayIso(){ return nowZurichDateString ? nowZurichDateString() : new Date().toISOString().slice(0,10); }
+function daysUntil(dateIso){
+  if(!dateIso) return null;
+  const d = new Date(dateIso + 'T00:00:00');
+  const t = new Date(todayIso() + 'T00:00:00');
+  return Math.round((d - t) / 86400000);
+}
+function fmtDdMmYyyy(isoDate){
+  if(!isoDate) return '—';
+  const m = String(isoDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return isoDate;
+  return `${m[3]}.${m[2]}.${m[1]}`;
+}
+
+function nextDueDate(currentDue, recurring){
+  const d = currentDue ? new Date(currentDue + 'T00:00:00') : new Date();
+  if(recurring === 'Annually'){
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().slice(0,10);
+  }
+  if(recurring === 'Month End'){
+    // Last day of the month *after* the current due month.
+    const nextMonthEnd = new Date(d.getFullYear(), d.getMonth() + 2, 0);
+    return nextMonthEnd.toISOString().slice(0,10);
+  }
+  return currentDue;
+}
+
+function securityName(secId){
+  if(!secId) return null;
+  const m = masterAll.find(x => String(x.SecurityID) === String(secId));
+  return m ? m.SecurityName : `#${secId}`;
+}
+
+function populateSecuritySelects(){
+  const opts = masterAll.map(m => `<option value="${m.SecurityID}">${m.SecurityName} · ${m.SecurityID}</option>`).join('');
+  document.getElementById('tfSecurity').innerHTML = `<option value="">— (kein Bezug) —</option>${opts}`;
+  document.getElementById('securityFilter').innerHTML = `<option value="">All Securities</option>${opts}`;
+}
+
+function resetTaskForm(){
+  editingTaskId = null;
+  document.getElementById('tfSave').textContent = 'Save';
+  document.getElementById('tfName').value = '';
+  document.getElementById('tfDescription').value = '';
+  document.getElementById('tfSecurity').value = '';
+  document.getElementById('tfDateDue').value = todayIso();
+  document.getElementById('tfRecurring').value = 'n/a';
+  document.getElementById('tfMsg').textContent = '';
+}
+
+function openTaskForm(task){
+  document.getElementById('taskForm').classList.add('show');
+  if(task){
+    editingTaskId = task.TaskID;
+    document.getElementById('tfSave').textContent = 'Update';
+    document.getElementById('tfName').value = task.TaskName || '';
+    document.getElementById('tfDescription').value = task.TaskDescription || '';
+    document.getElementById('tfSecurity').value = task.SecurityID || '';
+    document.getElementById('tfDateDue').value = task.DateDue || '';
+    document.getElementById('tfRecurring').value = task.Recurring || 'n/a';
+  } else {
+    resetTaskForm();
+  }
+  document.getElementById('taskForm').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+let dueSortDir = 'asc';
+
+function renderTasks(){
+  const wrap = document.getElementById('tasksWrap');
+  const secFilter = document.getElementById('securityFilter').value;
+  const search = document.getElementById('taskSearch').value.trim().toLowerCase();
+
+  let rows = tasksAll.filter(t => {
+    if(curFilter === 'open' && t.Completed) return false;
+    if(curFilter === 'done' && !t.Completed) return false;
+    if(secFilter && String(t.SecurityID) !== String(secFilter)) return false;
+    if(search){
+      const secName = (securityName(t.SecurityID) || '').toLowerCase();
+      const haystack = [
+        t.TaskName || '', t.TaskDescription || '', secName,
+        fmtDdMmYyyy(t.DateDue) || '', t.DateDue || '', t.Recurring || ''
+      ].join(' ').toLowerCase();
+      if(!haystack.includes(search)) return false;
+    }
+    return true;
+  });
+
+  rows = rows.sort((a,b) => {
+    if(!!a.Completed !== !!b.Completed) return a.Completed ? 1 : -1;
+    const da = a.DateDue || '9999-99-99', db = b.DateDue || '9999-99-99';
+    if(a.Completed) return (b.CompletedAt||'').localeCompare(a.CompletedAt||'');
+    return dueSortDir === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
+  });
+
+  if(!rows.length){ wrap.innerHTML = '<div class="empty">Keine Tasks in dieser Ansicht.</div>'; return; }
+
+  const rowsHtml = rows.map(t => {
+    const dleft = daysUntil(t.DateDue);
+    let rowCls = '';
+    if(!t.Completed){
+      if(dleft !== null && dleft < 0) rowCls = 'overdue';
+      else if(dleft !== null && dleft <= 7) rowCls = 'due-soon';
+    } else {
+      rowCls = 'done';
+    }
+    const secName = securityName(t.SecurityID);
+    const secCell = secName ? `<a class="sec-link" href="security.html?id=${encodeURIComponent(t.SecurityID)}">${secName}</a>` : '<span style="color:var(--muted);">—</span>';
+    const recBadge = (t.Recurring && t.Recurring !== 'n/a') ? `<span class="recurring-badge">↻ ${t.Recurring}</span>` : '';
+    return `<tr class="${rowCls}">
+      <td><input type="checkbox" class="done-checkbox" data-toggle-taskid="${t.TaskID}" ${t.Completed ? 'checked' : ''}></td>
+      <td>
+        <div class="task-name">${t.TaskName || '—'}</div>
+        ${t.TaskDescription ? `<div class="task-desc">${t.TaskDescription}</div>` : ''}
+      </td>
+      <td>${secCell}</td>
+      <td class="due">${fmtDdMmYyyy(t.DateDue)}</td>
+      <td>${recBadge || '<span style="color:var(--muted);">n/a</span>'}</td>
+      <td class="row-actions">
+        <a href="#" class="edit-link" data-edit-taskid="${t.TaskID}">✏️</a>
+        <a href="#" class="rm-link" data-delete-taskid="${t.TaskID}">✕</a>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const dueArrow = dueSortDir === 'asc' ? '▲' : '▼';
+  wrap.innerHTML = `
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th></th><th>Task</th><th>Security</th><th class="sortable" id="dueHeader" style="cursor:pointer;">Due ${dueArrow}</th><th>Recurring</th><th></th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    </div>
+  `;
+  document.getElementById('dueHeader').addEventListener('click', () => {
+    dueSortDir = dueSortDir === 'asc' ? 'desc' : 'asc';
+    renderTasks();
+  });
+}
+
+async function loadTasks(){
+  tasksAll = await tursoQuery('SELECT TaskID, TaskName, TaskDescription, SecurityID, DateDue, Recurring, Completed, CompletedAt FROM security_tasks', [], 0);
+  renderTasks();
+}
+
+async function toggleComplete(taskId){
+  const task = tasksAll.find(t => String(t.TaskID) === String(taskId));
+  if(!task) return;
+  const now = nowZurichString ? nowZurichString() : new Date().toISOString();
+  try {
+    if(!task.Completed){
+      if(task.Recurring && task.Recurring !== 'n/a'){
+        // Recurring task: roll the due date forward instead of leaving it marked done.
+        const next = nextDueDate(task.DateDue, task.Recurring);
+        await tursoRun('UPDATE security_tasks SET DateDue = ?, Completed = 0, CompletedAt = ? WHERE TaskID = ?', [next, now, taskId]);
+      } else {
+        await tursoRun('UPDATE security_tasks SET Completed = 1, CompletedAt = ? WHERE TaskID = ?', [now, taskId]);
+      }
+    } else {
+      await tursoRun('UPDATE security_tasks SET Completed = 0, CompletedAt = NULL WHERE TaskID = ?', [taskId]);
+    }
+    tursoClearCache();
+    await loadTasks();
+  } catch(e) {
+    alert('Fehler: ' + e.message);
+  }
+}
+
+async function deleteTask(taskId){
+  if(!confirm('Diesen Task löschen?')) return;
+  try {
+    await tursoRun('DELETE FROM security_tasks WHERE TaskID = ?', [taskId]);
+    tursoClearCache();
+    await loadTasks();
+  } catch(e) {
+    alert('Fehler beim Löschen: ' + e.message);
+  }
+}
+
+document.getElementById('tasksWrap').addEventListener('click', (e) => {
+  const editA = e.target.closest('[data-edit-taskid]');
+  if(editA){ e.preventDefault(); const t = tasksAll.find(x => String(x.TaskID)===String(editA.dataset.editTaskid)); if(t) openTaskForm(t); return; }
+  const delA = e.target.closest('[data-delete-taskid]');
+  if(delA){ e.preventDefault(); deleteTask(delA.dataset.deleteTaskid); return; }
+});
+document.getElementById('tasksWrap').addEventListener('change', (e) => {
+  const cb = e.target.closest('[data-toggle-taskid]');
+  if(cb){ toggleComplete(cb.dataset.toggleTaskid); }
+});
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    curFilter = btn.dataset.filter;
+    renderTasks();
+  });
+});
+document.getElementById('securityFilter').addEventListener('change', renderTasks);
+document.getElementById('taskSearch').addEventListener('input', renderTasks);
+
+document.getElementById('addTaskBtn').addEventListener('click', () => {
+  const panel = document.getElementById('taskForm');
+  if(panel.classList.contains('show') && !editingTaskId){ panel.classList.remove('show'); return; }
+  openTaskForm(null);
+});
+document.getElementById('tfCancel').addEventListener('click', () => {
+  document.getElementById('taskForm').classList.remove('show');
+  resetTaskForm();
+});
+
+document.getElementById('tfSave').addEventListener('click', async () => {
+  const msg = document.getElementById('tfMsg');
+  msg.textContent = ''; msg.className = 'msg';
+  const name = document.getElementById('tfName').value.trim();
+  if(!name){ msg.textContent = 'Bitte Task Name angeben.'; msg.className = 'msg error'; return; }
+  const description = document.getElementById('tfDescription').value.trim() || null;
+  const secId = document.getElementById('tfSecurity').value || null;
+  const dateDue = document.getElementById('tfDateDue').value || null;
+  const recurring = document.getElementById('tfRecurring').value;
+
+  try {
+    if(editingTaskId){
+      await tursoRun(
+        `UPDATE security_tasks SET TaskName=?, TaskDescription=?, SecurityID=?, DateDue=?, Recurring=? WHERE TaskID=?`,
+        [name, description, secId, dateDue, recurring, editingTaskId]
+      );
+      msg.textContent = 'Aktualisiert.'; msg.className = 'msg ok';
+    } else {
+      await tursoRun(
+        `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, Completed, created_at) VALUES (?,?,?,?,?,0,?)`,
+        [name, description, secId, dateDue, recurring, nowZurichString ? nowZurichString() : new Date().toISOString()]
+      );
+      msg.textContent = 'Gespeichert.'; msg.className = 'msg ok';
+    }
+    tursoClearCache();
+    document.getElementById('taskForm').classList.remove('show');
+    resetTaskForm();
+    await loadTasks();
+  } catch(e) {
+    msg.textContent = 'Fehler: ' + e.message; msg.className = 'msg error';
+  }
+});
+
+async function load(){
+  if (!tursoConfigured()) {
+    document.getElementById('statusText').textContent = 'Bitte Repo/Token setzen.';
+    document.getElementById('settingsPanel').classList.add('show');
+    return;
+  }
+  try {
+    await ensureTaskTable();
+    masterAll = await tursoQuery('SELECT SecurityID, SecurityName FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC', [], 3600000);
+    populateSecuritySelects();
+    resetTaskForm();
+    await loadTasks();
+    document.getElementById('statusText').textContent = `${tasksAll.length} Task(s)`;
+  } catch (e) {
+    document.getElementById('tasksWrap').innerHTML = `<div class="error">Fehler: ${e.message}</div>`;
+    document.getElementById('statusText').textContent = 'Fehler';
+  }
+}
+
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  document.getElementById('cfgUrl').value = TURSO.url;
+  document.getElementById('cfgToken').value = TURSO.token;
+  document.getElementById('settingsPanel').classList.toggle('show');
+});
+document.getElementById('cfgSave').addEventListener('click', () => {
+  tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
+  document.getElementById('settingsPanel').classList.remove('show');
+  load();
+});
+
+load();
+</script>
+</body>
+</html>
