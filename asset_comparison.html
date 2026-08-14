@@ -13,6 +13,15 @@
   .topnav::-webkit-scrollbar{display:none;}
   .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
   .topnav a:hover{color:var(--text);border-color:var(--line);}
+  .nav-dropdown{position:relative;}
+  .nav-dropdown>.dd-toggle{background:none;color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:12px;cursor:pointer;}
+  .nav-dropdown>.dd-toggle:hover,.nav-dropdown.open>.dd-toggle{color:var(--text);border-color:var(--line);}
+  .nav-dropdown.active-group>.dd-toggle{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
+  .dd-menu{position:fixed;background:#fff;border:1px solid var(--line);border-radius:4px;min-width:180px;display:none;flex-direction:column;box-shadow:0 6px 16px rgba(0,0,0,.09);z-index:1000;padding:4px;}
+  .dd-menu.show{display:flex;}
+  .dd-menu a{padding:8px 10px;border-radius:3px;color:var(--muted);text-decoration:none;white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  .dd-menu a:hover{background:var(--panel);color:var(--text);}
+  .dd-menu a.active{color:var(--text);font-weight:600;background:rgba(227,6,19,0.06);}
   .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
 
   .board{width:100%;max-width:1200px;}
@@ -46,6 +55,9 @@
   tbody td.num{font-family:'IBM Plex Mono',monospace;text-align:right;}
   tbody tr.summary-row td{font-weight:600;background:var(--panel);border-top:1px solid var(--line);}
   .name{font-weight:500;white-space:normal;min-width:160px;}
+  .table-wrap table th:first-child,.table-wrap table td.name{position:sticky;left:0;z-index:2;background:#fff;box-shadow:2px 0 4px rgba(0,0,0,.06);}
+  .table-wrap table thead th:first-child{z-index:3;background:var(--bg);}
+  .table-wrap table tbody tr.summary-row td.name{background:var(--panel);}
   .name a{color:var(--text);text-decoration:none;border-bottom:1px dotted var(--muted);}
   .name a:hover{color:var(--accent);border-bottom-color:var(--accent);}
   .cell-good{color:var(--gain);font-weight:600;}
@@ -66,12 +78,48 @@
   <a href="portfolio.html">💼 Portfolio</a>
   <a href="analyser.html">🔬 Analyser</a>
   <a href="asset_comparison.html" class="active">🆚 Comparison</a>
-  <a href="master_editor.html">🗂 Master Data</a>
-  <a href="price_editor.html">✏️ Prices</a>
-  <a href="transactions_editor.html">📋 Transactions</a>
-  <a href="distribution_editor.html">💰 Distributions</a>
-  <a href="admin.html">⚙️ Admin</a>
+  <div class="nav-dropdown" id="editorsDropdown">
+    <button type="button" class="dd-toggle" id="editorsToggle">🗂 Editors ▾</button>
+    <div class="dd-menu" id="editorsMenu">
+      <a href="master_editor.html">🗂 Master Data</a>
+      <a href="price_editor.html">✏️ Prices</a>
+      <a href="transactions_editor.html">📋 Transactions</a>
+      <a href="distribution_editor.html">💰 Distributions</a>
+      <a href="security_data.html">🔎 Security Data</a>
+      <a href="admin.html">⚙️ Admin</a>
+    </div>
+  </div>
 </nav>
+<script>
+(function(){
+  var dd = document.getElementById('editorsDropdown');
+  if(!dd) return;
+  var toggle = document.getElementById('editorsToggle');
+  var menu = document.getElementById('editorsMenu');
+  // Move the menu to <body> so it can never be trapped inside an ancestor's
+  // stacking/clipping context (e.g. the horizontally-scrolling topnav).
+  document.body.appendChild(menu);
+  function positionMenu(){
+    var r = toggle.getBoundingClientRect();
+    menu.style.top = (r.bottom + 4) + 'px';
+    menu.style.left = r.left + 'px';
+  }
+  function closeMenu(){ dd.classList.remove('open'); menu.classList.remove('show'); }
+  function openMenu(){ positionMenu(); dd.classList.add('open'); menu.classList.add('show'); }
+  toggle.addEventListener('click', function(e){
+    e.stopPropagation();
+    if(menu.classList.contains('show')) closeMenu(); else openMenu();
+  });
+  document.addEventListener('click', function(e){
+    if(!dd.contains(e.target) && !menu.contains(e.target)) closeMenu();
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') closeMenu();
+  });
+  window.addEventListener('resize', function(){ if(menu.classList.contains('show')) positionMenu(); });
+  window.addEventListener('scroll', function(){ if(menu.classList.contains('show')) positionMenu(); }, true);
+})();
+</script>
 <div class="board">
   <div class="eyebrow">
     <div class="brand"><h1>Asset Comparison</h1></div>
@@ -168,7 +216,13 @@ function computeYield(closes, distList, today){
   return (distSum / last.Price) * 100;
 }
 
-function fmtPctCell(v){ return (v===null||v===undefined||isNaN(v)) ? '—' : `${v.toFixed(2)}%`; }
+function fmtPctCell(v, decimals){ decimals = decimals===undefined ? 2 : decimals; return (v===null||v===undefined||isNaN(v)) ? '—' : `${v.toFixed(decimals)}%`; }
+function fmtReturnCell(v){ return (v===null||v===undefined||isNaN(v)) ? '—' : `${v.toFixed(1)}%`; }
+function fmtYieldCell(v){
+  if(v===null||v===undefined||isNaN(v)) return '—';
+  const rounded = Math.round(v*10)/10;
+  return rounded === 0 ? '—' : `${rounded.toFixed(1)}%`;
+}
 function fmtIntPctCell(v){ return (v===null||v===undefined||isNaN(v)) ? '—' : `${Math.round(v)}%`; }
 
 function minMaxClass(val, min, max){
@@ -176,6 +230,15 @@ function minMaxClass(val, min, max){
   if(val === min) return 'cell-good';
   if(val === max) return 'cell-bad';
   return '';
+}
+function shadeStyle(val, min, max){
+  if(val===null||val===undefined||isNaN(val)||min===null||max===null||min===max) return '';
+  let t = (val-min)/(max-min); t = Math.max(0,Math.min(1,t));
+  const good = [31,138,110], bad = [192,41,61];
+  const r = Math.round(good[0]+(bad[0]-good[0])*t);
+  const g = Math.round(good[1]+(bad[1]-good[1])*t);
+  const b = Math.round(good[2]+(bad[2]-good[2])*t);
+  return ` style="background:rgba(${r},${g},${b},0.16)"`;
 }
 
 async function loadGroups(){
@@ -293,10 +356,6 @@ async function renderComparison(){
     const vals = arr.filter(v => v!==null && v!==undefined && !isNaN(v));
     return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null;
   }
-  function sumOf(arr){
-    const vals = arr.filter(v => v!==null && v!==undefined && !isNaN(v));
-    return vals.length ? vals.reduce((s,v)=>s+v,0) : null;
-  }
 
   const trHeaders = TR_PERIODS.map(p => `<th class="num">${p.label}</th>`).join('');
   const sectorHeaders = allSectorNames.map(s => `<th class="num">${s}</th>`).join('');
@@ -304,14 +363,16 @@ async function renderComparison(){
   const bodyRows = perSecurity.map(r => {
     const terCls = minMaxClass(r.ter, terRange.min, terRange.max);
     const spreadCls = minMaxClass(r.spread, spreadRange.min, spreadRange.max);
-    const trCells = TR_PERIODS.map(p => `<td class="num">${fmtPctCell(r.trByPeriod[p.key])}</td>`).join('');
+    const terStyle = shadeStyle(r.ter, terRange.min, terRange.max);
+    const spreadStyle = shadeStyle(r.spread, spreadRange.min, spreadRange.max);
+    const trCells = TR_PERIODS.map(p => `<td class="num">${fmtReturnCell(r.trByPeriod[p.key])}</td>`).join('');
     const sectorCells = allSectorNames.map(s => `<td class="num">${fmtIntPctCell(r.sectorMap[s])}</td>`).join('');
     return `<tr>
       <td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>
-      <td class="num ${terCls}">${fmtPctCell(r.ter)}</td>
-      <td class="num ${spreadCls}">${fmtPctCell(r.spread)}</td>
+      <td class="num ${terCls}"${terStyle}>${fmtPctCell(r.ter)}</td>
+      <td class="num ${spreadCls}"${spreadStyle}>${fmtPctCell(r.spread)}</td>
       <td class="num">${r.trxCry || '—'}</td>
-      <td class="num">${fmtPctCell(r.yieldPct)}</td>
+      <td class="num">${fmtYieldCell(r.yieldPct)}</td>
       ${trCells}
       ${sectorCells}
       <td class="num">
@@ -321,23 +382,13 @@ async function renderComparison(){
     </tr>`;
   }).join('');
 
-  const totalRow = `<tr class="summary-row">
-    <td class="name">Total</td>
-    <td class="num">${fmtPctCell(sumOf(perSecurity.map(r=>r.ter)))}</td>
-    <td class="num">${fmtPctCell(sumOf(perSecurity.map(r=>r.spread)))}</td>
-    <td class="num">—</td>
-    <td class="num">${fmtPctCell(sumOf(perSecurity.map(r=>r.yieldPct)))}</td>
-    ${TR_PERIODS.map(p => `<td class="num">${fmtPctCell(sumOf(perSecurity.map(r=>r.trByPeriod[p.key])))}</td>`).join('')}
-    ${allSectorNames.map(s => `<td class="num">${fmtIntPctCell(sumOf(perSecurity.map(r=>r.sectorMap[s])))}</td>`).join('')}
-    <td></td>
-  </tr>`;
   const avgRow = `<tr class="summary-row">
     <td class="name">Average</td>
     <td class="num">${fmtPctCell(avgOf(perSecurity.map(r=>r.ter)))}</td>
     <td class="num">${fmtPctCell(avgOf(perSecurity.map(r=>r.spread)))}</td>
     <td class="num">—</td>
-    <td class="num">${fmtPctCell(avgOf(perSecurity.map(r=>r.yieldPct)))}</td>
-    ${TR_PERIODS.map(p => `<td class="num">${fmtPctCell(avgOf(perSecurity.map(r=>r.trByPeriod[p.key])))}</td>`).join('')}
+    <td class="num">${fmtYieldCell(avgOf(perSecurity.map(r=>r.yieldPct)))}</td>
+    ${TR_PERIODS.map(p => `<td class="num">${fmtReturnCell(avgOf(perSecurity.map(r=>r.trByPeriod[p.key])))}</td>`).join('')}
     ${allSectorNames.map(s => `<td class="num">${fmtIntPctCell(avgOf(perSecurity.map(r=>r.sectorMap[s])))}</td>`).join('')}
     <td></td>
   </tr>`;
@@ -350,7 +401,7 @@ async function renderComparison(){
         <th>SecurityName</th><th class="num">TER</th><th class="num">Spread</th><th class="num">TrxCry</th><th class="num">Yield</th>
         ${trHeaders}${sectorHeaders}<th></th>
       </tr></thead>
-      <tbody>${bodyRows}${totalRow}${avgRow}</tbody>
+      <tbody>${bodyRows}${avgRow}</tbody>
     </table>
     </div>
   `;
