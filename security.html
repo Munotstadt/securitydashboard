@@ -1352,7 +1352,10 @@ function renderFundSection(sectorRows, holdingRows){
 
 function findFundamental(rows, ...aliases){
   const lower = aliases.map(a => a.toLowerCase());
-  return rows.find(r => { const n = (r.ParameterName || r.FieldName || '').toLowerCase(); return lower.some(a => n.includes(a)); });
+  return rows.find(r => {
+    const n = (r.ParameterName || r.FieldName || '').toLowerCase().replace(/[_\-]/g, ' ').replace(/\s+/g, ' ').trim();
+    return lower.some(a => n.includes(a));
+  });
 }
 
 function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52wRow){
@@ -1379,12 +1382,29 @@ function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52
   const newestDate = rows.reduce((max,r) => (r.AsOfDate>max?r.AsOfDate:max), rows[0].AsOfDate);
   asOfEl.textContent = `Fundamentals as of ${fmtIsoDateDDMM(newestDate)} · Source: ${rows[0].Source||'—'}`;
 
-  const targetLow = findFundamental(rows, 'target low', 'pricetargetlow');
-  const targetHigh = findFundamental(rows, 'target high', 'pricetargethigh');
-  const targetMean = findFundamental(rows, 'target mean', 'pricetargetmean');
-  const targetMedian = findFundamental(rows, 'target median', 'pricetargetmedian');
+  // Broad alias matching - the exact field naming used by whatever entered the
+  // data (manual form, import script, etc.) can vary quite a bit.
+  const targetLow = findFundamental(rows, 'targetlowprice', 'target low', 'pricetargetlow', 'price target low', 'analyst low', 'low target', 'target price low');
+  const targetHigh = findFundamental(rows, 'targethighprice', 'target high', 'pricetargethigh', 'price target high', 'analyst high', 'high target', 'target price high');
+  const targetMean = findFundamental(rows, 'targetmeanprice', 'target mean', 'pricetargetmean', 'price target mean', 'target average', 'target avg', 'mean target', 'analyst mean');
+  const targetMedian = findFundamental(rows, 'targetmedianprice', 'target median', 'pricetargetmedian', 'price target median', 'median target', 'analyst median');
 
-  renderAnalystRangeChart(document.getElementById('analystChartWrap'), {
+  console.log('[renderSharesSection] Fundamentals field names available:', rows.map(r => r.ParameterName || r.FieldName));
+  console.log('[renderSharesSection] Analyst target match:', {
+    targetLow: targetLow ? (targetLow.ParameterName||targetLow.FieldName) : null,
+    targetHigh: targetHigh ? (targetHigh.ParameterName||targetHigh.FieldName) : null,
+    targetMean: targetMean ? (targetMean.ParameterName||targetMean.FieldName) : null,
+    targetMedian: targetMedian ? (targetMedian.ParameterName||targetMedian.FieldName) : null,
+  });
+
+  const analystChartWrap = document.getElementById('analystChartWrap');
+  if(!targetLow && !targetHigh && !targetMean && !targetMedian){
+    const availableNames = rows.map(r => r.ParameterName || r.FieldName).join(', ');
+    analystChartWrap.innerHTML = `<div class="chart-empty">Keine Analyst-Target-Felder (Low/High/Mean/Median) gefunden. Vorhandene Fundamentals-Felder für diese Security: ${availableNames || '—'}.</div>`;
+    return;
+  }
+
+  renderAnalystRangeChart(analystChartWrap, {
     currentPrice: last ? last.Price : null,
     analystLow: targetLow ? targetLow.NumericValue : null,
     analystHigh: targetHigh ? targetHigh.NumericValue : null,
