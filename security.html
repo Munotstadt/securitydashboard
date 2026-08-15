@@ -29,7 +29,8 @@
   .detail-header h2{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;margin:0 0 12px;padding-right:130px;}
   .status-badge{position:absolute;top:0;right:0;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#fff;background:var(--muted);padding:5px 10px;border-radius:3px;}
   .status-badge.status-active{background:var(--gain);}
-  .status-badge.status-inactive,.status-badge.status-terminated{background:var(--loss);}
+  .status-badge.status-pending{background:var(--loss);}
+  .status-badge.status-inactive,.status-badge.status-terminated{background:var(--muted);}
   .detail-stats{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
   .detail-price{font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:600;}
   .ccy{color:var(--muted);font-size:13px;}
@@ -947,9 +948,11 @@ async function loadSecurity(secId){
   const isTerminatedByDate = !!(master.DateTerminated && master.DateTerminated < todayIso);
   const isInactive = statusName === 'inactive';
   const isTerminated = statusName === 'terminated' || isTerminatedByDate;
-  badge.classList.remove('status-active','status-inactive','status-terminated');
+  const isPending = !master.Status && !isTerminatedByDate;
+  badge.classList.remove('status-active','status-inactive','status-terminated','status-pending');
   if(isTerminated){ badge.textContent = 'Terminated'; badge.classList.add('status-terminated'); }
   else if(isInactive){ badge.textContent = 'Inactive'; badge.classList.add('status-inactive'); }
+  else if(isPending){ badge.textContent = 'Pending'; badge.classList.add('status-pending'); }
   else { badge.textContent = 'Active'; badge.classList.add('status-active'); }
   badge.style.display = '';
 
