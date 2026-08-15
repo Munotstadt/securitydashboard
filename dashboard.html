@@ -23,6 +23,10 @@
   .name{font-weight:500;border-left:3px solid transparent;padding-left:10px !important;}
   tr.up .name{border-left-color:var(--gain);}
   tr.down .name{border-left-color:var(--loss);}
+  .name-cell{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .task-label{font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#fff;padding:2px 7px;border-radius:3px;white-space:nowrap;}
+  .task-label.overdue{background:var(--loss);}
+  .task-label.due-soon{background:#B5793A;}
   .price,.time{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
   .time{color:var(--muted);font-size:12px;}
   .chg{font-family:'IBM Plex Mono',monospace;text-align:right;font-size:13px;white-space:nowrap;}
@@ -218,6 +222,11 @@ function fmtPct(v){
   const dir = r>0?'up':(r<0?'down':'flat');
   return {text:`${r>0?'+':''}${r.toFixed(2)}%`, dir};
 }
+function isoToday(){
+  if(typeof nowZurichIsoDateString === 'function') return nowZurichIsoDateString();
+  if(typeof zurichParts === 'function'){ const p = zurichParts(new Date()); return `${p.year}-${p.month}-${p.day}`; }
+  return new Date().toISOString().slice(0,10);
+}
 
 let currentGroups = {};
 
@@ -229,19 +238,36 @@ async function load(){
     return;
   }
   try{
-    const [masterRows, priceRows] = await Promise.all([
+    await ensureSecurityTasksSchema();
+    const [masterRows, priceRows, openTasks] = await Promise.all([
       tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sp.ParameterName AS GroupName
               FROM security_master sm
               LEFT JOIN security_parameter sp ON sp.ParameterID = sm.DashboardGrouping
               WHERE sm.DashboardGrouping IS NOT NULL
               ORDER BY (sp.ParameterID IS NULL), sp.ParameterID ASC, sm.SecurityName COLLATE NOCASE ASC`, [], 3600000),
       tursoQuery(`SELECT SecurityID, Price, PriceDate, Source FROM security_prices`, [], 3600000),
+      tursoQuery(`SELECT SecurityID, DateDue FROM security_tasks WHERE Completed = 0 AND SecurityID IS NOT NULL`, [], 0),
     ]);
 
     const pricesBySecurity = new Map();
     for (const r of priceRows) {
       if (!pricesBySecurity.has(r.SecurityID)) pricesBySecurity.set(r.SecurityID, []);
       pricesBySecurity.get(r.SecurityID).push(r);
+    }
+
+    // Flag a security if it has an open task that's overdue or due within the
+    // next 7 days.
+    const todayIso = isoToday();
+    const soonCutoff = (() => { const d = new Date(todayIso + 'T00:00:00'); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10); })();
+    const taskFlagBySecurity = new Map(); // secId -> 'overdue' | 'due-soon'
+    for (const t of openTasks) {
+      if (!t.DateDue) continue;
+      let level = null;
+      if (t.DateDue < todayIso) level = 'overdue';
+      else if (t.DateDue <= soonCutoff) level = 'due-soon';
+      if (!level) continue;
+      const existing = taskFlagBySecurity.get(t.SecurityID);
+      if (existing !== 'overdue') taskFlagBySecurity.set(t.SecurityID, level);
     }
 
     const today = new Date();
@@ -253,6 +279,7 @@ async function load(){
       (groups[groupName] = groups[groupName] || []).push({
         name: m.SecurityName, currency: m.Currency, secId: m.SecurityID, groupName,
         last: ref.last, prev: ref.day, wtd: ref.wtd, mtd: ref.mtd, ytd: ref.ytd,
+        taskFlag: taskFlagBySecurity.get(m.SecurityID) || null,
       });
     }
 
@@ -288,7 +315,12 @@ function renderBoard(groups){
       const decimals = r.groupName === 'Currency' ? 4 : 2;
       const timeStr = r.last ? fmtShortDateTime(r.last.dt) : '—';
       html += `<tr class="${dirClass}">
-        <td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>
+        <td class="name">
+          <div class="name-cell">
+            <a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a>
+            ${r.taskFlag ? `<span class="task-label ${r.taskFlag}" title="${r.taskFlag === 'overdue' ? 'Überfälliger Task' : 'Task fällig in den nächsten 7 Tagen'}">Task</span>` : ''}
+          </div>
+        </td>
         <td class="price">${lastAmt!==null ? fmtDecimal(lastAmt, decimals) : '—'}<span class="ccy">${r.currency||''}</span></td>
         <td class="chg ${dDay.dir}">${dDay.text}</td>
         <td class="chg ${dWtd.dir}">${dWtd.text}</td>

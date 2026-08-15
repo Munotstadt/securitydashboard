@@ -46,9 +46,9 @@
   .status-pill.status-active{background:var(--gain);}
   .status-pill.status-pending{background:var(--loss);}
   .status-pill.status-inactive,.status-pill.status-terminated{background:var(--muted);}
-  .task-flag{font-size:12px;cursor:default;}
-  .task-flag.overdue{filter:none;}
-  .task-flag.due-soon{opacity:.75;}
+  .task-label{font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#fff;padding:2px 7px;border-radius:3px;white-space:nowrap;}
+  .task-label.overdue{background:var(--loss);}
+  .task-label.due-soon{background:#B5793A;}
 
   .topnav{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;align-items:center;max-width:1000px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;scrollbar-width:none;}
   .topnav::-webkit-scrollbar{display:none;}
@@ -153,7 +153,7 @@
     <dl style="margin:12px 0 0;font-size:12.5px;">
       <dt style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text);margin-top:8px;">MTD / YTD</dt><dd style="margin:2px 0 0;color:var(--muted);">Kursveränderung seit Monats- bzw. Jahresbeginn.</dd>
       <dt style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text);margin-top:8px;">Status-Pille</dt><dd style="margin:2px 0 0;color:var(--muted);">Grün = Active, Rot = Pending (Status nicht gesetzt), Grau = Inactive/Terminated.</dd>
-      <dt style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text);margin-top:8px;">⏰ Task-Flag</dt><dd style="margin:2px 0 0;color:var(--muted);">Zeigt an, dass diese Security offene Tasks hat, die überfällig sind oder in den nächsten 7 Tagen fällig werden.</dd>
+      <dt style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text);margin-top:8px;">Task-Label</dt><dd style="margin:2px 0 0;color:var(--muted);">Rot = überfälliger Task, Orange = Task fällig in den nächsten 7 Tagen.</dd>
     </dl>
   </details>
 </div>
@@ -293,7 +293,7 @@ function renderBoard(groups){
       const decimals = 2;
       const timeStr = r.last ? fmtShortDateTime(r.last.dt) : '—';
       const taskFlagHtml = r.taskFlag
-        ? `<span class="task-flag ${r.taskFlag}" title="${r.taskFlag === 'overdue' ? 'Überfälliger Task' : 'Task fällig in den nächsten 7 Tagen'}">${r.taskFlag === 'overdue' ? '🔴' : '🟠'}</span>`
+        ? `<span class="task-label ${r.taskFlag}" title="${r.taskFlag === 'overdue' ? 'Überfälliger Task' : 'Task fällig in den nächsten 7 Tagen'}">Task</span>`
         : '';
       html += `<tr class="${dirClass}">
         <td class="name">
