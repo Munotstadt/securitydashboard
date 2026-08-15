@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Securities Dashboard</title>
+<title>Listing</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613;--gain:#1F8A6E;--loss:#C0293D; }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:40px 16px 80px;display:flex;flex-direction:column;align-items:center;}
-  .board{width:100%;max-width:960px;}
+  .board{width:100%;max-width:1000px;}
   .eyebrow{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:2px solid var(--accent);}
   .brand h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:.02em;margin:0;}
   .brand span{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
@@ -23,6 +23,7 @@
   .name{font-weight:500;border-left:3px solid transparent;padding-left:10px !important;}
   tr.up .name{border-left-color:var(--gain);}
   tr.down .name{border-left-color:var(--loss);}
+  .name-cell{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
   .price,.time{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
   .time{color:var(--muted);font-size:12px;}
   .chg{font-family:'IBM Plex Mono',monospace;text-align:right;font-size:13px;white-space:nowrap;}
@@ -40,16 +41,20 @@
   .settings label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
   .settings input{font-family:'Inter',sans-serif;font-size:13px;padding:8px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;width:100%;}
   .settings button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
-  .definitions{margin-top:28px;padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:4px;}
-  .definitions summary{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);cursor:pointer;}
-  .definitions dl{margin:12px 0 0;font-size:12.5px;}
-  .definitions dt{font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text);margin-top:8px;}
-  .definitions dd{margin:2px 0 0;color:var(--muted);}
-  @media (max-width:700px){ #boardTable thead th:nth-child(4), #boardTable tbody td:nth-child(4){display:none;} }
-  .topnav{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;align-items:center;max-width:960px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;scrollbar-width:none;}
+
+  .status-pill{font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#fff;padding:2px 7px;border-radius:10px;white-space:nowrap;}
+  .status-pill.status-active{background:var(--gain);}
+  .status-pill.status-pending{background:var(--loss);}
+  .status-pill.status-inactive,.status-pill.status-terminated{background:var(--muted);}
+  .task-flag{font-size:12px;cursor:default;}
+  .task-flag.overdue{filter:none;}
+  .task-flag.due-soon{opacity:.75;}
+
+  .topnav{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;align-items:center;max-width:1000px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;scrollbar-width:none;}
   .topnav::-webkit-scrollbar{display:none;}
   .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
   .topnav a:hover{color:var(--text);border-color:var(--line);}
+  .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
   .nav-dropdown{position:relative;}
   .nav-dropdown>.dd-toggle{background:none;color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:12px;cursor:pointer;}
   .nav-dropdown>.dd-toggle:hover,.nav-dropdown.open>.dd-toggle{color:var(--text);border-color:var(--line);}
@@ -59,13 +64,15 @@
   .dd-menu a{padding:8px 10px;border-radius:3px;color:var(--muted);text-decoration:none;white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:12px;}
   .dd-menu a:hover{background:var(--panel);color:var(--text);}
   .dd-menu a.active{color:var(--text);font-weight:600;background:rgba(227,6,19,0.06);}
-  .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
 </style>
 </head>
 <body>
+<!-- Note: this page is intentionally not yet linked from the topnav on other
+     pages (still being reviewed) - navigate here directly via listing.html. -->
 <nav class="topnav">
   <a href="index.html">🏠 Home</a>
-  <a href="dashboard.html" class="active">📊 Dashboard</a>
+  <a href="dashboard.html">📊 Dashboard</a>
+  <a href="listing.html" class="active">📃 Listing</a>
   <a href="portfolio.html">💼 Portfolio</a>
   <a href="analyser.html">🔬 Analyser</a>
   <a href="asset_comparison.html">🆚 Comparison</a>
@@ -88,8 +95,6 @@
   if(!dd) return;
   var toggle = document.getElementById('editorsToggle');
   var menu = document.getElementById('editorsMenu');
-  // Move the menu to <body> so it can never be trapped inside an ancestor's
-  // stacking/clipping context (e.g. the horizontally-scrolling topnav).
   document.body.appendChild(menu);
   function positionMenu(){
     var r = toggle.getBoundingClientRect();
@@ -114,10 +119,10 @@
 </script>
 <div class="board">
   <div class="eyebrow">
-    <div class="brand"><h1>Securities Dashboard</h1><span>munotstadtsecuritydb</span></div>
+    <div class="brand"><h1>Listing</h1><span>Alle Wertschriften nach Instrument</span></div>
     <div class="status" id="statusText">lädt…</div>
   </div>
-  <input type="text" id="search" class="search-input" placeholder="Wertschrift suchen…">
+  <input type="text" id="search" class="search-input" placeholder="Wertschrift oder Instrument suchen…">
 
   <div class="settings" id="settingsPanel">
     <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
@@ -129,10 +134,9 @@
 
   <table id="boardTable">
     <thead><tr>
-      <th>Security</th><th class="num">Last</th><th class="num">Δ Day</th>
-      <th class="num">WTD</th><th class="num">MTD</th><th class="num">YTD</th><th class="num">Zeit</th>
+      <th>Security</th><th class="num">Last</th><th class="num">MTD</th><th class="num">YTD</th><th class="num">Zeit</th>
     </tr></thead>
-    <tbody id="boardBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+    <tbody id="boardBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
   </table>
   <div class="footer">
     <span id="lastSynced">—</span>
@@ -144,13 +148,12 @@
     </span>
   </div>
 
-  <details class="definitions">
-    <summary>Period Definitions</summary>
-    <dl>
-      <dt>Δ Day</dt><dd>vs. dem letzten verfügbaren Kurs eines früheren Handelstages.</dd>
-      <dt>WTD (Week-to-Date)</dt><dd>vs. dem letzten verfügbaren Kurs am/vor Sonntag der Vorwoche.</dd>
-      <dt>MTD (Month-to-Date)</dt><dd>vs. dem letzten verfügbaren Kurs des Vormonats (kalendarisch).</dd>
-      <dt>YTD (Year-to-Date)</dt><dd>vs. dem letzten verfügbaren Kurs des Vorjahres (31.12.).</dd>
+  <details class="definitions" style="margin-top:28px;padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:4px;">
+    <summary style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);cursor:pointer;">Legende</summary>
+    <dl style="margin:12px 0 0;font-size:12.5px;">
+      <dt style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text);margin-top:8px;">MTD / YTD</dt><dd style="margin:2px 0 0;color:var(--muted);">Kursveränderung seit Monats- bzw. Jahresbeginn.</dd>
+      <dt style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text);margin-top:8px;">Status-Pille</dt><dd style="margin:2px 0 0;color:var(--muted);">Grün = Active, Rot = Pending (Status nicht gesetzt), Grau = Inactive/Terminated.</dd>
+      <dt style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:var(--text);margin-top:8px;">⏰ Task-Flag</dt><dd style="margin:2px 0 0;color:var(--muted);">Zeigt an, dass diese Security offene Tasks hat, die überfällig sind oder in den nächsten 7 Tagen fällig werden.</dd>
     </dl>
   </details>
 </div>
@@ -158,17 +161,7 @@
 <script src="assets/turso-data.js"></script>
 <script>
 // Safety net: define the shared schema-guard helpers locally if the loaded
-// assets/turso-data.js doesn't have them yet (e.g. stale cached copy). Avoids
-// a hard "X is not defined" crash; the real versions in turso-data.js take
-// over automatically once that file is up to date (session-cached there).
-if (typeof ensureSecurityMasterSchema === 'undefined') {
-  window.ensureSecurityMasterSchema = async function(){
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateLaunch TEXT'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateTerminated TEXT'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN Status INTEGER'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN Comments TEXT'); } catch(e) {}
-  };
-}
+// assets/turso-data.js doesn't have them yet (e.g. stale cached copy).
 if (typeof ensureSecurityTasksSchema === 'undefined') {
   window.ensureSecurityTasksSchema = async function(){
     try {
@@ -187,26 +180,6 @@ if (typeof ensureSecurityTasksSchema === 'undefined') {
     try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
   };
 }
-if (typeof ensureSecurityDataSchema === 'undefined') {
-  window.ensureSecurityDataSchema = async function(){
-    try { await tursoRun('ALTER TABLE security_data ADD COLUMN Source TEXT'); } catch(e) {}
-  };
-}
-if (typeof ensureAssetComparisonSchema === 'undefined') {
-  window.ensureAssetComparisonSchema = async function(){
-    try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_group (
-      GroupID INTEGER PRIMARY KEY AUTOINCREMENT,
-      GroupName TEXT NOT NULL,
-      created_at TEXT
-    )`); } catch(e) {}
-    try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_member (
-      GroupID INTEGER NOT NULL,
-      SecurityID INTEGER NOT NULL,
-      created_at TEXT,
-      PRIMARY KEY (GroupID, SecurityID)
-    )`); } catch(e) {}
-  };
-}
 </script>
 <script>
 const REFRESH_MS = 5 * 60 * 1000;
@@ -218,24 +191,32 @@ function fmtPct(v){
   const dir = r>0?'up':(r<0?'down':'flat');
   return {text:`${r>0?'+':''}${r.toFixed(2)}%`, dir};
 }
+function isoToday(){
+  if(typeof nowZurichIsoDateString === 'function') return nowZurichIsoDateString();
+  if(typeof zurichParts === 'function'){ const p = zurichParts(new Date()); return `${p.year}-${p.month}-${p.day}`; }
+  return new Date().toISOString().slice(0,10);
+}
 
 let currentGroups = {};
 
 async function load(){
   if (!tursoConfigured()) {
-    document.getElementById('boardBody').innerHTML = `<tr><td colspan="7" class="error">Bitte zuerst ⚙ Repo/Token setzen.</td></tr>`;
+    document.getElementById('boardBody').innerHTML = `<tr><td colspan="5" class="error">Bitte zuerst ⚙ Repo/Token setzen.</td></tr>`;
     document.getElementById('settingsPanel').classList.add('show');
     document.getElementById('statusText').textContent = 'nicht konfiguriert';
     return;
   }
   try{
-    const [masterRows, priceRows] = await Promise.all([
-      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sp.ParameterName AS GroupName
+    await ensureSecurityTasksSchema();
+    const [masterRows, priceRows, openTasks] = await Promise.all([
+      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.DateTerminated,
+                         ip.ParameterName AS InstrumentName, sp.ParameterName AS StatusName
               FROM security_master sm
-              LEFT JOIN security_parameter sp ON sp.ParameterID = sm.DashboardGrouping
-              WHERE sm.DashboardGrouping IS NOT NULL
-              ORDER BY (sp.ParameterID IS NULL), sp.ParameterID ASC, sm.SecurityName COLLATE NOCASE ASC`, [], 3600000),
+              LEFT JOIN security_parameter ip ON ip.ParameterID = sm.Instrument
+              LEFT JOIN security_parameter sp ON sp.ParameterID = sm.Status
+              ORDER BY (ip.ParameterID IS NULL), ip.ParameterName COLLATE NOCASE ASC, sm.SecurityName COLLATE NOCASE ASC`, [], 3600000),
       tursoQuery(`SELECT SecurityID, Price, PriceDate, Source FROM security_prices`, [], 3600000),
+      tursoQuery(`SELECT SecurityID, DateDue FROM security_tasks WHERE Completed = 0 AND SecurityID IS NOT NULL`, [], 0),
     ]);
 
     const pricesBySecurity = new Map();
@@ -244,15 +225,39 @@ async function load(){
       pricesBySecurity.get(r.SecurityID).push(r);
     }
 
+    // Flag a security if it has an open task that's overdue or due within the
+    // next 7 days.
+    const todayIso = isoToday();
+    const soonCutoff = (() => { const d = new Date(todayIso + 'T00:00:00'); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10); })();
+    const taskFlagBySecurity = new Map(); // secId -> 'overdue' | 'due-soon'
+    for (const t of openTasks) {
+      if (!t.DateDue) continue;
+      let level = null;
+      if (t.DateDue < todayIso) level = 'overdue';
+      else if (t.DateDue <= soonCutoff) level = 'due-soon';
+      if (!level) continue;
+      const existing = taskFlagBySecurity.get(t.SecurityID);
+      if (existing !== 'overdue') taskFlagBySecurity.set(t.SecurityID, level);
+    }
+
     const today = new Date();
     const groups = {};
     for (const m of masterRows) {
       const secRows = pricesBySecurity.get(m.SecurityID) || [];
       const ref = periodReferences(secRows, today);
-      const groupName = m.GroupName || 'Ohne Gruppe';
+      const groupName = m.InstrumentName || 'Ohne Instrument';
+
+      const statusName = (m.StatusName || '').trim().toLowerCase();
+      const isTerminated = statusName === 'terminated' || !!(m.DateTerminated && m.DateTerminated < todayIso);
+      const isInactive = !isTerminated && statusName === 'inactive';
+      const isPending = !isTerminated && !isInactive && !statusName;
+      const statusFlag = isTerminated ? 'terminated' : (isInactive ? 'inactive' : (isPending ? 'pending' : 'active'));
+      const statusLabel = statusFlag.charAt(0).toUpperCase() + statusFlag.slice(1);
+
       (groups[groupName] = groups[groupName] || []).push({
         name: m.SecurityName, currency: m.Currency, secId: m.SecurityID, groupName,
-        last: ref.last, prev: ref.day, wtd: ref.wtd, mtd: ref.mtd, ytd: ref.ytd,
+        last: ref.last, mtd: ref.mtd, ytd: ref.ytd,
+        statusFlag, statusLabel, taskFlag: taskFlagBySecurity.get(m.SecurityID) || null,
       });
     }
 
@@ -260,7 +265,7 @@ async function load(){
     document.getElementById('statusText').textContent = 'live';
     document.getElementById('lastSynced').textContent = `Geladen: ${nowZurichString()}`;
   }catch(e){
-    document.getElementById('boardBody').innerHTML = `<tr><td colspan="7" class="error">Fehler: ${e.message}</td></tr>`;
+    document.getElementById('boardBody').innerHTML = `<tr><td colspan="5" class="error">Fehler: ${e.message}</td></tr>`;
     document.getElementById('statusText').textContent = 'Fehler';
   }
 }
@@ -270,35 +275,42 @@ function renderBoard(groups){
   const filter = document.getElementById('search').value.toLowerCase();
   const body = document.getElementById('boardBody');
   let html = '';
-  const groupNames = Object.keys(groups); // bereits in DashboardGrouping-Reihenfolge (ParameterID) aus SQL
+  const groupNames = Object.keys(groups);
   let any = false;
 
   for(const groupName of groupNames){
-    const rows = groups[groupName].filter(r => !filter || r.name.toLowerCase().includes(filter));
+    const rows = groups[groupName].filter(r =>
+      !filter || r.name.toLowerCase().includes(filter) || r.groupName.toLowerCase().includes(filter)
+    );
     if(!rows.length) continue;
     any = true;
-    html += `<tr class="section-row"><td colspan="7">${groupName}</td></tr>`;
+    html += `<tr class="section-row"><td colspan="5">${groupName}</td></tr>`;
     for(const r of rows){
       const lastAmt = r.last ? r.last.Price : null;
-      const dDay = fmtPct(pctChange(lastAmt, r.prev ? r.prev.Price : null));
-      const dWtd = fmtPct(pctChange(lastAmt, r.wtd ? r.wtd.Price : null));
       const dMtd = fmtPct(pctChange(lastAmt, r.mtd ? r.mtd.Price : null));
       const dYtd = fmtPct(pctChange(lastAmt, r.ytd ? r.ytd.Price : null));
-      const dirClass = dDay.dir;
-      const decimals = r.groupName === 'Currency' ? 4 : 2;
+      const dirClass = dMtd.dir;
+      const decimals = 2;
       const timeStr = r.last ? fmtShortDateTime(r.last.dt) : '—';
+      const taskFlagHtml = r.taskFlag
+        ? `<span class="task-flag ${r.taskFlag}" title="${r.taskFlag === 'overdue' ? 'Überfälliger Task' : 'Task fällig in den nächsten 7 Tagen'}">${r.taskFlag === 'overdue' ? '🔴' : '🟠'}</span>`
+        : '';
       html += `<tr class="${dirClass}">
-        <td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>
+        <td class="name">
+          <div class="name-cell">
+            <a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a>
+            <span class="status-pill status-${r.statusFlag}">${r.statusLabel}</span>
+            ${taskFlagHtml}
+          </div>
+        </td>
         <td class="price">${lastAmt!==null ? fmtDecimal(lastAmt, decimals) : '—'}<span class="ccy">${r.currency||''}</span></td>
-        <td class="chg ${dDay.dir}">${dDay.text}</td>
-        <td class="chg ${dWtd.dir}">${dWtd.text}</td>
         <td class="chg ${dMtd.dir}">${dMtd.text}</td>
         <td class="chg ${dYtd.dir}">${dYtd.text}</td>
         <td class="time">${timeStr}</td>
       </tr>`;
     }
   }
-  body.innerHTML = any ? html : '<tr><td colspan="7" class="empty">Keine Treffer.</td></tr>';
+  body.innerHTML = any ? html : '<tr><td colspan="5" class="empty">Keine Treffer.</td></tr>';
 }
 
 document.getElementById('search').addEventListener('input', () => renderBoard(currentGroups));
