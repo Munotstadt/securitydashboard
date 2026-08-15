@@ -24,7 +24,8 @@
   tr.up .name{border-left-color:var(--gain);}
   tr.down .name{border-left-color:var(--loss);}
   .name-cell{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-  .task-label{font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#fff;padding:2px 7px;border-radius:3px;white-space:nowrap;}
+  .task-label{font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#fff;padding:2px 7px;border-radius:3px;white-space:nowrap;text-decoration:none;cursor:pointer;}
+  .task-label:hover{opacity:.85;}
   .task-label.overdue{background:var(--loss);}
   .task-label.due-soon{background:#B5793A;}
   .price,.time{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
@@ -318,7 +319,7 @@ function renderBoard(groups){
         <td class="name">
           <div class="name-cell">
             <a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a>
-            ${r.taskFlag ? `<span class="task-label ${r.taskFlag}" title="${r.taskFlag === 'overdue' ? 'Überfälliger Task' : 'Task fällig in den nächsten 7 Tagen'}">Task</span>` : ''}
+            ${r.taskFlag ? `<a href="security.html?id=${encodeURIComponent(r.secId)}#securityTasksSection" class="task-label ${r.taskFlag}" title="${r.taskFlag === 'overdue' ? 'Überfälliger Task' : 'Task fällig in den nächsten 7 Tagen'}">Task</a>` : ''}
           </div>
         </td>
         <td class="price">${lastAmt!==null ? fmtDecimal(lastAmt, decimals) : '—'}<span class="ccy">${r.currency||''}</span></td>

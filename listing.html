@@ -46,7 +46,8 @@
   .status-pill.status-active{background:var(--gain);}
   .status-pill.status-pending{background:var(--loss);}
   .status-pill.status-inactive,.status-pill.status-terminated{background:var(--muted);}
-  .task-label{font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#fff;padding:2px 7px;border-radius:3px;white-space:nowrap;}
+  .task-label{font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#fff;padding:2px 7px;border-radius:3px;white-space:nowrap;text-decoration:none;cursor:pointer;}
+  .task-label:hover{opacity:.85;}
   .task-label.overdue{background:var(--loss);}
   .task-label.due-soon{background:#B5793A;}
 
@@ -293,7 +294,7 @@ function renderBoard(groups){
       const decimals = 2;
       const timeStr = r.last ? fmtShortDateTime(r.last.dt) : '—';
       const taskFlagHtml = r.taskFlag
-        ? `<span class="task-label ${r.taskFlag}" title="${r.taskFlag === 'overdue' ? 'Überfälliger Task' : 'Task fällig in den nächsten 7 Tagen'}">Task</span>`
+        ? `<a href="security.html?id=${encodeURIComponent(r.secId)}#securityTasksSection" class="task-label ${r.taskFlag}" title="${r.taskFlag === 'overdue' ? 'Überfälliger Task' : 'Task fällig in den nächsten 7 Tagen'}">Task</a>`
         : '';
       html += `<tr class="${dirClass}">
         <td class="name">
