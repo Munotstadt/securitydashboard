@@ -14,7 +14,10 @@
   .brand h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:.02em;margin:0;}
   .brand span{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
   .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
-  .search-input{width:100%;padding:10px 12px;margin:16px 0 4px;font-family:'Inter',sans-serif;font-size:14px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);}
+  .search-input{width:100%;padding:10px 32px 10px 12px;margin:16px 0 4px;font-family:'Inter',sans-serif;font-size:14px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);box-sizing:border-box;}
+  .search-wrap{position:relative;}
+  .search-clear-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:4px 6px;line-height:1;}
+  .search-clear-btn:hover{color:var(--accent);}
   table{width:100%;border-collapse:collapse;margin-top:4px;}
   thead th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:12px 8px 8px;border-bottom:1px solid var(--line);}
   thead th.num{text-align:right;}
@@ -123,7 +126,10 @@
     <div class="brand"><h1>Listing</h1><span>Alle Wertschriften nach Instrument</span></div>
     <div class="status" id="statusText">lädt…</div>
   </div>
-  <input type="text" id="search" class="search-input" placeholder="Wertschrift oder Instrument suchen…">
+  <div class="search-wrap" style="margin:16px 0 4px;">
+    <input type="text" id="search" class="search-input" placeholder="Wertschrift, Instrument, Status (Active/Pending/…) oder Task suchen…" style="margin:0;">
+    <button type="button" id="searchClear" class="search-clear-btn" title="Suche löschen" style="display:none;">✕</button>
+  </div>
 
   <div class="settings" id="settingsPanel">
     <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
@@ -179,6 +185,17 @@ if (typeof ensureSecurityTasksSchema === 'undefined') {
       )`);
     } catch(e) {}
     try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
+    try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN Priority TEXT'); } catch(e) {}
+    try {
+      await tursoRun(`CREATE TABLE IF NOT EXISTS security_task_completions (
+        CompletionID INTEGER PRIMARY KEY AUTOINCREMENT,
+        TaskID INTEGER,
+        TaskName TEXT,
+        SecurityID INTEGER,
+        DateDue TEXT,
+        CompletedAt TEXT
+      )`);
+    } catch(e) {}
   };
 }
 </script>
@@ -280,9 +297,17 @@ function renderBoard(groups){
   let any = false;
 
   for(const groupName of groupNames){
-    const rows = groups[groupName].filter(r =>
-      !filter || r.name.toLowerCase().includes(filter) || r.groupName.toLowerCase().includes(filter)
-    );
+    const rows = groups[groupName].filter(r => {
+      if(!filter) return true;
+      if(r.name.toLowerCase().includes(filter)) return true;
+      if(r.groupName.toLowerCase().includes(filter)) return true;
+      if(r.statusLabel && r.statusLabel.toLowerCase().includes(filter)) return true;
+      if(r.taskFlag){
+        const taskKeywords = ['task', 'überfällig', 'ueberfaellig', 'fällig', 'faellig', 'due', 'overdue'];
+        if(taskKeywords.some(k => k.includes(filter) || filter.includes(k))) return true;
+      }
+      return false;
+    });
     if(!rows.length) continue;
     any = true;
     html += `<tr class="section-row"><td colspan="5">${groupName}</td></tr>`;
@@ -314,7 +339,17 @@ function renderBoard(groups){
   body.innerHTML = any ? html : '<tr><td colspan="5" class="empty">Keine Treffer.</td></tr>';
 }
 
-document.getElementById('search').addEventListener('input', () => renderBoard(currentGroups));
+document.getElementById('search').addEventListener('input', (e) => {
+  document.getElementById('searchClear').style.display = e.target.value ? '' : 'none';
+  renderBoard(currentGroups);
+});
+document.getElementById('searchClear').addEventListener('click', () => {
+  const input = document.getElementById('search');
+  input.value = '';
+  document.getElementById('searchClear').style.display = 'none';
+  input.focus();
+  renderBoard(currentGroups);
+});
 document.getElementById('refreshBtn').addEventListener('click', () => { tursoClearCache(); load(); });
 document.getElementById('settingsBtn').addEventListener('click', () => {
   document.getElementById('cfgUrl').value = TURSO.url;

@@ -27,7 +27,8 @@
   #securitySwitcher{background:var(--bg);border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 28px 6px 12px;border-radius:3px;cursor:pointer;min-width:220px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23767E8A'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;}
   .detail-header{padding-bottom:18px;border-bottom:2px solid var(--accent);position:relative;}
   .detail-header h2{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:24px;margin:0 0 12px;padding-right:130px;}
-  .status-badge{position:absolute;top:0;right:0;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#fff;background:var(--muted);padding:5px 10px;border-radius:3px;}
+  .status-badge{position:absolute;top:0;right:0;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#fff;background:var(--muted);padding:5px 10px;border-radius:3px;cursor:pointer;}
+  .status-badge:hover{opacity:.85;}
   .status-badge.status-active{background:var(--gain);}
   .status-badge.status-pending{background:var(--loss);}
   .status-badge.status-inactive,.status-badge.status-terminated{background:var(--muted);}
@@ -245,7 +246,7 @@
 
   <div class="detail-header">
     <h2 id="detailName">Loading…</h2>
-    <span class="status-badge" id="statusBadge" style="display:none;"></span>
+    <span class="status-badge" id="statusBadge" style="display:none;" role="button" tabindex="0" title="Klicken, um den Status zu ändern"></span>
     <div class="detail-stats">
       <span class="detail-price" id="detailPrice">—</span>
       <span class="ccy" id="detailCcy"></span>
@@ -359,7 +360,7 @@
     <div class="fundamentals-grid" id="sharesFundamentalsGrid"></div>
     <div class="detail-meta" id="sharesDataAsOf" style="margin-top:8px;"></div>
 
-    <div class="section-title" style="margin-top:24px;">Analyst Targets</div>
+    <div class="section-title" id="analystTargetsTitle" style="margin-top:24px;">Analyst Targets</div>
     <div class="chart-wrap" id="analystChartWrap"></div>
   </div>
 
@@ -410,6 +411,14 @@
           <option value="Bi-Annual">Bi-Annual (alle 2 Jahre)</option>
         </select>
       </div>
+      <div>
+        <label>Priority</label>
+        <select id="stfPriority">
+          <option value="Medium">Medium</option>
+          <option value="High">High</option>
+          <option value="Low">Low</option>
+        </select>
+      </div>
       <div class="full">
         <label>Description</label>
         <textarea id="stfDescription" class="mf-textarea" rows="1" placeholder="Details zur Aufgabe…"></textarea>
@@ -423,7 +432,7 @@
     <div id="securityTasksWrap"><div class="empty">Loading…</div></div>
   </div>
 
-  <div class="section-title">Master Data</div>
+  <div class="section-title" id="masterDataTitle">Master Data</div>
   <div class="quick-form">
     <div class="master-form" id="masterForm"></div>
     <div class="actions"><span class="quick-status" id="masterStatus"></span><button type="button" id="masterSave">Save Master Data</button></div>
@@ -466,6 +475,17 @@ if (typeof ensureSecurityTasksSchema === 'undefined') {
       )`);
     } catch(e) {}
     try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
+    try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN Priority TEXT'); } catch(e) {}
+    try {
+      await tursoRun(`CREATE TABLE IF NOT EXISTS security_task_completions (
+        CompletionID INTEGER PRIMARY KEY AUTOINCREMENT,
+        TaskID INTEGER,
+        TaskName TEXT,
+        SecurityID INTEGER,
+        DateDue TEXT,
+        CompletedAt TEXT
+      )`);
+    } catch(e) {}
   };
 }
 if (typeof ensureSecurityDataSchema === 'undefined') {
@@ -1347,7 +1367,9 @@ async function loadInstrumentSpecificData(master, last, decimals, high52wRow, lo
   }
   if(fundamentalsRows.length){
     document.getElementById('sharesSection').classList.remove('hidden');
-    renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52wRow);
+    const instrumentName = (instrumentOpts.find(o => String(o.ParameterID)===String(master.Instrument)) || {}).ParameterName || '';
+    const isFundInstrument = /etf|fund/i.test(instrumentName);
+    renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52wRow, isFundInstrument);
   } else if(data.length){
     // Diagnostic aid: security_data has rows for this security but none matched
     // "fundamental*" - surface the DataTypes that WERE found so a mismatched
@@ -1414,15 +1436,26 @@ function findFundamental(rows, ...aliases){
   });
 }
 
-function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52wRow){
+function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52wRow, isFundInstrument){
   const rows = latestByParameter(fundamentalsRows);
   const grid = document.getElementById('sharesFundamentalsGrid');
   const asOfEl = document.getElementById('sharesDataAsOf');
+  const analystSectionTitle = document.getElementById('analystTargetsTitle');
+  const analystChartWrap = document.getElementById('analystChartWrap');
+
+  if(isFundInstrument){
+    // Analyst price targets don't apply to ETFs/Funds - hide the whole section.
+    if(analystSectionTitle) analystSectionTitle.classList.add('hidden');
+    analystChartWrap.classList.add('hidden');
+  } else {
+    if(analystSectionTitle) analystSectionTitle.classList.remove('hidden');
+    analystChartWrap.classList.remove('hidden');
+  }
 
   if(!rows.length){
     grid.innerHTML = '<div class="empty">No fundamentals collected yet for this security.</div>';
     asOfEl.textContent = '';
-    document.getElementById('analystChartWrap').innerHTML = '<div class="chart-empty">No fundamentals collected yet for this security.</div>';
+    if(!isFundInstrument) analystChartWrap.innerHTML = '<div class="chart-empty">No fundamentals collected yet for this security.</div>';
     return;
   }
 
@@ -1437,6 +1470,8 @@ function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52
 
   const newestDate = rows.reduce((max,r) => (r.AsOfDate>max?r.AsOfDate:max), rows[0].AsOfDate);
   asOfEl.textContent = `Fundamentals as of ${fmtIsoDateDDMM(newestDate)} · Source: ${rows[0].Source||'—'}`;
+
+  if(isFundInstrument) return; // no analyst targets for ETFs/Funds
 
   // Broad alias matching - the exact field naming used by whatever entered the
   // data (manual form, import script, etc.) can vary quite a bit.
@@ -1453,7 +1488,6 @@ function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52
     targetMedian: targetMedian ? (targetMedian.ParameterName||targetMedian.FieldName) : null,
   });
 
-  const analystChartWrap = document.getElementById('analystChartWrap');
   if(!targetLow && !targetHigh && !targetMean && !targetMedian){
     const availableNames = rows.map(r => r.ParameterName || r.FieldName).join(', ');
     analystChartWrap.innerHTML = `<div class="chart-empty">Keine Analyst-Target-Felder (Low/High/Mean/Median) gefunden. Vorhandene Fundamentals-Felder für diese Security: ${availableNames || '—'}.</div>`;
@@ -1588,6 +1622,7 @@ function resetSecurityTaskForm(){
   document.getElementById('stfDescription').value = '';
   document.getElementById('stfDateDue').value = taskIsoToday();
   document.getElementById('stfRecurring').value = 'n/a';
+  document.getElementById('stfPriority').value = 'Medium';
   document.getElementById('stfCustomTaskTypeWrap').style.display = 'none';
   document.getElementById('stfCustomTaskType').value = '';
   document.getElementById('stfMsg').textContent = '';
@@ -1606,6 +1641,7 @@ async function openSecurityTaskForm(task){
     document.getElementById('stfDescription').value = task.TaskDescription || '';
     document.getElementById('stfDateDue').value = task.DateDue || '';
     document.getElementById('stfRecurring').value = task.Recurring || 'n/a';
+    document.getElementById('stfPriority').value = task.Priority || 'Medium';
     document.getElementById('stfCustomTaskTypeWrap').style.display = 'none';
   } else {
     resetSecurityTaskForm();
@@ -1640,16 +1676,21 @@ function renderSecurityTasksList(){
       else if(dleft !== null && dleft <= 7) dueCls = 'due-soon';
     }
     const typeName = securityTaskTypeName(t.TaskTypeID);
+    const priorityVal = t.Priority || 'Medium';
+    const priorityBadge = `<span class="priority-badge ${priorityVal.toLowerCase()}" style="font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#fff;padding:2px 7px;border-radius:3px;white-space:nowrap;margin-left:4px;background:${priorityVal==='High'?'var(--loss)':(priorityVal==='Low'?'var(--muted)':'#B5793A')};">${priorityVal}</span>`;
+    const dueOrCompleted = t.Completed
+      ? `<span style="color:var(--gain);">✓ ${fmtIsoDateDDMM((t.CompletedAt||'').slice(0,10))}</span>`
+      : `<span class="task-teaser-due ${dueCls}">${fmtIsoDateDDMM(t.DateDue)}</span>`;
     return `<div class="task-teaser-row ${t.Completed ? 'done' : ''}">
       <div style="display:flex;gap:10px;align-items:flex-start;">
         <input type="checkbox" class="done-checkbox" data-toggle-sec-taskid="${t.TaskID}" ${t.Completed ? 'checked' : ''} style="margin-top:3px;">
         <div>
-          <div class="task-teaser-name">${t.TaskName || '—'}${typeName ? ` <span class="recurring-badge" style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:2px 6px;margin-left:4px;">🏷 ${typeName}</span>` : ''}</div>
+          <div class="task-teaser-name">${t.TaskName || '—'}${priorityBadge}${typeName ? ` <span class="recurring-badge" style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:2px 6px;margin-left:4px;">🏷 ${typeName}</span>` : ''}</div>
           ${t.TaskDescription ? `<div class="task-teaser-sub">${t.TaskDescription}</div>` : ''}
         </div>
       </div>
       <div class="task-teaser-actions">
-        <span class="task-teaser-due ${dueCls}">${fmtIsoDateDDMM(t.DateDue)}</span>
+        ${dueOrCompleted}
         <a href="#" data-edit-sec-taskid="${t.TaskID}">✏️</a>
         <a href="#" data-delete-sec-taskid="${t.TaskID}">✕</a>
       </div>
@@ -1661,7 +1702,7 @@ function renderSecurityTasksList(){
 async function loadSecurityTasks(secId){
   await ensureSecurityTasksSchema();
   securityTasksAll = await tursoQuery(
-    'SELECT TaskID, TaskName, TaskDescription, SecurityID, DateDue, Recurring, Completed, CompletedAt, TaskTypeID FROM security_tasks WHERE SecurityID = ?',
+    'SELECT TaskID, TaskName, TaskDescription, SecurityID, DateDue, Recurring, Completed, CompletedAt, TaskTypeID, Priority FROM security_tasks WHERE SecurityID = ?',
     [secId], 0
   );
   securityTaskTypeOpts = await tursoParameterOptions('security_tasks', 'TaskType', 0);
@@ -1689,6 +1730,10 @@ document.getElementById('securityTasksWrap').addEventListener('change', async (e
   const nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
   try {
     if(!task.Completed){
+      await tursoRun(
+        'INSERT INTO security_task_completions (TaskID, TaskName, SecurityID, DateDue, CompletedAt) VALUES (?,?,?,?,?)',
+        [task.TaskID, task.TaskName, task.SecurityID, task.DateDue, nowIso]
+      );
       await tursoRun('UPDATE security_tasks SET Completed = 1, CompletedAt = ? WHERE TaskID = ?', [nowIso, taskId]);
     } else {
       await tursoRun('UPDATE security_tasks SET Completed = 0, CompletedAt = NULL WHERE TaskID = ?', [taskId]);
@@ -1706,19 +1751,20 @@ document.getElementById('stfSave').addEventListener('click', async () => {
   const description = document.getElementById('stfDescription').value.trim() || null;
   const dateDue = document.getElementById('stfDateDue').value || null;
   const recurring = document.getElementById('stfRecurring').value;
+  const priority = document.getElementById('stfPriority').value;
 
   try {
     const taskTypeId = await resolveSecurityTaskTypeId();
     if(editingSecurityTaskId){
       await tursoRun(
-        `UPDATE security_tasks SET TaskName=?, TaskDescription=?, DateDue=?, Recurring=?, TaskTypeID=? WHERE TaskID=?`,
-        [name, description, dateDue, recurring, taskTypeId, editingSecurityTaskId]
+        `UPDATE security_tasks SET TaskName=?, TaskDescription=?, DateDue=?, Recurring=?, TaskTypeID=?, Priority=? WHERE TaskID=?`,
+        [name, description, dateDue, recurring, taskTypeId, priority, editingSecurityTaskId]
       );
       msg.textContent = 'Aktualisiert.'; msg.className = 'quick-status ok';
     } else {
       await tursoRun(
-        `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
-        [name, description, curSecId, dateDue, recurring, taskTypeId, (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString()]
+        `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Priority, Completed, created_at) VALUES (?,?,?,?,?,?,?,0,?)`,
+        [name, description, curSecId, dateDue, recurring, taskTypeId, priority, (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString()]
       );
       msg.textContent = 'Gespeichert.'; msg.className = 'quick-status ok';
     }
@@ -1729,6 +1775,15 @@ document.getElementById('stfSave').addEventListener('click', async () => {
   } catch(e) {
     msg.textContent = 'Fehler: ' + e.message; msg.className = 'quick-status err';
   }
+});
+
+document.getElementById('statusBadge').addEventListener('click', () => {
+  document.getElementById('masterDataTitle').scrollIntoView({ behavior:'smooth', block:'start' });
+  const statusSelect = document.getElementById('mfStatus');
+  if(statusSelect) setTimeout(() => statusSelect.focus(), 300);
+});
+document.getElementById('statusBadge').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); document.getElementById('statusBadge').click(); }
 });
 
 document.getElementById('settingsBtn').addEventListener('click', () => {

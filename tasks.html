@@ -46,6 +46,10 @@
   .filter-btn{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer;}
   .filter-btn.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
   .filter-bar .spacer{flex:1;}
+  .search-wrap{position:relative;min-width:220px;flex:1;max-width:320px;}
+  .search-wrap input{width:100%;font-family:'Inter',sans-serif;font-size:13px;padding:7px 28px 7px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;color:var(--text);box-sizing:border-box;}
+  .search-clear-btn{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:4px 6px;line-height:1;}
+  .search-clear-btn:hover{color:var(--accent);}
   .filter-bar select{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;color:var(--text);}
 
   .task-form{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:12px 0 20px;display:none;gap:10px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
@@ -74,6 +78,11 @@
   .sec-link{color:var(--text);text-decoration:none;border-bottom:1px dotted var(--muted);white-space:nowrap;}
   .sec-link:hover{color:var(--accent);border-bottom-color:var(--accent);}
   .recurring-badge{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);border:1px solid var(--line);border-radius:3px;padding:2px 6px;white-space:nowrap;}
+  .priority-badge{font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#fff;padding:2px 7px;border-radius:3px;white-space:nowrap;}
+  .priority-badge.high{background:var(--loss);}
+  .priority-badge.medium{background:#B5793A;}
+  .priority-badge.low{background:var(--muted);}
+  .completed-date{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--gain);white-space:nowrap;}
   .row-actions{white-space:nowrap;text-align:right;}
   .row-actions a{text-decoration:none;font-size:12px;margin-left:8px;color:var(--muted);}
   .row-actions a:hover{color:var(--accent);}
@@ -154,8 +163,12 @@
     <button class="filter-btn active" data-filter="open">Open</button>
     <button class="filter-btn" data-filter="done">Done</button>
     <button class="filter-btn" data-filter="all">All</button>
+    <button class="filter-btn" data-filter="history">History</button>
     <div class="spacer"></div>
-    <input type="text" id="taskSearch" placeholder="🔎 Task, Security oder Datum suchen…" style="min-width:220px;flex:1;max-width:320px;font-family:'Inter',sans-serif;font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;color:var(--text);">
+    <div class="search-wrap">
+      <input type="text" id="taskSearch" placeholder="🔎 Task, Security oder Datum suchen…">
+      <button type="button" id="taskSearchClear" class="search-clear-btn" title="Suche löschen" style="display:none;">✕</button>
+    </div>
     <select id="securityFilter"><option value="">All Securities</option></select>
     <button class="toggle-btn" id="addTaskBtn">➕ New Task</button>
   </div>
@@ -192,6 +205,14 @@
         <option value="Month End">Month End</option>
         <option value="Annually">Annually</option>
         <option value="Bi-Annual">Bi-Annual (alle 2 Jahre)</option>
+      </select>
+    </div>
+    <div>
+      <label>Priority</label>
+      <select id="tfPriority">
+        <option value="Medium">Medium</option>
+        <option value="High">High</option>
+        <option value="Low">Low</option>
       </select>
     </div>
     <div class="actions">
@@ -243,6 +264,17 @@ if (typeof ensureSecurityTasksSchema === 'undefined') {
       )`);
     } catch(e) {}
     try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
+    try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN Priority TEXT'); } catch(e) {}
+    try {
+      await tursoRun(`CREATE TABLE IF NOT EXISTS security_task_completions (
+        CompletionID INTEGER PRIMARY KEY AUTOINCREMENT,
+        TaskID INTEGER,
+        TaskName TEXT,
+        SecurityID INTEGER,
+        DateDue TEXT,
+        CompletedAt TEXT
+      )`);
+    } catch(e) {}
   };
 }
 if (typeof ensureSecurityDataSchema === 'undefined') {
@@ -365,6 +397,7 @@ function resetTaskForm(){
   document.getElementById('tfSecurity').value = '';
   document.getElementById('tfDateDue').value = todayIso();
   document.getElementById('tfRecurring').value = 'n/a';
+  document.getElementById('tfPriority').value = 'Medium';
   document.getElementById('tfCustomTaskTypeWrap').style.display = 'none';
   document.getElementById('tfCustomTaskType').value = '';
   document.getElementById('tfMsg').textContent = '';
@@ -381,6 +414,7 @@ async function openTaskForm(task){
     document.getElementById('tfSecurity').value = task.SecurityID || '';
     document.getElementById('tfDateDue').value = task.DateDue || '';
     document.getElementById('tfRecurring').value = task.Recurring || 'n/a';
+    document.getElementById('tfPriority').value = task.Priority || 'Medium';
     document.getElementById('tfCustomTaskTypeWrap').style.display = 'none';
   } else {
     resetTaskForm();
@@ -389,11 +423,23 @@ async function openTaskForm(task){
 }
 
 let dueSortDir = 'asc';
+let completionHistory = [];
 
-function renderTasks(){
+function priorityBadge(p){
+  const val = (p || 'Medium');
+  return `<span class="priority-badge ${val.toLowerCase()}">${val}</span>`;
+}
+
+async function renderTasks(){
   const wrap = document.getElementById('tasksWrap');
-  const secFilter = document.getElementById('securityFilter').value;
   const search = document.getElementById('taskSearch').value.trim().toLowerCase();
+
+  if(curFilter === 'history'){
+    await renderHistory(wrap, search);
+    return;
+  }
+
+  const secFilter = document.getElementById('securityFilter').value;
 
   let rows = tasksAll.filter(t => {
     if(curFilter === 'open' && t.Completed) return false;
@@ -404,7 +450,7 @@ function renderTasks(){
       const typeName = taskTypeName(t.TaskTypeID) || '';
       const haystack = [
         t.TaskName || '', t.TaskDescription || '', secName,
-        fmtDdMmYyyy(t.DateDue) || '', t.DateDue || '', t.Recurring || '', typeName
+        fmtDdMmYyyy(t.DateDue) || '', t.DateDue || '', t.Recurring || '', typeName, t.Priority || ''
       ].join(' ').toLowerCase();
       if(!haystack.includes(search)) return false;
     }
@@ -434,6 +480,9 @@ function renderTasks(){
     const recBadge = (t.Recurring && t.Recurring !== 'n/a') ? `<span class="recurring-badge">↻ ${t.Recurring}</span>` : '';
     const typeName = taskTypeName(t.TaskTypeID);
     const typeBadge = typeName ? `<span class="recurring-badge" style="margin-left:6px;">🏷 ${typeName}</span>` : '';
+    const dueCell = t.Completed
+      ? `<span class="completed-date">✓ ${fmtDdMmYyyy((t.CompletedAt||'').slice(0,10))}</span>`
+      : fmtDdMmYyyy(t.DateDue);
     return `<tr class="${rowCls}">
       <td><input type="checkbox" class="done-checkbox" data-toggle-taskid="${t.TaskID}" ${t.Completed ? 'checked' : ''}></td>
       <td>
@@ -441,7 +490,8 @@ function renderTasks(){
         ${t.TaskDescription ? `<div class="task-desc">${t.TaskDescription}</div>` : ''}
       </td>
       <td>${secCell}</td>
-      <td class="due">${fmtDdMmYyyy(t.DateDue)}</td>
+      <td class="due">${dueCell}</td>
+      <td>${priorityBadge(t.Priority)}</td>
       <td>${recBadge || '<span style="color:var(--muted);">n/a</span>'}</td>
       <td class="row-actions">
         <a href="#" class="edit-link" data-edit-taskid="${t.TaskID}">✏️</a>
@@ -454,7 +504,7 @@ function renderTasks(){
   wrap.innerHTML = `
     <div class="table-wrap">
     <table>
-      <thead><tr><th></th><th>Task</th><th>Security</th><th class="sortable" id="dueHeader" style="cursor:pointer;">Due ${dueArrow}</th><th>Recurring</th><th></th></tr></thead>
+      <thead><tr><th></th><th>Task</th><th>Security</th><th class="sortable" id="dueHeader" style="cursor:pointer;">Due ${dueArrow}</th><th>Priority</th><th>Recurring</th><th></th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
     </div>
@@ -465,9 +515,52 @@ function renderTasks(){
   });
 }
 
+async function renderHistory(wrap, search){
+  wrap.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    completionHistory = await tursoQuery(
+      'SELECT CompletionID, TaskID, TaskName, SecurityID, DateDue, CompletedAt FROM security_task_completions ORDER BY CompletedAt DESC LIMIT 200',
+      [], 0
+    );
+  } catch(e) {
+    wrap.innerHTML = `<div class="error">Fehler: ${e.message}</div>`;
+    return;
+  }
+
+  let rows = completionHistory;
+  if(search){
+    rows = rows.filter(r => {
+      const secName = (securityName(r.SecurityID) || '').toLowerCase();
+      return [r.TaskName||'', secName, r.CompletedAt||'', r.DateDue||''].join(' ').toLowerCase().includes(search);
+    });
+  }
+
+  if(!rows.length){ wrap.innerHTML = '<div class="empty">Noch keine erledigten Tasks protokolliert.</div>'; return; }
+
+  const rowsHtml = rows.map(r => {
+    const secName = securityName(r.SecurityID);
+    const secCell = secName ? `<a class="sec-link" href="security.html?id=${encodeURIComponent(r.SecurityID)}">${secName}</a>` : '<span style="color:var(--muted);">—</span>';
+    return `<tr>
+      <td>${r.TaskName || '—'}</td>
+      <td>${secCell}</td>
+      <td>${fmtDdMmYyyy(r.DateDue)}</td>
+      <td class="completed-date">${fmtDdMmYyyy((r.CompletedAt||'').slice(0,10))}</td>
+    </tr>`;
+  }).join('');
+
+  wrap.innerHTML = `
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>Task</th><th>Security</th><th>War fällig am</th><th>Erledigt am</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    </div>
+  `;
+}
+
 async function loadTasks(){
-  tasksAll = await tursoQuery('SELECT TaskID, TaskName, TaskDescription, SecurityID, DateDue, Recurring, Completed, CompletedAt, TaskTypeID FROM security_tasks', [], 0);
-  renderTasks();
+  tasksAll = await tursoQuery('SELECT TaskID, TaskName, TaskDescription, SecurityID, DateDue, Recurring, Completed, CompletedAt, TaskTypeID, Priority FROM security_tasks', [], 0);
+  await renderTasks();
 }
 
 async function toggleComplete(taskId){
@@ -476,6 +569,13 @@ async function toggleComplete(taskId){
   const now = nowZurichString ? nowZurichString() : new Date().toISOString();
   try {
     if(!task.Completed){
+      // Record every completion event in a permanent history log - important
+      // for recurring tasks, where the row itself just rolls its due date
+      // forward and would otherwise only ever show the LAST completion.
+      await tursoRun(
+        'INSERT INTO security_task_completions (TaskID, TaskName, SecurityID, DateDue, CompletedAt) VALUES (?,?,?,?,?)',
+        [task.TaskID, task.TaskName, task.SecurityID, task.DateDue, now]
+      );
       if(task.Recurring && task.Recurring !== 'n/a'){
         // Recurring task: roll the due date forward instead of leaving it marked done.
         const next = nextDueDate(task.DateDue, task.Recurring);
@@ -524,7 +624,17 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
   });
 });
 document.getElementById('securityFilter').addEventListener('change', renderTasks);
-document.getElementById('taskSearch').addEventListener('input', renderTasks);
+document.getElementById('taskSearch').addEventListener('input', (e) => {
+  document.getElementById('taskSearchClear').style.display = e.target.value ? '' : 'none';
+  renderTasks();
+});
+document.getElementById('taskSearchClear').addEventListener('click', () => {
+  const input = document.getElementById('taskSearch');
+  input.value = '';
+  document.getElementById('taskSearchClear').style.display = 'none';
+  input.focus();
+  renderTasks();
+});
 
 document.getElementById('addTaskBtn').addEventListener('click', () => {
   const panel = document.getElementById('taskForm');
@@ -545,19 +655,20 @@ document.getElementById('tfSave').addEventListener('click', async () => {
   const secId = document.getElementById('tfSecurity').value || null;
   const dateDue = document.getElementById('tfDateDue').value || null;
   const recurring = document.getElementById('tfRecurring').value;
+  const priority = document.getElementById('tfPriority').value;
 
   try {
     const taskTypeId = await resolveTaskTypeId();
     if(editingTaskId){
       await tursoRun(
-        `UPDATE security_tasks SET TaskName=?, TaskDescription=?, SecurityID=?, DateDue=?, Recurring=?, TaskTypeID=? WHERE TaskID=?`,
-        [name, description, secId, dateDue, recurring, taskTypeId, editingTaskId]
+        `UPDATE security_tasks SET TaskName=?, TaskDescription=?, SecurityID=?, DateDue=?, Recurring=?, TaskTypeID=?, Priority=? WHERE TaskID=?`,
+        [name, description, secId, dateDue, recurring, taskTypeId, priority, editingTaskId]
       );
       msg.textContent = 'Aktualisiert.'; msg.className = 'msg ok';
     } else {
       await tursoRun(
-        `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
-        [name, description, secId, dateDue, recurring, taskTypeId, nowZurichString ? nowZurichString() : new Date().toISOString()]
+        `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Priority, Completed, created_at) VALUES (?,?,?,?,?,?,?,0,?)`,
+        [name, description, secId, dateDue, recurring, taskTypeId, priority, nowZurichString ? nowZurichString() : new Date().toISOString()]
       );
       msg.textContent = 'Gespeichert.'; msg.className = 'msg ok';
     }
@@ -628,21 +739,79 @@ document.getElementById('qualityCheckBtn').addEventListener('click', async () =>
     }
 
     const missing = activeSecurities.filter(s => !coveredSecIds.has(String(s.SecurityID)));
-    if(!missing.length){
-      alert('Alle aktiven Securities (Status 136) haben bereits einen "Security Quality Check" Task mit Fälligkeit in den nächsten 2 Jahren.');
+    let createdCount = 0;
+    if(missing.length){
+      const nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
+      for(const s of missing){
+        await tursoRun(
+          `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
+          [QC_TASK_NAME, null, s.SecurityID, nextDue, 'Annually', QC_TASKTYPE_ID, nowIso]
+        );
+      }
+      createdCount = missing.length;
+    }
+
+    // Dividend-cut check: for Active securities where the last 12 months of
+    // distributions dropped to zero from a non-zero prior 12 months (YoY
+    // -100%), the Security Quality Check must become urgent - due within the
+    // next 10 days - regardless of how far out its normal 2-year schedule was.
+    let tightenedCount = 0;
+    const urgentDue = (() => { const d = new Date(today + 'T00:00:00'); d.setDate(d.getDate() + 10); return d.toISOString().slice(0,10); })();
+    if(activeSecurities.length){
+      const placeholders = activeSecurities.map(() => '?').join(',');
+      const distRows = await tursoQuery(
+        `SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions WHERE SecurityID IN (${placeholders})`,
+        activeSecurities.map(s => s.SecurityID), 0
+      );
+      const distBySec = new Map();
+      for(const d of distRows){
+        const amount = parseFloat(d.DistributionAmount);
+        const exDate = parseSwissDate(d.ExDate);
+        if(isNaN(amount) || !exDate) continue;
+        if(!distBySec.has(d.SecurityID)) distBySec.set(d.SecurityID, []);
+        distBySec.get(d.SecurityID).push({ amount, exDate });
+      }
+
+      const todayDate = new Date(today + 'T00:00:00');
+      const oneYearAgo = new Date(todayDate); oneYearAgo.setDate(oneYearAgo.getDate() - 365);
+      const twoYearsAgo = new Date(todayDate); twoYearsAgo.setDate(twoYearsAgo.getDate() - 730);
+
+      const existingBySec = new Map(existingTasks.map(t => [String(t.SecurityID), t]));
+      const nowIso2 = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
+
+      for(const s of activeSecurities){
+        const dists = distBySec.get(s.SecurityID) || [];
+        const dist12m = dists.filter(d => d.exDate > oneYearAgo && d.exDate <= todayDate).reduce((sum,d) => sum + d.amount, 0);
+        const dist12mPrior = dists.filter(d => d.exDate > twoYearsAgo && d.exDate <= oneYearAgo).reduce((sum,d) => sum + d.amount, 0);
+        const isFullCut = dist12mPrior > 0 && dist12m === 0;
+        if(!isFullCut) continue;
+
+        const existing = existingBySec.get(String(s.SecurityID));
+        if(existing && existing.DateDue && existing.DateDue <= urgentDue) continue; // already urgent enough
+
+        if(existing){
+          await tursoRun('UPDATE security_tasks SET DateDue = ? WHERE TaskTypeID = ? AND TaskName = ? AND SecurityID = ?', [urgentDue, QC_TASKTYPE_ID, QC_TASK_NAME, s.SecurityID]);
+        } else {
+          await tursoRun(
+            `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
+            [QC_TASK_NAME, 'Automatisch erstellt: Dividende der letzten 12 Monate ist auf 0 gefallen (YoY -100%).', s.SecurityID, urgentDue, 'Annually', QC_TASKTYPE_ID, nowIso2]
+          );
+        }
+        tightenedCount++;
+      }
+    }
+
+    if(!createdCount && !tightenedCount){
+      alert('Alle aktiven Securities (Status 136) haben bereits einen "Security Quality Check" Task mit Fälligkeit in den nächsten 2 Jahren, und keine Dividenden-Vollkürzung wurde festgestellt.');
       return;
     }
 
-    const nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
-    for(const s of missing){
-      await tursoRun(
-        `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
-        [QC_TASK_NAME, null, s.SecurityID, nextDue, 'Annually', QC_TASKTYPE_ID, nowIso]
-      );
-    }
     tursoClearCache();
     await load();
-    alert(`${missing.length} neue "Security Quality Check" Task(s) erstellt (Fälligkeit: ${fmtDdMmYyyy(nextDue)}).`);
+    const parts = [];
+    if(createdCount) parts.push(`${createdCount} neue Task(s) erstellt (Fälligkeit: ${fmtDdMmYyyy(nextDue)})`);
+    if(tightenedCount) parts.push(`${tightenedCount} Task(s) wegen Dividenden-Vollkürzung auf ${fmtDdMmYyyy(urgentDue)} vorgezogen`);
+    alert(parts.join(' · ') + '.');
   } catch(e) {
     alert('Fehler beim Audit: ' + e.message);
   } finally {

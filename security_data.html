@@ -237,6 +237,17 @@ if (typeof ensureSecurityTasksSchema === 'undefined') {
       )`);
     } catch(e) {}
     try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
+    try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN Priority TEXT'); } catch(e) {}
+    try {
+      await tursoRun(`CREATE TABLE IF NOT EXISTS security_task_completions (
+        CompletionID INTEGER PRIMARY KEY AUTOINCREMENT,
+        TaskID INTEGER,
+        TaskName TEXT,
+        SecurityID INTEGER,
+        DateDue TEXT,
+        CompletedAt TEXT
+      )`);
+    } catch(e) {}
   };
 }
 if (typeof ensureSecurityDataSchema === 'undefined') {
@@ -285,13 +296,20 @@ const SECTION_DEFS = [
 
 const PIE_PALETTE = ['#E30613','#1F8A6E','#2C6FBB','#D9A441','#7A5FC0','#C0293D','#3FA7A0','#B5793A','#6F7B8C','#9C4F96','#4C8B3B','#B0A03F'];
 
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function linkifyValue(text){
+  const urlRe = /(https?:\/\/[^\s<]+)/gi;
+  return escapeHtml(text).replace(urlRe, url => `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`);
+}
 function fmtValue(row){
   if(row.NumericValue !== null && row.NumericValue !== undefined){
     const decimals = row.Unit === '%' ? 2 : (Math.abs(row.NumericValue) >= 1000 ? 0 : 2);
     const formatted = fmtDecimal(row.NumericValue, decimals);
     return row.Unit ? `${formatted} ${row.Unit}` : formatted;
   }
-  if(row.FieldValue) return row.FieldValue;
+  if(row.FieldValue) return linkifyValue(row.FieldValue);
   return '—';
 }
 

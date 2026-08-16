@@ -43,13 +43,15 @@
   .missing{color:var(--muted);font-style:italic;font-size:12px;}
 
   .task-teaser-list{display:flex;flex-direction:column;gap:0;margin-top:8px;}
-  .task-teaser-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line);}
+  .task-teaser-row{display:flex;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line);}
   .task-teaser-row:last-child{border-bottom:none;}
-  .task-teaser-name{font-size:14px;font-weight:500;}
+  .task-teaser-check{flex:none;width:16px;height:16px;cursor:pointer;}
+  .task-teaser-link{flex:1;min-width:0;text-decoration:none;color:inherit;}
+  .task-teaser-name{font-size:14px;font-weight:500;color:var(--text);}
   .task-teaser-sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px;}
-  .task-teaser-due{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;white-space:nowrap;}
+  .task-teaser-due{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;white-space:nowrap;color:var(--text);text-decoration:none;flex:none;}
+  .task-teaser-due:hover{text-decoration:underline;}
   .task-teaser-due.overdue{color:var(--loss);}
-  .task-teaser-due.due-soon{color:#B5793A;}
   .task-teaser-footer{margin-top:10px;text-align:right;}
   .task-teaser-footer a{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);text-decoration:none;}
   .task-teaser-footer a:hover{color:var(--accent);}
@@ -166,16 +168,6 @@
     <tbody id="boardBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
   </table>
 
-  <div class="footer">
-    <span id="lastSynced">—</span>
-    <span>
-      <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
-      <button type="button" id="improvementSaveBtn">💡 Save</button>
-      <button id="settingsBtn">⚙ Repo/Token</button>
-      <button id="refreshBtn">Refresh</button>
-    </span>
-  </div>
-
   <div class="section-title">Tasks</div>
   <div id="taskTeaserWrap"><div class="empty">Loading…</div></div>
 
@@ -214,6 +206,16 @@
       <p>DB stats &amp; collector activity</p>
     </a>
   </div>
+
+  <div class="footer">
+    <span id="lastSynced">—</span>
+    <span>
+      <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
+      <button type="button" id="improvementSaveBtn">💡 Save</button>
+      <button id="settingsBtn">⚙ Repo/Token</button>
+      <button id="refreshBtn">Refresh</button>
+    </span>
+  </div>
 </div>
 
 <script src="assets/turso-data.js"></script>
@@ -246,6 +248,17 @@ if (typeof ensureSecurityTasksSchema === 'undefined') {
       )`);
     } catch(e) {}
     try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
+    try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN Priority TEXT'); } catch(e) {}
+    try {
+      await tursoRun(`CREATE TABLE IF NOT EXISTS security_task_completions (
+        CompletionID INTEGER PRIMARY KEY AUTOINCREMENT,
+        TaskID INTEGER,
+        TaskName TEXT,
+        SecurityID INTEGER,
+        DateDue TEXT,
+        CompletedAt TEXT
+      )`);
+    } catch(e) {}
   };
 }
 if (typeof ensureSecurityDataSchema === 'undefined') {
@@ -495,6 +508,7 @@ async function load(){
 async function loadTaskTeaser(){
   const wrap = document.getElementById('taskTeaserWrap');
   try{
+    await ensureSecurityTasksSchema();
     const rows = await tursoQuery(
       `SELECT TaskID, TaskName, SecurityID, DateDue FROM security_tasks WHERE Completed = 0`, [], 0
     );
@@ -507,17 +521,20 @@ async function loadTaskTeaser(){
     if(!due.length){ wrap.innerHTML = '<div class="empty">Keine überfälligen oder in den nächsten 10 Tagen fälligen Tasks.</div>'; return; }
 
     const rowsHtml = due.map(t => {
-      const overdue = t.DateDue < todayIso;
-      const dueCls = overdue ? 'overdue' : 'due-soon';
+      // "Heute oder älter" = red; everything else neutral (no amber warning tier here).
+      const overdue = t.DateDue <= todayIso;
+      const dueCls = overdue ? 'overdue' : '';
       const secName = secNameById.get(String(t.SecurityID));
       const m = String(t.DateDue).match(/^(\d{4})-(\d{2})-(\d{2})/);
       const dueFmt = m ? `${m[3]}.${m[2]}.${m[1]}` : t.DateDue;
+      const detailHref = t.SecurityID ? `security.html?id=${encodeURIComponent(t.SecurityID)}#securityTasksSection` : 'tasks.html';
       return `<div class="task-teaser-row">
-        <div>
+        <input type="checkbox" class="task-teaser-check" data-toggle-taskid="${t.TaskID}">
+        <a class="task-teaser-link" href="${detailHref}">
           <div class="task-teaser-name">${t.TaskName || '—'}</div>
           ${secName ? `<div class="task-teaser-sub">${secName}</div>` : ''}
-        </div>
-        <div class="task-teaser-due ${dueCls}">${overdue ? 'überfällig · ' : ''}${dueFmt}</div>
+        </a>
+        <a class="task-teaser-due ${dueCls}" href="${detailHref}">${overdue ? 'überfällig · ' : ''}${dueFmt}</a>
       </div>`;
     }).join('');
 
@@ -526,6 +543,36 @@ async function loadTaskTeaser(){
     wrap.innerHTML = `<div class="empty">Tasks konnten nicht geladen werden (${e.message}).</div>`;
   }
 }
+
+document.getElementById('taskTeaserWrap').addEventListener('change', async (e) => {
+  const cb = e.target.closest('[data-toggle-taskid]');
+  if(!cb) return;
+  const taskId = cb.dataset.toggleTaskid;
+  const nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
+  cb.disabled = true;
+  try {
+    const [task] = await tursoQuery('SELECT TaskID, TaskName, SecurityID, DateDue, Recurring FROM security_tasks WHERE TaskID = ?', [taskId], 0);
+    if(!task) return;
+    await tursoRun(
+      'INSERT INTO security_task_completions (TaskID, TaskName, SecurityID, DateDue, CompletedAt) VALUES (?,?,?,?,?)',
+      [task.TaskID, task.TaskName, task.SecurityID, task.DateDue, nowIso]
+    );
+    if(task.Recurring && task.Recurring !== 'n/a'){
+      const d = task.DateDue ? new Date(task.DateDue + 'T00:00:00') : new Date();
+      if(task.Recurring === 'Bi-Annual'){ const t2 = new Date(); t2.setFullYear(t2.getFullYear()+2); await tursoRun('UPDATE security_tasks SET DateDue=?, Completed=0, CompletedAt=? WHERE TaskID=?', [t2.toISOString().slice(0,10), nowIso, taskId]); }
+      else if(task.Recurring === 'Annually'){ d.setFullYear(d.getFullYear()+1); await tursoRun('UPDATE security_tasks SET DateDue=?, Completed=0, CompletedAt=? WHERE TaskID=?', [d.toISOString().slice(0,10), nowIso, taskId]); }
+      else if(task.Recurring === 'Month End'){ const nm = new Date(d.getFullYear(), d.getMonth()+2, 0); await tursoRun('UPDATE security_tasks SET DateDue=?, Completed=0, CompletedAt=? WHERE TaskID=?', [nm.toISOString().slice(0,10), nowIso, taskId]); }
+      else { await tursoRun('UPDATE security_tasks SET Completed=1, CompletedAt=? WHERE TaskID=?', [nowIso, taskId]); }
+    } else {
+      await tursoRun('UPDATE security_tasks SET Completed=1, CompletedAt=? WHERE TaskID=?', [nowIso, taskId]);
+    }
+    tursoClearCache();
+    await loadTaskTeaser();
+  } catch(e) {
+    alert('Fehler: ' + e.message);
+    cb.disabled = false;
+  }
+});
 
 document.getElementById('refreshBtn').addEventListener('click', () => { tursoClearCache(); load(); });
 document.getElementById('settingsBtn').addEventListener('click', () => {
