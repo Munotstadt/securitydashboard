@@ -112,6 +112,17 @@ async function ensureSecurityTasksSchema(){
     )`);
   } catch(e) {}
   try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
+  try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN Priority TEXT'); } catch(e) {}
+  try {
+    await tursoRun(`CREATE TABLE IF NOT EXISTS security_task_completions (
+      CompletionID INTEGER PRIMARY KEY AUTOINCREMENT,
+      TaskID INTEGER,
+      TaskName TEXT,
+      SecurityID INTEGER,
+      DateDue TEXT,
+      CompletedAt TEXT
+    )`);
+  } catch(e) {}
   markSchemaEnsured('security_tasks');
 }
 
