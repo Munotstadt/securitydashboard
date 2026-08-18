@@ -553,10 +553,30 @@ async function renderLog(secId){
   }
 }
 
-function populateSectionSelect(){
+async function populateSectionSelect(selectValue){
   const sel = document.getElementById('mfSection');
-  sel.innerHTML = SECTION_DEFS.map(d => `<option value="${d.dataType}">${d.title}</option>`).join('')
-    + `<option value="__custom__">Other (freitext) …</option>`;
+  sel.innerHTML = `<option>Loading…</option>`;
+  let paraFields = [];
+  try {
+    // Dynamic by design: whatever ParaField values exist in security_parameter
+    // for ParaTable='security_data' show up here automatically - no code
+    // change needed when new sections/parameters are added directly in Turso.
+    paraFields = await tursoQuery(
+      `SELECT DISTINCT ParaField FROM security_parameter WHERE ParaTable = 'security_data' ORDER BY ParaField COLLATE NOCASE ASC`,
+      [], 0
+    );
+  } catch(e) { paraFields = []; }
+
+  if(paraFields.length){
+    sel.innerHTML = paraFields.map(p => `<option value="${p.ParaField}">${p.ParaField}</option>`).join('')
+      + `<option value="__custom__">Other (freitext) …</option>`;
+  } else {
+    // Fallback to the built-in section list if security_parameter has no
+    // security_data rows yet (e.g. brand-new database).
+    sel.innerHTML = SECTION_DEFS.map(d => `<option value="${d.dataType}">${d.title}</option>`).join('')
+      + `<option value="__custom__">Other (freitext) …</option>`;
+  }
+  if(selectValue && [...sel.options].some(o => o.value === selectValue)) sel.value = selectValue;
 }
 
 async function populateParameterSelect(dataType, selectFieldNameId){
@@ -595,11 +615,9 @@ async function openEditForm(rowId){
   editingRowId = rowId;
   const panel = document.getElementById('manualForm');
   panel.classList.add('show');
-  populateSectionSelect();
+  await populateSectionSelect(row.DataType);
   const sectionSel = document.getElementById('mfSection');
-  const knownTypes = new Set(SECTION_DEFS.map(d => d.dataType));
-  if(knownTypes.has(row.DataType)){
-    sectionSel.value = row.DataType;
+  if(sectionSel.value === row.DataType){
     document.getElementById('mfCustomSectionWrap').style.display = 'none';
   } else {
     sectionSel.value = '__custom__';
@@ -668,7 +686,7 @@ document.getElementById('addDataBtn').addEventListener('click', async () => {
   if(!willShow){ panel.classList.remove('show'); resetManualForm(); return; }
   resetManualForm();
   panel.classList.add('show');
-  populateSectionSelect();
+  await populateSectionSelect();
   await populateParameterSelect(document.getElementById('mfSection').value);
 });
 
