@@ -1,0 +1,341 @@
+diff --git a/admin.html b/admin.html
+index 2a68959..2853b68 100644
+--- a/admin.html
++++ b/admin.html
+@@ -66,8 +66,12 @@
+   .preview-table td.status-ok{color:#1F8A6E;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+   .preview-table td.status-err{color:#C0293D;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+   .preview-table td.status-skip{color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:11px;}
++  .preview-table td.status-warn{color:#B8860B;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+   .preview-table select, .preview-table input[type=text]{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 5px;border:1px solid var(--line);border-radius:3px;background:#fff;max-width:170px;}
+   .preview-table tr.row-skip td{opacity:.55;}
++  .preview-table tr.row-warn td{background:rgba(184,134,11,0.08);}
++  .mag-btn{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:2px 6px;border-radius:3px;border:1px solid #B8860B;background:#fff;color:#B8860B;cursor:pointer;margin-left:4px;white-space:nowrap;}
++  .mag-btn:hover{background:#B8860B;color:#fff;}
+   .upload-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:10px;}
+   .upload-actions button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 16px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
+   .upload-actions button:disabled{opacity:.4;cursor:not-allowed;}
+@@ -466,6 +470,72 @@ function resolveSecurity(row, master) {
+   return { ok: false, error: 'No SecurityID/SecurityName column' };
+ }
+ 
++// ============ Currency/magnitude sanity check ============
++// Manual CSV price lists and the UBS quote export don't reliably agree on
++// which convention a price uses, and some currencies (JPY, KRW, IDR, HUF,
++// VND, ISK, CLP …) are conventionally quoted "per 100 units" by some
++// providers. Imported as-is, that silently produces a price ~100x too high
++// or too low. Rather than maintaining a per-source whitelist of who uses
++// which convention (fragile, drifts as sources change), every incoming
++// price is checked against the security's own last stored price: a genuine
++// single-import jump of ~100x (or ~1/100x) essentially never happens for
++// anything tracked here, so that specific jump is almost always a
++// quoting-convention or decimal mistake rather than a real market move.
++// Low-value currencies are surfaced only as a corroborating hint in the
++// warning text, never as a requirement for flagging — this also catches
++// plain fat-finger/decimal-shift errors on any currency.
++const LOW_VALUE_CCY = new Set(['JPY', 'KRW', 'IDR', 'HUF', 'VND', 'ISK', 'CLP']);
++
++let lastPriceCache = new Map(); // SecurityID -> { price:number, date:string(Swiss display) } | null
++async function ensureLastPrices(secIds) {
++  const missing = secIds.filter(id => !lastPriceCache.has(id));
++  if (!missing.length) return;
++  const placeholders = missing.map(() => '?').join(',');
++  const rows = await tursoQuery(
++    `SELECT SecurityID, Price, PriceDate FROM security_prices WHERE SecurityID IN (${placeholders})`,
++    missing
++  );
++  missing.forEach(id => lastPriceCache.set(id, null));
++  rows.forEach(r => {
++    if (r.Price === null || r.Price === undefined) return;
++    const dt = parseSwissDateTime(r.PriceDate);
++    if (!dt) return;
++    const cur = lastPriceCache.get(r.SecurityID);
++    if (!cur || dt > parseSwissDateTime(cur.date)) {
++      lastPriceCache.set(r.SecurityID, { price: Number(r.Price), date: toSwissDateTime(dt) });
++    }
++  });
++}
++
++// Returns null when nothing looks off (no price history yet, or the ratio to
++// the last price isn't near a x100/÷100 step). Tolerance band (40x–250x) is
++// deliberately wide of exactly 100x since real-world "per 100" feeds aren't
++// always a clean factor of exactly 100, but deliberately far from normal
++// day-to-day price moves (which are essentially never >10x for anything
++// this dashboard tracks) so it doesn't fire on genuine volatility.
++function checkMagnitude(secId, price, currency) {
++  const last = lastPriceCache.get(secId);
++  if (!last || !last.price || !price) return null;
++  const ratio = price / last.price;
++  if (!isFinite(ratio) || ratio <= 0) return null;
++  let factor = null;
++  if (ratio >= 40 && ratio <= 250) factor = 100;           // price looks ~100x too high
++  else if (ratio <= 1 / 40 && ratio >= 1 / 250) factor = 0.01; // price looks ~100x too low
++  if (!factor) return null;
++  return {
++    factor,
++    suggested: price / factor,
++    lastPrice: last.price,
++    lastDate: last.date,
++    lowValueCcy: LOW_VALUE_CCY.has((currency || '').toUpperCase().trim()),
++  };
++}
++function magnitudeLabel(mag) {
++  const dir = mag.factor === 100 ? '÷100' : '×100';
++  const hint = mag.lowValueCcy ? ' – Währung wird oft „je 100“ notiert' : '';
++  return `⚠ Kurssprung ~${mag.factor === 100 ? '100×' : '1/100×'} vs. letzter Kurs ${fmtDecimal(mag.lastPrice, 4)} (${mag.lastDate})${hint}. Vorschlag: ${dir} → ${fmtDecimal(mag.suggested, 4)}`;
++}
++
+ async function handlePriceFile(file){
+   const area = document.getElementById('priceUploadArea');
+   area.innerHTML = '<div class="empty">Parsing…</div>';
+@@ -488,16 +558,97 @@ async function handlePriceFile(file){
+       return {
+         raw: row, secId: sec.ok ? sec.secId : null, secName: sec.ok ? (master.find(m=>m.SecurityID===sec.secId)||{}).SecurityName : (findCol(row,'SecurityName')||findCol(row,'SecurityID')||''),
+         price, priceDate: dt ? toSwissDateTime(dt) : null, priceDateIso: dt ? toIsoDateTime(dt) : null, source: sourceRaw, errors,
++        magnitudeWarning: null, magnitudeResolved: false,
+       };
+     });
+-    renderUploadPreview(area, parsed, ['secName','price','priceDate','source'],
+-      ['Security','Price','PriceDate','Source'], () => importPrices(parsed));
++
++    const secIds = [...new Set(parsed.filter(p => p.secId).map(p => p.secId))];
++    await ensureLastPrices(secIds);
++    parsed.forEach(p => {
++      if (p.secId && !isNaN(p.price) && p.price !== undefined) {
++        const currency = (master.find(m => m.SecurityID === p.secId) || {}).Currency;
++        p.magnitudeWarning = checkMagnitude(p.secId, p.price, currency);
++      }
++    });
++
++    renderPriceUploadPreview(area, parsed, () => importPrices(parsed));
+   } catch (e) {
+     console.error('Price upload failed:', e);
+     area.innerHTML = `<div class="error">Error: ${e.message}</div>`;
+   }
+ }
+ 
++// Dedicated preview renderer for the Price CSV/Excel upload (kept separate
++// from the generic renderUploadPreview used for Distributions) because price
++// rows can carry a magnitude warning that needs its own interactive
++// accept/correct controls in the table.
++function renderPriceUploadPreview(area, parsed, onImport) {
++  const rowStatus = p => p.errors.length ? 'err' : (p.magnitudeWarning && !p.magnitudeResolved ? 'warn' : 'ok');
++  const okCount = () => parsed.filter(p => rowStatus(p) === 'ok').length;
++  const warnCount = parsed.filter(p => rowStatus(p) === 'warn').length;
++  const errCount = parsed.filter(p => rowStatus(p) === 'err').length;
++  const summary = `${parsed.length} rows parsed · <span class="good">${okCount()} ok</span>` +
++    (warnCount ? ` · <span class="bad">${warnCount} mit Kurssprung-Warnung (zu bestätigen)</span>` : '') +
++    (errCount ? ` · <span class="bad">${errCount} with errors (skipped on import)</span>` : '');
++
++  const rowsHtml = parsed.map((p, i) => {
++    const status = rowStatus(p);
++    const priceCell = (status === 'warn')
++      ? `${fmtDecimal(p.price, 4)}
++         <button type="button" class="mag-btn mag-fix" data-i="${i}">${p.magnitudeWarning.factor === 100 ? '÷100' : '×100'} → ${fmtDecimal(p.magnitudeWarning.suggested, 4)}</button>
++         <button type="button" class="mag-btn mag-accept" data-i="${i}">✓ so übernehmen</button>`
++      : (p.price ?? '—');
++    const cells = `<td>${p.secName ?? '—'}</td><td class="num">${priceCell}</td><td>${p.priceDate ?? '—'}</td><td>${p.source ?? '—'}</td>`;
++    const statusCell = {
++      err: `<td class="status-err">${p.errors.join('; ')}</td>`,
++      warn: `<td class="status-warn">${magnitudeLabel(p.magnitudeWarning)}</td>`,
++      ok: `<td class="status-ok">OK</td>`,
++    }[status];
++    return `<tr class="${status === 'err' ? 'row-error' : (status === 'warn' ? 'row-warn' : '')}">${cells}${statusCell}</tr>`;
++  }).join('');
++
++  area.innerHTML = `<div class="upload-box">
++    <div class="upload-summary">${summary}</div>
++    <div class="preview-table-wrap"><table class="preview-table">
++      <thead><tr><th>Security</th><th class="num">Price</th><th>PriceDate</th><th>Source</th><th>Status</th></tr></thead>
++      <tbody>${rowsHtml || '<tr><td colspan="99">No rows found.</td></tr>'}</tbody>
++    </table></div>
++    <div class="upload-actions">
++      <span class="quick-status" id="uploadStatus" style="align-self:center;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);"></span>
++      <button id="importBtn" ${okCount() ? '' : 'disabled'}>Import ${okCount()} row(s)</button>
++    </div>
++  </div>`;
++
++  area.querySelectorAll('.mag-fix').forEach(btn => {
++    btn.addEventListener('click', () => {
++      const p = parsed[Number(btn.dataset.i)];
++      p.price = p.magnitudeWarning.suggested;
++      p.magnitudeResolved = true;
++      renderPriceUploadPreview(area, parsed, onImport);
++    });
++  });
++  area.querySelectorAll('.mag-accept').forEach(btn => {
++    btn.addEventListener('click', () => {
++      const p = parsed[Number(btn.dataset.i)];
++      p.magnitudeResolved = true;
++      renderPriceUploadPreview(area, parsed, onImport);
++    });
++  });
++
++  const statusEl = area.querySelector('#uploadStatus');
++  area.querySelector('#importBtn').addEventListener('click', async (e) => {
++    e.target.disabled = true;
++    statusEl.textContent = 'Importing…';
++    try {
++      await onImport();
++      statusEl.textContent = 'Imported ✓ ' + nowZurichString();
++    } catch (err) {
++      statusEl.textContent = 'Error: ' + err.message;
++      e.target.disabled = false;
++    }
++  });
++}
++
+ async function handleDistFile(file){
+   const area = document.getElementById('distUploadArea');
+   area.innerHTML = '<div class="empty">Parsing…</div>';
+@@ -576,7 +727,7 @@ async function batchInChunks(stmts, chunkSize = 300){
+   }
+ }
+ async function importPrices(parsed){
+-  const valid = parsed.filter(p => !p.errors.length);
++  const valid = parsed.filter(p => !p.errors.length && !(p.magnitudeWarning && !p.magnitudeResolved));
+   const stmts = valid.map(p => ({
+     sql: 'INSERT INTO security_prices (SecurityID, Price, PriceDate, Source, created_at) VALUES (?,?,?,?,?)',
+     args: [p.secId, p.price, p.priceDateIso, p.source, nowZurichString()],
+@@ -719,6 +870,7 @@ async function handleUbsFile(file){
+         timeRaw, priceDateIso: td.iso, priceDateDisplay: td.display,
+         secId: sec.secId, secName: sec.secName, matchType: sec.matchType,
+         errors, conflict: null, duplicate: false,
++        magnitudeWarning: null, magnitudeResolved: false,
+       };
+     });
+ 
+@@ -728,6 +880,7 @@ async function handleUbsFile(file){
+     ubsSort = { key: null, dir: 1 };
+     await markUbsDuplicates(parsed);
+     computeUbsConflicts(parsed);
++    await markUbsMagnitudeWarnings(parsed, master);
+     renderUbsPreview(area, parsed, master);
+   } catch (e) {
+     console.error('UBS Excel upload failed:', e);
+@@ -821,13 +974,31 @@ async function markUbsDuplicates(parsed){
+   });
+ }
+ 
++// Recomputes the ~100x/1/100x price-magnitude check (see checkMagnitude
++// above) for every row that has a resolved SecurityID and a numeric price.
++// Resets any prior acknowledgment (magnitudeResolved) since the underlying
++// price or security assignment may have just changed (re-parse, dropdown
++// edit, manual price edit) and an old "confirmed" flag would otherwise
++// silently carry over to a different value.
++async function markUbsMagnitudeWarnings(parsed, master){
++  const secIds = [...new Set(parsed.filter(p => p.secId).map(p => p.secId))];
++  if (secIds.length) await ensureLastPrices(secIds);
++  parsed.forEach(p => {
++    p.magnitudeResolved = false;
++    if (!p.secId || p.price === null) { p.magnitudeWarning = null; return; }
++    const currency = (master.find(m => m.SecurityID === p.secId) || {}).Currency;
++    p.magnitudeWarning = checkMagnitude(p.secId, p.price, currency);
++  });
++}
++
+ // Sort order when sorting by Status: problems first, then skipped, then ok.
+-const UBS_STATUS_ORDER = { err: 0, unmatched: 1, conflict: 2, skip: 3, ok: 4 };
++const UBS_STATUS_ORDER = { err: 0, unmatched: 1, conflict: 2, warn: 3, skip: 4, ok: 5 };
+ 
+ function ubsRowStatus(p){
+   if (p.errors.length) return 'err';
+   if (!p.secId) return 'unmatched';
+   if (p.conflict) return 'conflict';
++  if (p.magnitudeWarning && !p.magnitudeResolved) return 'warn';
+   if (p.duplicate) return 'skip';
+   return 'ok';
+ }
+@@ -837,11 +1008,12 @@ function renderUbsPreview(area, parsed, master){
+   const optionsFor = (selectedId) => '<option value="">— wählen —</option>' +
+     sortedMaster.map(m => `<option value="${m.SecurityID}" ${String(m.SecurityID) === String(selectedId) ? 'selected' : ''}>${m.SecurityName}</option>`).join('');
+ 
+-  const counts = { ok: 0, err: 0, unmatched: 0, conflict: 0, skip: 0 };
++  const counts = { ok: 0, err: 0, unmatched: 0, conflict: 0, warn: 0, skip: 0 };
+   parsed.forEach(p => counts[ubsRowStatus(p)]++);
+   const summary = `${parsed.length} Zeilen · <span class="good">${counts.ok} bereit</span>` +
+     (counts.unmatched ? ` · <span class="bad">${counts.unmatched} ohne Zuordnung</span>` : '') +
+     (counts.conflict ? ` · <span class="bad">${counts.conflict} Konflikt(e)</span>` : '') +
++    (counts.warn ? ` · <span class="bad">${counts.warn} Kurssprung-Warnung(en) (zu bestätigen)</span>` : '') +
+     (counts.err ? ` · <span class="bad">${counts.err} mit Fehler</span>` : '') +
+     (counts.skip ? ` · ${counts.skip} bereits vorhanden (übersprungen)` : '');
+ 
+@@ -853,9 +1025,13 @@ function renderUbsPreview(area, parsed, master){
+     const matchBadge = p.matchType === 'auto' ? ' <span title="automatisch per Namen erkannt, wird gelernt">🔎</span>'
+       : p.matchType === 'mapping' ? ' <span title="gelerntes Matching">✓</span>' : '';
+     const secCell = `<select data-i="${i}" class="ubs-sec-select">${optionsFor(p.secId)}</select>${p.secId ? matchBadge : ''}`;
+-    const priceCell = p.price !== null
+-      ? fmtDecimal(p.price, 4)
+-      : `<input type="text" data-i="${i}" class="ubs-price-input" value="${p.priceRaw ?? ''}" placeholder="Kurs">`;
++    const priceCell = status === 'warn'
++      ? `${fmtDecimal(p.price, 4)}
++         <button type="button" class="mag-btn mag-fix" data-i="${i}">${p.magnitudeWarning.factor === 100 ? '÷100' : '×100'} → ${fmtDecimal(p.magnitudeWarning.suggested, 4)}</button>
++         <button type="button" class="mag-btn mag-accept" data-i="${i}">✓ so übernehmen</button>`
++      : (p.price !== null
++          ? fmtDecimal(p.price, 4)
++          : `<input type="text" data-i="${i}" class="ubs-price-input" value="${p.priceRaw ?? ''}" placeholder="Kurs">`);
+     const dateCell = p.priceDateIso
+       ? p.priceDateDisplay
+       : `<input type="text" data-i="${i}" class="ubs-time-input" value="" placeholder="hh:mm oder dd.mm.yyyy">`;
+@@ -863,10 +1039,11 @@ function renderUbsPreview(area, parsed, master){
+       ok: '<td class="status-ok">OK</td>',
+       unmatched: '<td class="status-err">Kein Match</td>',
+       conflict: `<td class="status-err">${p.conflict}</td>`,
++      warn: `<td class="status-warn">${magnitudeLabel(p.magnitudeWarning)}</td>`,
+       err: `<td class="status-err">${p.errors.join('; ')}</td>`,
+       skip: '<td class="status-skip">Bereits vorhanden</td>',
+     }[status];
+-    return `<tr class="${status === 'err' || status === 'unmatched' || status === 'conflict' ? 'row-error' : (status === 'skip' ? 'row-skip' : '')}">
++    return `<tr class="${status === 'err' || status === 'unmatched' || status === 'conflict' ? 'row-error' : (status === 'warn' ? 'row-warn' : (status === 'skip' ? 'row-skip' : ''))}">
+       <td>${p.sheet}</td><td>${p.excelName}</td><td>${secCell}</td><td class="num">${priceCell}</td><td>${dateCell}</td>${statusCell}
+     </tr>`;
+   }).join('');
+@@ -890,7 +1067,7 @@ function renderUbsPreview(area, parsed, master){
+     </div>
+   </div>`;
+ 
+-  const okCount = () => parsed.filter(p => !p.errors.length && p.secId && p.priceDateIso && p.price !== null && !p.duplicate && !p.conflict).length;
++  const okCount = () => parsed.filter(p => !p.errors.length && p.secId && p.priceDateIso && p.price !== null && !p.duplicate && !p.conflict && !(p.magnitudeWarning && !p.magnitudeResolved)).length;
+   const btn = area.querySelector('#ubsImportBtn');
+   btn.textContent = `Import ${okCount()} Zeile(n)`;
+   btn.disabled = okCount() === 0;
+@@ -912,6 +1089,7 @@ function renderUbsPreview(area, parsed, master){
+       p.secId = secId; p.secName = m ? m.SecurityName : ''; p.matchType = secId ? 'manual' : 'unmatched';
+       await markUbsDuplicates(parsed);
+       computeUbsConflicts(parsed);
++      await markUbsMagnitudeWarnings(parsed, master);
+       renderUbsPreview(area, parsed, master);
+     });
+   });
+@@ -924,6 +1102,22 @@ function renderUbsPreview(area, parsed, master){
+       p.errors = p.errors.filter(e => !e.startsWith('Kein Kurs'));
+       await markUbsDuplicates(parsed);
+       computeUbsConflicts(parsed);
++      await markUbsMagnitudeWarnings(parsed, master);
++      renderUbsPreview(area, parsed, master);
++    });
++  });
++  area.querySelectorAll('.mag-fix').forEach(btn => {
++    btn.addEventListener('click', () => {
++      const p = parsed[Number(btn.dataset.i)];
++      p.price = p.magnitudeWarning.suggested;
++      p.magnitudeResolved = true;
++      renderUbsPreview(area, parsed, master);
++    });
++  });
++  area.querySelectorAll('.mag-accept').forEach(btn => {
++    btn.addEventListener('click', () => {
++      const p = parsed[Number(btn.dataset.i)];
++      p.magnitudeResolved = true;
+       renderUbsPreview(area, parsed, master);
+     });
+   });
+@@ -956,7 +1150,7 @@ function renderUbsPreview(area, parsed, master){
+ }
+ 
+ async function importUbsQuotes(parsed){
+-  const valid = parsed.filter(p => !p.errors.length && p.secId && p.priceDateIso && p.price !== null && !p.duplicate && !p.conflict);
++  const valid = parsed.filter(p => !p.errors.length && p.secId && p.priceDateIso && p.price !== null && !p.duplicate && !p.conflict && !(p.magnitudeWarning && !p.magnitudeResolved));
+   const now = nowZurichString();
+   const priceStmts = valid.map(p => ({
+     sql: 'INSERT INTO security_prices (SecurityID, Price, PriceDate, Source, created_at) VALUES (?,?,?,?,?)',
