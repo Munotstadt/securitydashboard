@@ -38,9 +38,13 @@
   button:disabled, a.disabled{opacity:.4;cursor:not-allowed;pointer-events:none;}
   .count-line{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin:0 0 14px;}
   table{width:100%;border-collapse:collapse;font-size:13px;}
-  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);background:var(--panel);}
-  td{padding:6px;border-bottom:1px solid var(--line);vertical-align:middle;}
-  td input, td select{width:100%;}
+  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);background:var(--panel);cursor:pointer;user-select:none;white-space:nowrap;}
+  th:hover{color:var(--text);}
+  th[data-sort]::after{content:'';display:inline-block;width:0;height:0;margin-left:4px;vertical-align:middle;border-left:4px solid transparent;border-right:4px solid transparent;}
+  th.sorted-asc::after{border-bottom:5px solid var(--accent);}
+  th.sorted-desc::after{border-top:5px solid var(--accent);}
+  td{padding:3px 6px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  td input, td select{width:100%;padding:5px 7px;}
   .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;}
   .status.error{color:#C0293D;} .status.ok{color:#1F8A6E;}
   .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin-bottom:16px;display:none;gap:8px;}
@@ -103,13 +107,12 @@
 <div class="wrap">
   <h1>Security Distributions · Editor</h1>
   <div class="toolbar">
-    <select id="filterSecurity"><option value="">All securities…</option></select>
+    <select id="filterSecurity"><option value="">Security wählen…</option></select>
     <a id="linkSecurityForm" class="disabled"><button disabled id="btnSecurityForm">📈 View Security</button></a>
     <a id="linkPrices" class="disabled"><button disabled id="btnPrices">✏️ View Prices</button></a>
-    <button id="addBtn">+ New Distribution</button>
+    <button id="addBtn" disabled>+ New Distribution</button>
     <button id="saveBtn" class="primary">Save</button>
   </div>
-  <div class="count-line" id="countLine">Loading…</div>
   <div class="settings" id="settingsPanel">
     <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
       <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="https://…turso.io"></div>
@@ -119,7 +122,15 @@
   </div>
   <div class="table-wrap">
   <table>
-    <thead><tr><th>Security</th><th>Amount</th><th>Currency</th><th>ExDate</th><th>PayDate</th><th>Source</th><th></th></tr></thead>
+    <thead><tr>
+      <th>Security</th>
+      <th data-sort="DistributionAmount">Amount</th>
+      <th>Currency</th>
+      <th data-sort="ExDate">ExDate</th>
+      <th data-sort="PayDate">PayDate</th>
+      <th data-sort="Source">Source</th>
+      <th></th>
+    </tr></thead>
     <tbody id="body"><tr><td colspan="7">Loading…</td></tr></tbody>
   </table>
   </div>
@@ -200,6 +211,8 @@ if (typeof ensureAssetComparisonSchema === 'undefined') {
 let rows = [];
 let masterRows = [];
 let deleteQueue = [];
+let sortKey = 'ExDate';
+let sortDir = 'desc';
 const CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD'];
 
 function secOptions(selected) {
@@ -232,14 +245,34 @@ function updateSelectionLinks(secId) {
     btnSecurityForm.disabled = true; btnPrices.disabled = true;
   }
 }
+function sortValue(r, key){
+  if(key === 'DistributionAmount') return parseFloat(r.DistributionAmount) || 0;
+  if(key === 'ExDate' || key === 'PayDate') return parseSwissDate(r[key]) || new Date(0);
+  return (r[key] || '').toString().toLowerCase();
+}
+function updateSortHeaders(){
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.classList.toggle('sorted-asc', th.dataset.sort === sortKey && sortDir === 'asc');
+    th.classList.toggle('sorted-desc', th.dataset.sort === sortKey && sortDir === 'desc');
+  });
+}
 function renderAll(filterSecId='') {
   const body = document.getElementById('body');
-  const filtered = rows.map((r,i)=>({r,i}))
-    .filter(({r}) => !filterSecId || String(r.SecurityID) === String(filterSecId))
-    .sort((a,b) => (parseSwissDate(b.r.ExDate)||0) - (parseSwissDate(a.r.ExDate)||0));
-
-  document.getElementById('countLine').textContent = `Total ${rows.length} · ${filtered.length} ausgewählt`;
   updateSelectionLinks(filterSecId);
+  document.getElementById('addBtn').disabled = !filterSecId;
+
+  if (!filterSecId) {
+    body.innerHTML = '<tr><td colspan="7">Bitte oben zuerst eine Security auswählen.</td></tr>';
+    return;
+  }
+
+  const filtered = rows.map((r,i)=>({r,i}))
+    .filter(({r}) => String(r.SecurityID) === String(filterSecId))
+    .sort((a,b) => {
+      const va = sortValue(a.r, sortKey), vb = sortValue(b.r, sortKey);
+      let cmp = (typeof va === 'string') ? va.localeCompare(vb) : (va - vb);
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
 
   body.innerHTML = filtered.length ? filtered.map(({r,i}) => renderRow(r,i)).join('') : '<tr><td colspan="7">No entries.</td></tr>';
 
@@ -265,6 +298,17 @@ function renderAll(filterSecId='') {
   });
 }
 
+document.querySelectorAll('th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    if(sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    else { sortKey = key; sortDir = 'asc'; }
+    updateSortHeaders();
+    renderAll(document.getElementById('filterSecurity').value);
+  });
+});
+updateSortHeaders();
+
 async function load() {
   if (!tursoConfigured()) {
     document.getElementById('body').innerHTML = `<tr><td colspan="7">Bitte ⚙ Repo/Token setzen.</td></tr>`;
@@ -276,16 +320,23 @@ async function load() {
       tursoQuery('SELECT id, SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source FROM security_distributions'),
       tursoQuery('SELECT SecurityID, SecurityName, Currency FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC', [], 3600000),
     ]);
-    rows = distRows.map(r => ({ ...r, _dirty:false, _new:false }));
+    // DB stores ISO (yyyy-mm-dd); display as Swiss (dd.mm.yyyy) in the editor,
+    // matching the input placeholders and how dates are shown everywhere else.
+    rows = distRows.map(r => ({
+      ...r,
+      ExDate: r.ExDate ? toSwissDate(parseSwissDate(r.ExDate)) : '',
+      PayDate: r.PayDate ? toSwissDate(parseSwissDate(r.PayDate)) : '',
+      _dirty:false, _new:false,
+    }));
     masterRows = master;
     deleteQueue = [];
 
     const sel = document.getElementById('filterSecurity');
-    sel.innerHTML = '<option value="">All securities…</option>' + secOptions('');
+    sel.innerHTML = '<option value="">Security wählen…</option>' + secOptions('');
 
     const urlId = new URLSearchParams(location.search).get('id');
     if (urlId && masterRows.some(m => String(m.SecurityID) === urlId)) { sel.value = urlId; renderAll(urlId); }
-    else renderAll();
+    else renderAll(''); // require an explicit security selection before showing entries
     setStatus(`${rows.length} distribution entries geladen.`, 'ok');
     if (new URLSearchParams(location.search).get('add') === '1') { document.getElementById('addBtn').click(); }
   } catch (e) {
