@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Security Parameters - Editor</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613; }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:32px 16px 80px;display:flex;flex-direction:column;align-items:center;}
+  .topnav{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;align-items:center;max-width:960px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;scrollbar-width:none;}
+  .topnav::-webkit-scrollbar{display:none;}
+  .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
+  .topnav a:hover{color:var(--text);border-color:var(--line);}
+  .nav-dropdown{position:relative;}
+  .nav-dropdown>.dd-toggle{background:none;color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:12px;cursor:pointer;}
+  .nav-dropdown>.dd-toggle:hover,.nav-dropdown.open>.dd-toggle{color:var(--text);border-color:var(--line);}
+  .nav-dropdown.active-group>.dd-toggle{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
+  .dd-menu{position:fixed;background:#fff;border:1px solid var(--line);border-radius:4px;min-width:180px;display:none;flex-direction:column;box-shadow:0 6px 16px rgba(0,0,0,.09);z-index:1000;padding:4px;}
+  .dd-menu.show{display:flex;}
+  .dd-menu a{padding:8px 10px;border-radius:3px;color:var(--muted);text-decoration:none;white-space:nowrap;font-family:"IBM Plex Mono",monospace;font-size:12px;}
+  .dd-menu a:hover{background:var(--panel);color:var(--text);}
+  .dd-menu a.active{color:var(--text);font-weight:600;background:rgba(227,6,19,0.06);}
+  .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
+  .wrap{max-width:1100px;width:100%;}
+  h1{font-family:'Space Grotesk',sans-serif;font-size:20px;text-transform:uppercase;letter-spacing:.02em;border-bottom:2px solid var(--accent);padding-bottom:14px;}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 8px;}
+  input[type=text], select, input[type=number]{font-family:'Inter',sans-serif;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);outline:none;}
+  #filterGroup{min-width:240px;}
+  #searchBox{min-width:200px;}
+  button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--line);background:none;cursor:pointer;color:var(--text);}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
+  button:hover{border-color:var(--text);}
+  button:disabled, a.disabled{opacity:.4;cursor:not-allowed;pointer-events:none;}
+  .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;}
+  .improvement-input{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);background:#fff;border:1px solid var(--line);border-radius:3px;padding:6px 10px;min-width:200px;vertical-align:middle;}
+  .improvement-input::placeholder{color:var(--muted);}
+  #improvementSaveBtn{font-family:'IBM Plex Mono',monospace;font-size:12px;}
+  .count-line{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin:0 0 14px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:1;}
+  td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  td.id-col, th.id-col{position:sticky;left:0;background:#fff;z-index:1;}
+  th.id-col{background:var(--panel);z-index:2;}
+  td.id-col{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);white-space:nowrap;}
+  td input, td select{width:100%;padding:6px 8px;font-size:13px;}
+  .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;}
+  .status.error{color:#C0293D;} .status.ok{color:#1F8A6E;}
+  .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin-bottom:16px;display:none;gap:8px;}
+  .settings.show{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;}
+  .settings label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
+  .table-wrap{overflow-x:auto;max-height:66vh;overflow-y:auto;border:1px solid var(--line);border-radius:4px;}
+  tr.row-new td{background:rgba(31,138,110,0.06);}
+</style>
+</head>
+<body>
+<nav class="topnav">
+  <a href="index.html">🏠 Home</a>
+  <a href="dashboard.html">📊 Dashboard</a>
+  <a href="listing.html">📃 Listing</a>
+  <a href="portfolio.html">💼 Portfolio</a>
+  <a href="analyser.html">🔬 Analyser</a>
+  <a href="asset_comparison.html">🆚 Comparison</a>
+  <a href="tasks.html">✅ Tasks</a>
+  <div class="nav-dropdown active-group" id="editorsDropdown">
+    <button type="button" class="dd-toggle" id="editorsToggle">🗂 Editors ▾</button>
+    <div class="dd-menu" id="editorsMenu">
+      <a href="master_editor.html">🗂 Master Data</a>
+      <a href="price_editor.html">✏️ Prices</a>
+      <a href="transactions_editor.html">📋 Transactions</a>
+      <a href="distribution_editor.html">💰 Distributions</a>
+      <a href="parameters_editor.html" class="active">🏷 Parameters</a>
+      <a href="security_data.html">🔎 Security Data</a>
+      <a href="admin.html">⚙️ Admin</a>
+    </div>
+  </div>
+</nav>
+<script>
+(function(){
+  var dd = document.getElementById('editorsDropdown');
+  if(!dd) return;
+  var toggle = document.getElementById('editorsToggle');
+  var menu = document.getElementById('editorsMenu');
+  document.body.appendChild(menu);
+  function positionMenu(){
+    var r = toggle.getBoundingClientRect();
+    menu.style.top = (r.bottom + 4) + 'px';
+    menu.style.left = r.left + 'px';
+  }
+  function closeMenu(){ dd.classList.remove('open'); menu.classList.remove('show'); }
+  function openMenu(){ positionMenu(); dd.classList.add('open'); menu.classList.add('show'); }
+  toggle.addEventListener('click', function(e){
+    e.stopPropagation();
+    if(menu.classList.contains('show')) closeMenu(); else openMenu();
+  });
+  document.addEventListener('click', function(e){
+    if(!dd.contains(e.target) && !menu.contains(e.target)) closeMenu();
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') closeMenu();
+  });
+  window.addEventListener('resize', function(){ if(menu.classList.contains('show')) positionMenu(); });
+  window.addEventListener('scroll', function(){ if(menu.classList.contains('show')) positionMenu(); }, true);
+})();
+</script>
+<div class="wrap">
+  <h1>Security Parameters · Editor</h1>
+  <div class="toolbar">
+    <select id="filterGroup"><option value="">All groups…</option></select>
+    <input type="text" id="searchBox" placeholder="Search name/field…">
+    <button id="addBtn">+ New Parameter</button>
+    <button id="saveBtn" class="primary">Save</button>
+  </div>
+  <div class="count-line" id="countLine">Loading…</div>
+  <div class="settings" id="settingsPanel">
+    <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
+      <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="https://…turso.io"></div>
+      <div><label>Auth Token</label><input type="password" id="cfgToken" name="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…"></div>
+      <div style="align-self:end;"><button id="cfgSave" type="submit" class="primary">Apply</button></div>
+    </form>
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th class="id-col">ID</th><th>Table</th><th>Field</th><th>Parameter Name</th><th></th></tr></thead>
+    <tbody id="body"><tr><td colspan="5">Loading…</td></tr></tbody>
+  </table>
+  </div>
+  <div class="status" id="status"></div>
+
+  <div class="footer">
+    <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
+    <button type="button" id="improvementSaveBtn">💡 Save</button>
+    <button id="settingsBtn">⚙ Repo/Token</button>
+  </div>
+</div>
+
+<datalist id="paraTableOptions"></datalist>
+<datalist id="paraFieldOptions"></datalist>
+
+<script src="assets/turso-data.js"></script>
+<script>
+let rows = [];       // {ParameterID, ParaTable, ParaField, ParameterName, _dirty, _new}
+let deleteQueue = [];
+
+function groupKey(r) { return `${r.ParaTable}\u0001${r.ParaField}`; }
+function groupLabel(r) { return `${r.ParaTable} · ${r.ParaField}`; }
+
+function distinctGroups() {
+  const map = new Map();
+  rows.forEach(r => {
+    if (!r.ParaTable && !r.ParaField) return;
+    map.set(groupKey(r), { ParaTable: r.ParaTable, ParaField: r.ParaField });
+  });
+  return [...map.values()].sort((a,b) => groupLabel(a).localeCompare(groupLabel(b)));
+}
+
+function populateGroupFilter(selected) {
+  const sel = document.getElementById('filterGroup');
+  const groups = distinctGroups();
+  sel.innerHTML = '<option value="">All groups…</option>' + groups.map(g =>
+    `<option value="${groupKey(g)}" ${groupKey(g)===selected?'selected':''}>${groupLabel(g)}</option>`
+  ).join('');
+}
+
+function populateDatalists() {
+  const tables = [...new Set(rows.map(r => r.ParaTable).filter(Boolean))].sort();
+  const fields = [...new Set(rows.map(r => r.ParaField).filter(Boolean))].sort();
+  document.getElementById('paraTableOptions').innerHTML = tables.map(t => `<option value="${t}">`).join('');
+  document.getElementById('paraFieldOptions').innerHTML = fields.map(f => `<option value="${f}">`).join('');
+}
+
+function renderRow(row, idx) {
+  return `<tr data-idx="${idx}" class="${row._new ? 'row-new' : ''}">
+    <td class="id-col">${row.ParameterID ?? '(neu)'}</td>
+    <td><input type="text" data-field="ParaTable" list="paraTableOptions" value="${row.ParaTable||''}" style="width:150px"></td>
+    <td><input type="text" data-field="ParaField" list="paraFieldOptions" value="${row.ParaField||''}" style="width:150px"></td>
+    <td><input type="text" data-field="ParameterName" value="${row.ParameterName||''}"></td>
+    <td><button data-del="${idx}" title="Delete">✕</button></td>
+  </tr>`;
+}
+
+function renderAll() {
+  const filterGroup = document.getElementById('filterGroup').value;
+  const search = document.getElementById('searchBox').value.trim().toLowerCase();
+
+  const filtered = rows.map((r,i) => ({r,i}))
+    .filter(({r}) => !filterGroup || groupKey(r) === filterGroup)
+    .filter(({r}) => !search ||
+      (r.ParameterName||'').toLowerCase().includes(search) ||
+      (r.ParaField||'').toLowerCase().includes(search) ||
+      (r.ParaTable||'').toLowerCase().includes(search))
+    .sort((a,b) => groupLabel(a.r).localeCompare(groupLabel(b.r)) || (a.r.ParameterName||'').localeCompare(b.r.ParameterName||''));
+
+  document.getElementById('countLine').textContent = `Total ${rows.length} · ${filtered.length} angezeigt`;
+
+  const body = document.getElementById('body');
+  body.innerHTML = filtered.length ? filtered.map(({r,i}) => renderRow(r,i)).join('') : '<tr><td colspan="5">No entries.</td></tr>';
+
+  body.querySelectorAll('input').forEach(el => {
+    el.addEventListener('change', () => {
+      const idx = Number(el.closest('tr').dataset.idx);
+      rows[idx][el.dataset.field] = el.value.trim();
+      rows[idx]._dirty = true;
+    });
+  });
+  body.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.del);
+      if (!confirm('Delete this parameter?')) return;
+      if (!rows[idx]._new) deleteQueue.push(rows[idx].ParameterID);
+      rows.splice(idx,1);
+      renderAll();
+    });
+  });
+}
+
+async function load() {
+  if (!tursoConfigured()) {
+    document.getElementById('body').innerHTML = `<tr><td colspan="5">Bitte ⚙ Repo/Token setzen.</td></tr>`;
+    document.getElementById('settingsPanel').classList.add('show');
+    return;
+  }
+  try {
+    const paraRows = await tursoQuery(
+      'SELECT ParameterID, ParaTable, ParaField, ParameterName FROM security_parameter ORDER BY ParaTable COLLATE NOCASE ASC, ParaField COLLATE NOCASE ASC, ParameterName COLLATE NOCASE ASC'
+    );
+    rows = paraRows.map(r => ({ ...r, _dirty:false, _new:false }));
+    deleteQueue = [];
+
+    const groupParam = new URLSearchParams(location.search).get('group') || '';
+    populateGroupFilter(groupParam);
+    populateDatalists();
+    renderAll();
+    setStatus(`${rows.length} Parameter geladen.`, 'ok');
+  } catch (e) {
+    document.getElementById('body').innerHTML = `<tr><td colspan="5">Error: ${e.message}</td></tr>`;
+  }
+}
+function setStatus(msg, cls) { const s = document.getElementById('status'); s.textContent = msg; s.className = 'status ' + (cls||''); }
+
+document.getElementById('filterGroup').addEventListener('change', renderAll);
+document.getElementById('searchBox').addEventListener('input', renderAll);
+
+document.getElementById('addBtn').addEventListener('click', () => {
+  const filterGroup = document.getElementById('filterGroup').value;
+  let ParaTable = '', ParaField = '';
+  if (filterGroup) {
+    const [t, f] = filterGroup.split('\u0001');
+    ParaTable = t; ParaField = f;
+  }
+  rows.push({ ParameterID:null, ParaTable, ParaField, ParameterName:'', _dirty:true, _new:true });
+  renderAll();
+  const body = document.getElementById('body');
+  const lastInput = body.querySelector('tr.row-new:last-of-type [data-field="ParameterName"]');
+  if (lastInput) lastInput.focus();
+});
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  if (!tursoConfigured()) { setStatus('Bitte ⚙ Repo/Token setzen.', 'error'); document.getElementById('settingsPanel').classList.add('show'); return; }
+  for (const r of rows) {
+    if (r._dirty && (!r.ParaTable || !r.ParaField || !r.ParameterName)) {
+      setStatus('Table, Field und Parameter Name dürfen nicht leer sein.', 'error');
+      return;
+    }
+  }
+  const stmts = []; const newRowIdxs = [];
+  rows.forEach((r,i) => {
+    if (!r._dirty) return;
+    if (r._new) {
+      stmts.push({ sql:`INSERT INTO security_parameter (ParaTable, ParaField, ParameterName) VALUES (?,?,?)`,
+        args:[r.ParaTable, r.ParaField, r.ParameterName] });
+      newRowIdxs.push(i);
+    } else {
+      stmts.push({ sql:`UPDATE security_parameter SET ParaTable=?, ParaField=?, ParameterName=? WHERE ParameterID=?`,
+        args:[r.ParaTable, r.ParaField, r.ParameterName, r.ParameterID] });
+    }
+  });
+  for (const id of deleteQueue) stmts.push({ sql:`DELETE FROM security_parameter WHERE ParameterID=?`, args:[id] });
+
+  if (!stmts.length) { setStatus('Keine Änderungen.', 'ok'); return; }
+  try {
+    setStatus('Speichere…');
+    const results = await tursoBatch(stmts);
+    let seen = 0;
+    for (let ri=0; ri<stmts.length; ri++) {
+      if (stmts[ri].sql.startsWith('INSERT')) { rows[newRowIdxs[seen++]].ParameterID = results[ri].lastInsertRowid; rows[newRowIdxs[seen-1]]._new = false; }
+    }
+    rows.forEach(r => r._dirty=false);
+    deleteQueue = [];
+    populateGroupFilter(document.getElementById('filterGroup').value);
+    populateDatalists();
+    renderAll();
+    setStatus('Gespeichert ✓ ' + nowZurichString(), 'ok');
+  } catch (e) { setStatus('Fehler beim Speichern: ' + e.message, 'error'); }
+});
+
+document.getElementById('settingsBtn').addEventListener('click', () => {
+  document.getElementById('cfgUrl').value = TURSO.url;
+  document.getElementById('cfgToken').value = TURSO.token;
+  document.getElementById('settingsPanel').classList.toggle('show');
+});
+document.getElementById('cfgSave').addEventListener('click', () => {
+  tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
+  document.getElementById('settingsPanel').classList.remove('show');
+  load();
+});
+
+load();
+
+// ============ Improvement quick-capture (footer) ============
+(function(){
+  var btn = document.getElementById('improvementSaveBtn');
+  if(!btn) return;
+  btn.addEventListener('click', async function(){
+    var input = document.getElementById('improvementInput');
+    var text = input.value.trim();
+    if(!text){ return; }
+    if(!tursoConfigured()){ alert('Bitte zuerst ⚙ Repo/Token setzen.'); return; }
+    var original = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Speichere…';
+    try {
+      await ensureSecurityTasksSchema();
+      var pageName = (location.pathname.split('/').pop() || 'index.html');
+      var todayDate = (typeof nowZurichIsoDateString === 'function') ? new Date(nowZurichIsoDateString()+'T00:00:00')
+        : (typeof zurichParts === 'function' ? (function(){ var p = zurichParts(new Date()); return new Date(p.year+'-'+p.month+'-'+p.day+'T00:00:00'); })() : new Date());
+      var due = new Date(todayDate); due.setDate(due.getDate()+10);
+      var dueIso = due.toISOString().slice(0,10);
+      var nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
+      await tursoRun(
+        `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
+        ['Improvement ' + pageName, text, null, dueIso, 'n/a', 140, nowIso]
+      );
+      input.value = '';
+      alert('Improvement-Task erstellt (fällig ' + dueIso.split('-').reverse().join('.') + ').');
+    } catch(e) {
+      alert('Fehler: ' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = original;
+    }
+  });
+})();
+</script>
+</body>
+</html>
