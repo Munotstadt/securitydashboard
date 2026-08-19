@@ -120,6 +120,7 @@
       <div style="align-self:end;"><button id="cfgSave" type="submit" class="primary">Apply</button></div>
     </form>
   </div>
+  <div class="count-line" id="countLine"></div>
   <div class="table-wrap">
   <table>
     <thead><tr>
@@ -258,11 +259,13 @@ function updateSortHeaders(){
 }
 function renderAll(filterSecId='') {
   const body = document.getElementById('body');
+  const countLine = document.getElementById('countLine');
   updateSelectionLinks(filterSecId);
   document.getElementById('addBtn').disabled = !filterSecId;
 
   if (!filterSecId) {
     body.innerHTML = '<tr><td colspan="7">Bitte oben zuerst eine Security auswählen.</td></tr>';
+    countLine.textContent = `Total ${rows.length} Einträge`;
     return;
   }
 
@@ -274,6 +277,7 @@ function renderAll(filterSecId='') {
       return sortDir === 'asc' ? cmp : -cmp;
     });
 
+  countLine.textContent = `Total ${filtered.length} von ${rows.length} ausgewählt`;
   body.innerHTML = filtered.length ? filtered.map(({r,i}) => renderRow(r,i)).join('') : '<tr><td colspan="7">No entries.</td></tr>';
 
   body.querySelectorAll('input, select').forEach(el => {
