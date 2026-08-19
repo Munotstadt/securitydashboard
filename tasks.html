@@ -343,6 +343,23 @@ function nextDueDate(currentDue, recurring){
   return currentDue;
 }
 
+const QC_TASKTYPE_ID = 139;
+// Security Quality Check tasks always roll forward on completion, even when
+// Recurring is "n/a" - default to 2 years out, or the task's own Recurring
+// interval if that's shorter (Annually/Month End).
+function nextDueDateForTask(task){
+  const isQualityCheck = String(task.TaskTypeID) === String(QC_TASKTYPE_ID);
+  if(task.Recurring && task.Recurring !== 'n/a'){
+    return { next: nextDueDate(task.DateDue, task.Recurring), rollsForward: true };
+  }
+  if(isQualityCheck){
+    const t = new Date(todayIso() + 'T00:00:00');
+    t.setFullYear(t.getFullYear() + 2);
+    return { next: t.toISOString().slice(0,10), rollsForward: true };
+  }
+  return { next: task.DateDue, rollsForward: false };
+}
+
 function securityName(secId){
   if(!secId) return null;
   const m = masterAll.find(x => String(x.SecurityID) === String(secId));
@@ -580,6 +597,11 @@ async function toggleComplete(taskId){
         // Recurring task: roll the due date forward instead of leaving it marked done.
         const next = nextDueDate(task.DateDue, task.Recurring);
         await tursoRun('UPDATE security_tasks SET DateDue = ?, Completed = 0, CompletedAt = ? WHERE TaskID = ?', [next, now, taskId]);
+      } else if(String(task.TaskTypeID) === String(QC_TASKTYPE_ID)){
+        // Security Quality Check: always roll forward (2 years, or shorter
+        // per Recurring) instead of leaving it permanently completed.
+        const { next } = nextDueDateForTask(task);
+        await tursoRun('UPDATE security_tasks SET DateDue = ?, Completed = 0, CompletedAt = ? WHERE TaskID = ?', [next, now, taskId]);
       } else {
         await tursoRun('UPDATE security_tasks SET Completed = 1, CompletedAt = ? WHERE TaskID = ?', [now, taskId]);
       }
@@ -719,36 +741,75 @@ document.getElementById('qualityCheckBtn').addEventListener('click', async () =>
   const originalText = btn.textContent;
   btn.disabled = true; btn.textContent = 'Prüfe…';
   try {
-    const QC_STATUS_ID = 136;
     const QC_TASKTYPE_ID = 139;
     const QC_TASK_NAME = 'Security Quality Check';
 
-    const activeSecurities = await tursoQuery('SELECT SecurityID FROM security_master WHERE Status = ?', [QC_STATUS_ID], 0);
+    const allSecurities = await tursoQuery('SELECT SecurityID, Status FROM security_master', [], 0);
+    const activeSecurities = allSecurities.filter(s => s.Status === 136);
+    const pendingSecurities = allSecurities.filter(s => s.Status === null || s.Status === undefined);
+    const inactiveTerminatedSecurities = allSecurities.filter(s => s.Status === 137 || s.Status === 138);
+
     const existingTasks = await tursoQuery(
-      'SELECT SecurityID, DateDue FROM security_tasks WHERE TaskTypeID = ? AND TaskName = ?',
+      'SELECT TaskID, SecurityID, DateDue, Completed, TaskDescription FROM security_tasks WHERE TaskTypeID = ? AND TaskName = ?',
       [QC_TASKTYPE_ID, QC_TASK_NAME], 0
     );
-
-    const today = todayIso();
-    const windowEnd = (() => { const d = new Date(today + 'T00:00:00'); d.setFullYear(d.getFullYear() + 2); return d.toISOString().slice(0,10); })();
-    const nextDue = (() => { const d = new Date(today + 'T00:00:00'); d.setFullYear(d.getFullYear() + 1); return d.toISOString().slice(0,10); })();
-
-    const coveredSecIds = new Set();
+    // Only OPEN tasks count as "covering" the check window - a completed task
+    // (whose DateDue may be stale) shouldn't suppress creating a fresh one.
+    const openTasksBySec = new Map();
     for(const t of existingTasks){
-      if(t.DateDue && t.DateDue >= today && t.DateDue <= windowEnd) coveredSecIds.add(String(t.SecurityID));
+      if(t.Completed) continue;
+      if(!openTasksBySec.has(String(t.SecurityID))) openTasksBySec.set(String(t.SecurityID), []);
+      openTasksBySec.get(String(t.SecurityID)).push(t);
     }
 
-    const missing = activeSecurities.filter(s => !coveredSecIds.has(String(s.SecurityID)));
-    let createdCount = 0;
-    if(missing.length){
-      const nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
-      for(const s of missing){
+    const today = todayIso();
+    const addPeriod = (isoDate, unit, amount) => {
+      const d = new Date(isoDate + 'T00:00:00');
+      if(unit === 'years') d.setFullYear(d.getFullYear() + amount);
+      else if(unit === 'months') d.setMonth(d.getMonth() + amount);
+      else d.setDate(d.getDate() + amount);
+      return d.toISOString().slice(0,10);
+    };
+    const nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
+
+    async function ensureCovered(securities, windowUnit, windowAmount, dueUnit, dueAmount, recurring){
+      const windowEnd = addPeriod(today, windowUnit, windowAmount);
+      const dueDate = addPeriod(today, dueUnit, dueAmount);
+      let created = 0;
+      for(const s of securities){
+        const openTasks = openTasksBySec.get(String(s.SecurityID)) || [];
+        const covered = openTasks.some(t => t.DateDue && t.DateDue >= today && t.DateDue <= windowEnd);
+        if(covered) continue;
         await tursoRun(
           `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
-          [QC_TASK_NAME, null, s.SecurityID, nextDue, 'Annually', QC_TASKTYPE_ID, nowIso]
+          [QC_TASK_NAME, null, s.SecurityID, dueDate, recurring, QC_TASKTYPE_ID, nowIso]
         );
+        created++;
       }
-      createdCount = missing.length;
+      return { created, dueDate };
+    }
+
+    // 1) Active (Status 136): must have an open check due within the next 2 years.
+    const { created: createdActive, dueDate: nextDueActive } = await ensureCovered(activeSecurities, 'years', 2, 'years', 1, 'Annually');
+
+    // 2) Pending (Status NULL): must have an open check due within the next 2 months.
+    const { created: createdPending, dueDate: nextDuePending } = await ensureCovered(pendingSecurities, 'months', 2, 'months', 1, 'n/a');
+
+    // 3) Inactive/Terminated (Status 137/138): auto-complete any still-open
+    // check - it no longer needs following up - and note why in the task.
+    let autoCompletedCount = 0;
+    for(const s of inactiveTerminatedSecurities){
+      const openTasks = openTasksBySec.get(String(s.SecurityID)) || [];
+      for(const t of openTasks){
+        const note = 'Comment: inactive/terminated security';
+        const newDescription = t.TaskDescription ? `${t.TaskDescription} · ${note}` : note;
+        await tursoRun('UPDATE security_tasks SET Completed = 1, CompletedAt = ?, TaskDescription = ? WHERE TaskID = ?', [nowIso, newDescription, t.TaskID]);
+        await tursoRun(
+          'INSERT INTO security_task_completions (TaskID, TaskName, SecurityID, DateDue, CompletedAt) VALUES (?,?,?,?,?)',
+          [t.TaskID, QC_TASK_NAME, s.SecurityID, t.DateDue, nowIso]
+        );
+        autoCompletedCount++;
+      }
     }
 
     // Dividend-cut check: for Active securities where the last 12 months of
@@ -776,9 +837,6 @@ document.getElementById('qualityCheckBtn').addEventListener('click', async () =>
       const oneYearAgo = new Date(todayDate); oneYearAgo.setDate(oneYearAgo.getDate() - 365);
       const twoYearsAgo = new Date(todayDate); twoYearsAgo.setDate(twoYearsAgo.getDate() - 730);
 
-      const existingBySec = new Map(existingTasks.map(t => [String(t.SecurityID), t]));
-      const nowIso2 = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
-
       for(const s of activeSecurities){
         const dists = distBySec.get(s.SecurityID) || [];
         const dist12m = dists.filter(d => d.exDate > oneYearAgo && d.exDate <= todayDate).reduce((sum,d) => sum + d.amount, 0);
@@ -786,31 +844,35 @@ document.getElementById('qualityCheckBtn').addEventListener('click', async () =>
         const isFullCut = dist12mPrior > 0 && dist12m === 0;
         if(!isFullCut) continue;
 
-        const existing = existingBySec.get(String(s.SecurityID));
+        const openTasks = openTasksBySec.get(String(s.SecurityID)) || [];
+        const existing = openTasks[0];
         if(existing && existing.DateDue && existing.DateDue <= urgentDue) continue; // already urgent enough
 
         if(existing){
-          await tursoRun('UPDATE security_tasks SET DateDue = ? WHERE TaskTypeID = ? AND TaskName = ? AND SecurityID = ?', [urgentDue, QC_TASKTYPE_ID, QC_TASK_NAME, s.SecurityID]);
+          await tursoRun('UPDATE security_tasks SET DateDue = ? WHERE TaskID = ?', [urgentDue, existing.TaskID]);
         } else {
           await tursoRun(
             `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
-            [QC_TASK_NAME, 'Automatisch erstellt: Dividende der letzten 12 Monate ist auf 0 gefallen (YoY -100%).', s.SecurityID, urgentDue, 'Annually', QC_TASKTYPE_ID, nowIso2]
+            [QC_TASK_NAME, 'Automatisch erstellt: Dividende der letzten 12 Monate ist auf 0 gefallen (YoY -100%).', s.SecurityID, urgentDue, 'Annually', QC_TASKTYPE_ID, nowIso]
           );
         }
         tightenedCount++;
       }
     }
 
-    if(!createdCount && !tightenedCount){
-      alert('Alle aktiven Securities (Status 136) haben bereits einen "Security Quality Check" Task mit Fälligkeit in den nächsten 2 Jahren, und keine Dividenden-Vollkürzung wurde festgestellt.');
+    const totalCreated = createdActive + createdPending;
+    if(!totalCreated && !tightenedCount && !autoCompletedCount){
+      alert('Keine Änderungen nötig: alle Securities sind bereits korrekt abgedeckt.');
       return;
     }
 
     tursoClearCache();
     await load();
     const parts = [];
-    if(createdCount) parts.push(`${createdCount} neue Task(s) erstellt (Fälligkeit: ${fmtDdMmYyyy(nextDue)})`);
+    if(createdActive) parts.push(`${createdActive} neue Task(s) für aktive Securities (Fälligkeit: ${fmtDdMmYyyy(nextDueActive)})`);
+    if(createdPending) parts.push(`${createdPending} neue Task(s) für Pending Securities (Fälligkeit: ${fmtDdMmYyyy(nextDuePending)})`);
     if(tightenedCount) parts.push(`${tightenedCount} Task(s) wegen Dividenden-Vollkürzung auf ${fmtDdMmYyyy(urgentDue)} vorgezogen`);
+    if(autoCompletedCount) parts.push(`${autoCompletedCount} Task(s) für Inactive/Terminated Securities automatisch erledigt`);
     alert(parts.join(' · ') + '.');
   } catch(e) {
     alert('Fehler beim Audit: ' + e.message);

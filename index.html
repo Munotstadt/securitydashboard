@@ -107,7 +107,6 @@
       <a href="price_editor.html">✏️ Prices</a>
       <a href="transactions_editor.html">📋 Transactions</a>
       <a href="distribution_editor.html">💰 Distributions</a>
-      <a href="parameters_editor.html">🏷 Parameters</a>
       <a href="security_data.html">🔎 Security Data</a>
       <a href="admin.html">⚙️ Admin</a>
     </div>
@@ -552,18 +551,25 @@ document.getElementById('taskTeaserWrap').addEventListener('change', async (e) =
   const nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
   cb.disabled = true;
   try {
-    const [task] = await tursoQuery('SELECT TaskID, TaskName, SecurityID, DateDue, Recurring FROM security_tasks WHERE TaskID = ?', [taskId], 0);
+    const [task] = await tursoQuery('SELECT TaskID, TaskName, SecurityID, DateDue, Recurring, TaskTypeID FROM security_tasks WHERE TaskID = ?', [taskId], 0);
     if(!task) return;
     await tursoRun(
       'INSERT INTO security_task_completions (TaskID, TaskName, SecurityID, DateDue, CompletedAt) VALUES (?,?,?,?,?)',
       [task.TaskID, task.TaskName, task.SecurityID, task.DateDue, nowIso]
     );
+    const QC_TASKTYPE_ID = 139;
+    const isQualityCheck = String(task.TaskTypeID) === String(QC_TASKTYPE_ID);
     if(task.Recurring && task.Recurring !== 'n/a'){
       const d = task.DateDue ? new Date(task.DateDue + 'T00:00:00') : new Date();
       if(task.Recurring === 'Bi-Annual'){ const t2 = new Date(); t2.setFullYear(t2.getFullYear()+2); await tursoRun('UPDATE security_tasks SET DateDue=?, Completed=0, CompletedAt=? WHERE TaskID=?', [t2.toISOString().slice(0,10), nowIso, taskId]); }
       else if(task.Recurring === 'Annually'){ d.setFullYear(d.getFullYear()+1); await tursoRun('UPDATE security_tasks SET DateDue=?, Completed=0, CompletedAt=? WHERE TaskID=?', [d.toISOString().slice(0,10), nowIso, taskId]); }
       else if(task.Recurring === 'Month End'){ const nm = new Date(d.getFullYear(), d.getMonth()+2, 0); await tursoRun('UPDATE security_tasks SET DateDue=?, Completed=0, CompletedAt=? WHERE TaskID=?', [nm.toISOString().slice(0,10), nowIso, taskId]); }
       else { await tursoRun('UPDATE security_tasks SET Completed=1, CompletedAt=? WHERE TaskID=?', [nowIso, taskId]); }
+    } else if(isQualityCheck){
+      // Security Quality Check with no explicit Recurring interval - always
+      // roll forward 2 years instead of completing permanently.
+      const t2 = new Date(); t2.setFullYear(t2.getFullYear()+2);
+      await tursoRun('UPDATE security_tasks SET DateDue=?, Completed=0, CompletedAt=? WHERE TaskID=?', [t2.toISOString().slice(0,10), nowIso, taskId]);
     } else {
       await tursoRun('UPDATE security_tasks SET Completed=1, CompletedAt=? WHERE TaskID=?', [nowIso, taskId]);
     }

@@ -1576,6 +1576,30 @@ function taskIsoToday(){
   if(typeof zurichParts === 'function'){ const p = zurichParts(new Date()); return `${p.year}-${p.month}-${p.day}`; }
   return new Date().toISOString().slice(0,10);
 }
+function taskNextDueDate(currentDue, recurring){
+  const d = currentDue ? new Date(currentDue + 'T00:00:00') : new Date();
+  if(recurring === 'Bi-Annual'){
+    const t = new Date(taskIsoToday() + 'T00:00:00');
+    t.setFullYear(t.getFullYear() + 2);
+    return t.toISOString().slice(0,10);
+  }
+  if(recurring === 'Annually'){ d.setFullYear(d.getFullYear() + 1); return d.toISOString().slice(0,10); }
+  if(recurring === 'Month End'){ const nm = new Date(d.getFullYear(), d.getMonth()+2, 0); return nm.toISOString().slice(0,10); }
+  return currentDue;
+}
+const QC_TASKTYPE_ID = 139;
+// Security Quality Check tasks always roll forward on completion, even when
+// Recurring is "n/a" - default to 2 years out, or the task's own Recurring
+// interval if that's shorter (Annually/Month End).
+function taskNextDueDateForTask(task){
+  if(task.Recurring && task.Recurring !== 'n/a') return taskNextDueDate(task.DateDue, task.Recurring);
+  if(String(task.TaskTypeID) === String(QC_TASKTYPE_ID)){
+    const t = new Date(taskIsoToday() + 'T00:00:00');
+    t.setFullYear(t.getFullYear() + 2);
+    return t.toISOString().slice(0,10);
+  }
+  return null; // no roll-forward - complete permanently
+}
 function taskDaysUntil(dateIso){
   if(!dateIso) return null;
   const d = new Date(dateIso + 'T00:00:00');
@@ -1734,7 +1758,14 @@ document.getElementById('securityTasksWrap').addEventListener('change', async (e
         'INSERT INTO security_task_completions (TaskID, TaskName, SecurityID, DateDue, CompletedAt) VALUES (?,?,?,?,?)',
         [task.TaskID, task.TaskName, task.SecurityID, task.DateDue, nowIso]
       );
-      await tursoRun('UPDATE security_tasks SET Completed = 1, CompletedAt = ? WHERE TaskID = ?', [nowIso, taskId]);
+      const next = taskNextDueDateForTask(task);
+      if(next){
+        // Recurring (or Security Quality Check) task: roll the due date
+        // forward instead of leaving it marked permanently done.
+        await tursoRun('UPDATE security_tasks SET DateDue = ?, Completed = 0, CompletedAt = ? WHERE TaskID = ?', [next, nowIso, taskId]);
+      } else {
+        await tursoRun('UPDATE security_tasks SET Completed = 1, CompletedAt = ? WHERE TaskID = ?', [nowIso, taskId]);
+      }
     } else {
       await tursoRun('UPDATE security_tasks SET Completed = 0, CompletedAt = NULL WHERE TaskID = ?', [taskId]);
     }
