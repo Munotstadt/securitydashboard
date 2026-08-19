@@ -9,7 +9,7 @@
   :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613;--gain:#1F8A6E;--loss:#C0293D; }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:40px 16px 80px;display:flex;flex-direction:column;align-items:center;}
-  .board{width:100%;max-width:1000px;}
+  .board{width:100%;max-width:1280px;}
   .eyebrow{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:2px solid var(--accent);}
   .brand h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:.02em;margin:0;}
   .brand span{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
@@ -19,9 +19,14 @@
   .search-clear-btn{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:4px 6px;line-height:1;}
   .search-clear-btn:hover{color:var(--accent);}
   table{width:100%;border-collapse:collapse;margin-top:4px;}
-  thead th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:12px 8px 8px;border-bottom:1px solid var(--line);}
+  .table-scroll{overflow-x:auto;}
+  thead th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px;border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap;user-select:none;}
+  thead th:hover{color:var(--text);}
+  thead th[data-sort]::after{content:'';display:inline-block;width:0;height:0;margin-left:4px;vertical-align:middle;border-left:4px solid transparent;border-right:4px solid transparent;}
+  thead th.sorted-asc::after{border-bottom:5px solid var(--accent);}
+  thead th.sorted-desc::after{border-top:5px solid var(--accent);}
   thead th.num{text-align:right;}
-  tbody td{padding:12px 8px;border-bottom:1px solid var(--line);font-size:14px;}
+  tbody td{padding:6px 8px;border-bottom:1px solid var(--line);font-size:13px;}
   tbody tr.section-row td{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);padding:20px 8px 6px;font-weight:600;border-bottom:1px solid var(--line);}
   .name{font-weight:500;border-left:3px solid transparent;padding-left:10px !important;}
   tr.up .name{border-left-color:var(--gain);}
@@ -49,6 +54,8 @@
   .status-pill.status-active{background:var(--gain);}
   .status-pill.status-pending{background:var(--loss);}
   .status-pill.status-inactive,.status-pill.status-terminated{background:var(--muted);}
+  .toggle-inactive-label{display:flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin:8px 0 12px;cursor:pointer;user-select:none;}
+  .toggle-inactive-label input{cursor:pointer;}
   .task-label{font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#fff;padding:2px 7px;border-radius:3px;white-space:nowrap;text-decoration:none;cursor:pointer;}
   .task-label:hover{opacity:.85;}
   .task-label.overdue{background:var(--loss);}
@@ -130,6 +137,9 @@
     <input type="text" id="search" class="search-input" placeholder="Wertschrift, Instrument, Status (Active/Pending/…) oder Task suchen…" style="margin:0;">
     <button type="button" id="searchClear" class="search-clear-btn" title="Suche löschen" style="display:none;">✕</button>
   </div>
+  <label class="toggle-inactive-label">
+    <input type="checkbox" id="showInactiveToggle"> Inactive / Terminated anzeigen
+  </label>
 
   <div class="settings" id="settingsPanel">
     <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
@@ -139,12 +149,20 @@
     </form>
   </div>
 
+  <div class="table-scroll">
   <table id="boardTable">
     <thead><tr>
-      <th>Security</th><th class="num">Last</th><th class="num">MTD</th><th class="num">YTD</th><th class="num">Zeit</th>
+      <th data-sort="name">Security</th>
+      <th data-sort="instrument">Instrument</th>
+      <th data-sort="status">Status</th>
+      <th class="num" data-sort="last">Last</th>
+      <th class="num" data-sort="mtd">MTD</th>
+      <th class="num" data-sort="ytd">YTD</th>
+      <th class="num" data-sort="time">Zeit</th>
     </tr></thead>
-    <tbody id="boardBody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+    <tbody id="boardBody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
   </table>
+  </div>
   <div class="footer">
     <span id="lastSynced">—</span>
     <span>
@@ -215,11 +233,14 @@ function isoToday(){
   return new Date().toISOString().slice(0,10);
 }
 
-let currentGroups = {};
+let allRows = [];
+let sortKey = 'name';
+let sortDir = 'asc';
+let showInactiveTerminated = false;
 
 async function load(){
   if (!tursoConfigured()) {
-    document.getElementById('boardBody').innerHTML = `<tr><td colspan="5" class="error">Bitte zuerst ⚙ Repo/Token setzen.</td></tr>`;
+    document.getElementById('boardBody').innerHTML = `<tr><td colspan="7" class="error">Bitte zuerst ⚙ Repo/Token setzen.</td></tr>`;
     document.getElementById('settingsPanel').classList.add('show');
     document.getElementById('statusText').textContent = 'nicht konfiguriert';
     return;
@@ -227,12 +248,12 @@ async function load(){
   try{
     await ensureSecurityTasksSchema();
     const [masterRows, priceRows, openTasks] = await Promise.all([
-      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.DateTerminated,
+      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.DateTerminated, sm.Status,
                          ip.ParameterName AS InstrumentName, sp.ParameterName AS StatusName
               FROM security_master sm
               LEFT JOIN security_parameter ip ON ip.ParameterID = sm.Instrument
               LEFT JOIN security_parameter sp ON sp.ParameterID = sm.Status
-              ORDER BY (ip.ParameterID IS NULL), ip.ParameterName COLLATE NOCASE ASC, sm.SecurityName COLLATE NOCASE ASC`, [], 3600000),
+              ORDER BY sm.SecurityName COLLATE NOCASE ASC`, [], 3600000),
       tursoQuery(`SELECT SecurityID, Price, PriceDate, Source FROM security_prices`, [], 3600000),
       tursoQuery(`SELECT SecurityID, DateDue FROM security_tasks WHERE Completed = 0 AND SecurityID IS NOT NULL`, [], 0),
     ]);
@@ -259,96 +280,134 @@ async function load(){
     }
 
     const today = new Date();
-    const groups = {};
-    for (const m of masterRows) {
+    allRows = masterRows.map(m => {
       const secRows = pricesBySecurity.get(m.SecurityID) || [];
       const ref = periodReferences(secRows, today);
-      const groupName = m.InstrumentName || 'Ohne Instrument';
+      const instrumentName = m.InstrumentName || 'Ohne Instrument';
 
       const statusName = (m.StatusName || '').trim().toLowerCase();
       const isTerminated = statusName === 'terminated' || !!(m.DateTerminated && m.DateTerminated < todayIso);
       const isInactive = !isTerminated && statusName === 'inactive';
-      const isPending = !isTerminated && !isInactive && !statusName;
+      const isPending = !isTerminated && !isInactive && !m.Status;
       const statusFlag = isTerminated ? 'terminated' : (isInactive ? 'inactive' : (isPending ? 'pending' : 'active'));
       const statusLabel = statusFlag.charAt(0).toUpperCase() + statusFlag.slice(1);
 
-      (groups[groupName] = groups[groupName] || []).push({
-        name: m.SecurityName, currency: m.Currency, secId: m.SecurityID, groupName,
+      return {
+        name: m.SecurityName, currency: m.Currency, secId: m.SecurityID, instrumentName,
         last: ref.last, mtd: ref.mtd, ytd: ref.ytd,
         statusFlag, statusLabel, taskFlag: taskFlagBySecurity.get(m.SecurityID) || null,
-      });
-    }
+      };
+    });
 
-    renderBoard(groups);
+    renderBoard();
     document.getElementById('statusText').textContent = 'live';
     document.getElementById('lastSynced').textContent = `Geladen: ${nowZurichString()}`;
   }catch(e){
-    document.getElementById('boardBody').innerHTML = `<tr><td colspan="5" class="error">Fehler: ${e.message}</td></tr>`;
+    document.getElementById('boardBody').innerHTML = `<tr><td colspan="7" class="error">Fehler: ${e.message}</td></tr>`;
     document.getElementById('statusText').textContent = 'Fehler';
   }
 }
 
-function renderBoard(groups){
-  currentGroups = groups;
+function sortValue(r, key){
+  switch(key){
+    case 'name': return (r.name||'').toLowerCase();
+    case 'instrument': return (r.instrumentName||'').toLowerCase();
+    case 'status': return (r.statusLabel||'').toLowerCase();
+    case 'last': return r.last ? r.last.Price : -Infinity;
+    case 'mtd': return pctChange(r.last?r.last.Price:null, r.mtd?r.mtd.Price:null) ?? -Infinity;
+    case 'ytd': return pctChange(r.last?r.last.Price:null, r.ytd?r.ytd.Price:null) ?? -Infinity;
+    case 'time': return r.last ? r.last.dt.getTime() : -Infinity;
+    default: return '';
+  }
+}
+
+function renderBoard(){
   const filter = document.getElementById('search').value.toLowerCase();
   const body = document.getElementById('boardBody');
-  let html = '';
-  const groupNames = Object.keys(groups);
-  let any = false;
 
-  for(const groupName of groupNames){
-    const rows = groups[groupName].filter(r => {
-      if(!filter) return true;
-      if(r.name.toLowerCase().includes(filter)) return true;
-      if(r.groupName.toLowerCase().includes(filter)) return true;
-      if(r.statusLabel && r.statusLabel.toLowerCase().includes(filter)) return true;
-      if(r.taskFlag){
-        const taskKeywords = ['task', 'überfällig', 'ueberfaellig', 'fällig', 'faellig', 'due', 'overdue'];
-        if(taskKeywords.some(k => k.includes(filter) || filter.includes(k))) return true;
-      }
-      return false;
-    });
-    if(!rows.length) continue;
-    any = true;
-    html += `<tr class="section-row"><td colspan="5">${groupName}</td></tr>`;
-    for(const r of rows){
-      const lastAmt = r.last ? r.last.Price : null;
-      const dMtd = fmtPct(pctChange(lastAmt, r.mtd ? r.mtd.Price : null));
-      const dYtd = fmtPct(pctChange(lastAmt, r.ytd ? r.ytd.Price : null));
-      const dirClass = dMtd.dir;
-      const decimals = 2;
-      const timeStr = r.last ? fmtShortDateTime(r.last.dt) : '—';
-      const taskFlagHtml = r.taskFlag
-        ? `<a href="security.html?id=${encodeURIComponent(r.secId)}#securityTasksSection" class="task-label ${r.taskFlag}" title="${r.taskFlag === 'overdue' ? 'Überfälliger Task' : 'Task fällig in den nächsten 7 Tagen'}">Task</a>`
-        : '';
-      html += `<tr class="${dirClass}">
-        <td class="name">
-          <div class="name-cell">
-            <a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a>
-            <span class="status-pill status-${r.statusFlag}">${r.statusLabel}</span>
-            ${taskFlagHtml}
-          </div>
-        </td>
-        <td class="price">${lastAmt!==null ? fmtDecimal(lastAmt, decimals) : '—'}<span class="ccy">${r.currency||''}</span></td>
-        <td class="chg ${dMtd.dir}">${dMtd.text}</td>
-        <td class="chg ${dYtd.dir}">${dYtd.text}</td>
-        <td class="time">${timeStr}</td>
-      </tr>`;
+  let rows = allRows.filter(r => {
+    if(!showInactiveTerminated && (r.statusFlag === 'inactive' || r.statusFlag === 'terminated')) return false;
+    if(!filter) return true;
+    if(r.name.toLowerCase().includes(filter)) return true;
+    if(r.instrumentName.toLowerCase().includes(filter)) return true;
+    if(r.statusLabel && r.statusLabel.toLowerCase().includes(filter)) return true;
+    if(r.last && fmtShortDateTime(r.last.dt).toLowerCase().includes(filter)) return true;
+    if(r.taskFlag){
+      const taskKeywords = ['task', 'überfällig', 'ueberfaellig', 'fällig', 'faellig', 'due', 'overdue'];
+      if(taskKeywords.some(k => k.includes(filter) || filter.includes(k))) return true;
     }
-  }
-  body.innerHTML = any ? html : '<tr><td colspan="5" class="empty">Keine Treffer.</td></tr>';
+    return false;
+  });
+
+  rows = rows.sort((a,b) => {
+    const va = sortValue(a, sortKey), vb = sortValue(b, sortKey);
+    let cmp;
+    if(typeof va === 'string') cmp = va.localeCompare(vb);
+    else cmp = (va<vb ? -1 : (va>vb ? 1 : 0));
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+
+  if(!rows.length){ body.innerHTML = '<tr><td colspan="7" class="empty">Keine Treffer.</td></tr>'; return; }
+
+  const decimals = 2;
+  body.innerHTML = rows.map(r => {
+    const lastAmt = r.last ? r.last.Price : null;
+    const dMtd = fmtPct(pctChange(lastAmt, r.mtd ? r.mtd.Price : null));
+    const dYtd = fmtPct(pctChange(lastAmt, r.ytd ? r.ytd.Price : null));
+    const timeStr = r.last ? fmtShortDateTime(r.last.dt) : '—';
+    const taskFlagHtml = r.taskFlag
+      ? `<a href="security.html?id=${encodeURIComponent(r.secId)}#securityTasksSection" class="task-label ${r.taskFlag}" title="${r.taskFlag === 'overdue' ? 'Überfälliger Task' : 'Task fällig in den nächsten 7 Tagen'}">Task</a>`
+      : '';
+    return `<tr class="${dMtd.dir}">
+      <td class="name">
+        <div class="name-cell">
+          <a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a>
+          ${taskFlagHtml}
+        </div>
+      </td>
+      <td>${r.instrumentName}</td>
+      <td><span class="status-pill status-${r.statusFlag}">${r.statusLabel}</span></td>
+      <td class="price">${lastAmt!==null ? fmtDecimal(lastAmt, decimals) : '—'}<span class="ccy">${r.currency||''}</span></td>
+      <td class="chg ${dMtd.dir}">${dMtd.text}</td>
+      <td class="chg ${dYtd.dir}">${dYtd.text}</td>
+      <td class="time">${timeStr}</td>
+    </tr>`;
+  }).join('');
 }
+
+function updateSortHeaders(){
+  document.querySelectorAll('#boardTable th[data-sort]').forEach(th => {
+    th.classList.toggle('sorted-asc', th.dataset.sort === sortKey && sortDir === 'asc');
+    th.classList.toggle('sorted-desc', th.dataset.sort === sortKey && sortDir === 'desc');
+  });
+}
+
+document.querySelectorAll('#boardTable th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    if(sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    else { sortKey = key; sortDir = 'asc'; }
+    updateSortHeaders();
+    renderBoard();
+  });
+});
+updateSortHeaders();
+
+document.getElementById('showInactiveToggle').addEventListener('change', (e) => {
+  showInactiveTerminated = e.target.checked;
+  renderBoard();
+});
 
 document.getElementById('search').addEventListener('input', (e) => {
   document.getElementById('searchClear').style.display = e.target.value ? '' : 'none';
-  renderBoard(currentGroups);
+  renderBoard();
 });
 document.getElementById('searchClear').addEventListener('click', () => {
   const input = document.getElementById('search');
   input.value = '';
   document.getElementById('searchClear').style.display = 'none';
   input.focus();
-  renderBoard(currentGroups);
+  renderBoard();
 });
 document.getElementById('refreshBtn').addEventListener('click', () => { tursoClearCache(); load(); });
 document.getElementById('settingsBtn').addEventListener('click', () => {
