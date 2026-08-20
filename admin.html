@@ -599,11 +599,11 @@ function renderPriceUploadPreview(area, parsed, onImport) {
          <button type="button" class="mag-btn mag-accept" data-i="${i}">✓ so übernehmen</button>`
       : (p.price ?? '—');
     const cells = `<td>${p.secName ?? '—'}</td><td class="num">${priceCell}</td><td>${p.priceDate ?? '—'}</td><td>${p.source ?? '—'}</td>`;
-    const statusCell = {
-      err: `<td class="status-err">${p.errors.join('; ')}</td>`,
-      warn: `<td class="status-warn">${magnitudeLabel(p.magnitudeWarning)}</td>`,
-      ok: `<td class="status-ok">OK</td>`,
-    }[status];
+    const statusCell = status === 'err'
+      ? `<td class="status-err">${p.errors.join('; ')}</td>`
+      : status === 'warn'
+      ? `<td class="status-warn">${magnitudeLabel(p.magnitudeWarning)}</td>`
+      : `<td class="status-ok">OK</td>`;
     return `<tr class="${status === 'err' ? 'row-error' : (status === 'warn' ? 'row-warn' : '')}">${cells}${statusCell}</tr>`;
   }).join('');
 
@@ -1035,14 +1035,12 @@ function renderUbsPreview(area, parsed, master){
     const dateCell = p.priceDateIso
       ? p.priceDateDisplay
       : `<input type="text" data-i="${i}" class="ubs-time-input" value="" placeholder="hh:mm oder dd.mm.yyyy">`;
-    const statusCell = {
-      ok: '<td class="status-ok">OK</td>',
-      unmatched: '<td class="status-err">Kein Match</td>',
-      conflict: `<td class="status-err">${p.conflict}</td>`,
-      warn: `<td class="status-warn">${magnitudeLabel(p.magnitudeWarning)}</td>`,
-      err: `<td class="status-err">${p.errors.join('; ')}</td>`,
-      skip: '<td class="status-skip">Bereits vorhanden</td>',
-    }[status];
+    const statusCell = status === 'ok' ? '<td class="status-ok">OK</td>'
+      : status === 'unmatched' ? '<td class="status-err">Kein Match</td>'
+      : status === 'conflict' ? `<td class="status-err">${p.conflict}</td>`
+      : status === 'warn' ? `<td class="status-warn">${magnitudeLabel(p.magnitudeWarning)}</td>`
+      : status === 'err' ? `<td class="status-err">${p.errors.join('; ')}</td>`
+      : '<td class="status-skip">Bereits vorhanden</td>';
     return `<tr class="${status === 'err' || status === 'unmatched' || status === 'conflict' ? 'row-error' : (status === 'warn' ? 'row-warn' : (status === 'skip' ? 'row-skip' : ''))}">
       <td>${p.sheet}</td><td>${p.excelName}</td><td>${secCell}</td><td class="num">${priceCell}</td><td>${dateCell}</td>${statusCell}
     </tr>`;
