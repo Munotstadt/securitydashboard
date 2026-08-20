@@ -215,9 +215,35 @@ if (typeof ensureAssetComparisonSchema === 'undefined') {
     )`); } catch(e) {}
   };
 }
+if (typeof ensureSecurityCurrenciesSchema === 'undefined') {
+  window.ensureSecurityCurrenciesSchema = async function(){
+    try {
+      await tursoRun(`CREATE TABLE IF NOT EXISTS security_currencies (
+        SecurityCurrencyID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Cry TEXT,
+        SecurityID INTEGER NOT NULL,
+        ConversionFactor REAL DEFAULT 1,
+        Comments TEXT,
+        created_at TEXT
+      )`);
+    } catch(e) {}
+  };
+}
+if (typeof tursoCurrencyOptions === 'undefined') {
+  window.tursoCurrencyOptions = async function(){
+    try {
+      await ensureSecurityCurrenciesSchema();
+      const rows = await tursoQuery("SELECT DISTINCT Cry FROM security_currencies WHERE Cry IS NOT NULL AND Cry <> '' ORDER BY Cry ASC", [], 3600000);
+      const list = rows.map(r => r.Cry).filter(Boolean);
+      return list.length ? list : ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD'];
+    } catch(e) {
+      return ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD'];
+    }
+  };
+}
 </script>
 <script>
-const CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD'];
+let CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD']; // fallback until tursoCurrencyOptions() resolves in load()
 const EYE_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>`;
 
 let rows = [];          // {SecurityID, SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, DashboardGrouping, Instrument, PortfolioGrouping, _dirty, _new}
@@ -340,17 +366,19 @@ async function load() {
     return;
   }
   try {
-    const [masterRows, collectors, groupings, instruments, portfolioGroupings] = await Promise.all([
+    const [masterRows, collectors, groupings, instruments, portfolioGroupings, currencyOpts] = await Promise.all([
       tursoQuery('SELECT SecurityID, SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, DashboardGrouping, Instrument, PortfolioGrouping FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC'),
       tursoParameterOptions('security_master','Collector'),
       tursoParameterOptions('security_master','DashboardGrouping'),
       tursoParameterOptions('security_master','Instrument'),
       tursoParameterOptions('security_master','PortfolioGrouping'),
+      tursoCurrencyOptions(),
     ]);
     collectorOpts = [...collectors].sort((a,b) => a.ParameterName.localeCompare(b.ParameterName));
     groupingOpts = groupings;
     instrumentOpts = instruments;
     portfolioGroupingOpts = portfolioGroupings;
+    CURRENCY_OPTS = currencyOpts;
     rows = masterRows.map(r => ({ ...r, _dirty:false, _new:false }));
     deleteQueue = [];
     renderAll();

@@ -125,10 +125,14 @@
   .task-form.show{display:grid;}
   .task-form label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-bottom:3px;}
   .task-form select,.task-form input{width:100%;font-family:'Inter',sans-serif;font-size:14px;padding:8px 9px;border:1px solid var(--line);border-radius:3px;background:var(--bg);color:var(--text);}
+  .task-form textarea{width:100%;font-family:'Inter',sans-serif;font-size:14px;line-height:1.4;padding:8px 9px;border:1px solid var(--line);border-radius:3px;background:var(--bg);color:var(--text);resize:vertical;min-height:120px;}
   .task-form .full{grid-column:1/-1;}
   .task-form button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:600;cursor:pointer;}
   .task-form .quick-status.ok{color:var(--gain);}
   .task-form .quick-status.err{color:var(--loss);}
+  .due-shift-row{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
+  .due-shift-btn{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:4px 9px;border-radius:3px;border:1px solid var(--line);background:var(--bg);color:var(--muted);cursor:pointer;}
+  .due-shift-btn:hover{border-color:var(--accent);color:var(--text);}
 
   .task-teaser-list{display:flex;flex-direction:column;gap:0;margin-top:8px;}
   .task-teaser-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line);}
@@ -401,6 +405,11 @@
       <div>
         <label>Date Due</label>
         <input type="date" id="stfDateDue">
+        <div class="due-shift-row">
+          <button type="button" class="due-shift-btn" id="stfDueShiftSat" title="Auf nächsten Samstag setzen">→ SA</button>
+          <button type="button" class="due-shift-btn" id="stfDueShift10d" title="+10 Tage ab heute">+10D</button>
+          <button type="button" class="due-shift-btn" id="stfDueShift30d" title="+30 Tage ab heute">+30D</button>
+        </div>
       </div>
       <div>
         <label>Recurring</label>
@@ -421,7 +430,7 @@
       </div>
       <div class="full">
         <label>Description</label>
-        <textarea id="stfDescription" class="mf-textarea" rows="1" placeholder="Details zur Aufgabe…"></textarea>
+        <textarea id="stfDescription" rows="6" placeholder="Details zur Aufgabe…"></textarea>
       </div>
       <div class="full" style="display:flex;gap:8px;align-items:center;">
         <button type="button" id="stfSave">Save Task</button>
@@ -506,6 +515,32 @@ if (typeof ensureAssetComparisonSchema === 'undefined') {
       created_at TEXT,
       PRIMARY KEY (GroupID, SecurityID)
     )`); } catch(e) {}
+  };
+}
+if (typeof ensureSecurityCurrenciesSchema === 'undefined') {
+  window.ensureSecurityCurrenciesSchema = async function(){
+    try {
+      await tursoRun(`CREATE TABLE IF NOT EXISTS security_currencies (
+        SecurityCurrencyID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Cry TEXT,
+        SecurityID INTEGER NOT NULL,
+        ConversionFactor REAL DEFAULT 1,
+        Comments TEXT,
+        created_at TEXT
+      )`);
+    } catch(e) {}
+  };
+}
+if (typeof tursoCurrencyOptions === 'undefined') {
+  window.tursoCurrencyOptions = async function(){
+    try {
+      await ensureSecurityCurrenciesSchema();
+      const rows = await tursoQuery("SELECT DISTINCT Cry FROM security_currencies WHERE Cry IS NOT NULL AND Cry <> '' ORDER BY Cry ASC", [], 3600000);
+      const list = rows.map(r => r.Cry).filter(Boolean);
+      return list.length ? list : ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD'];
+    } catch(e) {
+      return ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD'];
+    }
   };
 }
 </script>
@@ -904,7 +939,7 @@ function renderRange52w(highRow, lowRow, last, decimals){
     </div>`;
 }
 
-const CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD'];
+let CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD']; // fallback until tursoCurrencyOptions() resolves in load()
 function optionList(opts, current, allowBlank){
   let html = allowBlank ? `<option value="" ${!current?'selected':''}>—</option>` : '';
   html += opts.map(o => `<option value="${o.ParameterID}" ${String(current)===String(o.ParameterID)?'selected':''}>${o.ParameterName}</option>`).join('');
@@ -1264,7 +1299,7 @@ async function load(){
   }
   try {
     await ensureSecurityMasterSchema();
-    const [master, collectors, groupings, instruments, portfolioGroupings, statuses] = await Promise.all([
+    const [master, collectors, groupings, instruments, portfolioGroupings, statuses, currencyOpts] = await Promise.all([
       tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.Ticker, sm.ID_ISIN, sm.ID_Valor, sm.Collector, sm.DashboardGrouping, sm.Instrument, sm.PortfolioGrouping,
                          sm.DateLaunch, sm.DateTerminated, sm.Status, sm.Comments,
                          gp.ParameterName AS GroupName, sp.ParameterName AS StatusName
@@ -1277,6 +1312,7 @@ async function load(){
       tursoParameterOptions('security_master','Instrument'),
       tursoParameterOptions('security_master','PortfolioGrouping'),
       tursoParameterOptions('security_master','Status'),
+      tursoCurrencyOptions(),
     ]);
     masterAll = master;
     collectorOpts = [...collectors].sort((a,b) => a.ParameterName.localeCompare(b.ParameterName));
@@ -1284,6 +1320,7 @@ async function load(){
     instrumentOpts = instruments;
     portfolioGroupingOpts = portfolioGroupings;
     statusOpts = statuses;
+    CURRENCY_OPTS = currencyOpts;
 
     const sel = document.getElementById('securitySwitcher');
     const keepSel = sel.value;
@@ -1606,6 +1643,20 @@ function taskDaysUntil(dateIso){
   const t = new Date(taskIsoToday() + 'T00:00:00');
   return Math.round((d - t) / 86400000);
 }
+// Quick due-date presets (all anchored to today, not the current field value).
+function taskAddDaysFromToday(n){
+  const d = new Date(taskIsoToday() + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0,10);
+}
+function taskNextSaturday(){
+  const d = new Date(taskIsoToday() + 'T00:00:00');
+  const day = d.getDay(); // 0=So … 6=Sa
+  let add = (6 - day + 7) % 7;
+  if(add === 0) add = 7; // if today is already Saturday, jump to next week's
+  d.setDate(d.getDate() + add);
+  return d.toISOString().slice(0,10);
+}
 function securityTaskTypeName(id){
   if(!id) return null;
   const t = securityTaskTypeOpts.find(o => String(o.ParameterID) === String(id));
@@ -1644,14 +1695,12 @@ function resetSecurityTaskForm(){
   document.getElementById('stfSave').textContent = 'Save Task';
   document.getElementById('stfName').value = '';
   document.getElementById('stfDescription').value = '';
-  document.getElementById('stfDateDue').value = taskIsoToday();
+  document.getElementById('stfDateDue').value = taskAddDaysFromToday(14);
   document.getElementById('stfRecurring').value = 'n/a';
   document.getElementById('stfPriority').value = 'Medium';
   document.getElementById('stfCustomTaskTypeWrap').style.display = 'none';
   document.getElementById('stfCustomTaskType').value = '';
   document.getElementById('stfMsg').textContent = '';
-  const desc = document.getElementById('stfDescription');
-  desc.style.height = 'auto';
 }
 
 async function openSecurityTaskForm(task){
@@ -1681,6 +1730,15 @@ document.getElementById('addSecurityTaskBtn').addEventListener('click', () => {
 document.getElementById('stfCancel').addEventListener('click', () => {
   document.getElementById('securityTaskForm').classList.remove('show');
   resetSecurityTaskForm();
+});
+document.getElementById('stfDueShiftSat').addEventListener('click', () => {
+  document.getElementById('stfDateDue').value = taskNextSaturday();
+});
+document.getElementById('stfDueShift10d').addEventListener('click', () => {
+  document.getElementById('stfDateDue').value = taskAddDaysFromToday(10);
+});
+document.getElementById('stfDueShift30d').addEventListener('click', () => {
+  document.getElementById('stfDateDue').value = taskAddDaysFromToday(30);
 });
 
 function renderSecurityTasksList(){
