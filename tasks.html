@@ -46,11 +46,14 @@
   .filter-btn{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer;}
   .filter-btn.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
   .filter-bar .spacer{flex:1;}
+  .search-row{width:100%;margin:0 0 4px;}
   .search-wrap{position:relative;min-width:220px;flex:1;max-width:320px;}
+  .search-row .search-wrap{max-width:none;width:100%;}
   .search-wrap input{width:100%;font-family:'Inter',sans-serif;font-size:13px;padding:7px 28px 7px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;color:var(--text);box-sizing:border-box;}
   .search-clear-btn{position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:4px 6px;line-height:1;}
   .search-clear-btn:hover{color:var(--accent);}
   .filter-bar select{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 10px;border:1px solid var(--line);border-radius:3px;background:#fff;color:var(--text);}
+  .task-count{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin:0 0 4px;}
 
   .task-form{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin:12px 0 20px;display:none;gap:10px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));}
   .task-form.show{display:grid;}
@@ -63,6 +66,9 @@
   .task-form .msg{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
   .task-form .msg.ok{color:var(--gain);}
   .task-form .msg.error{color:var(--loss);}
+  .due-quick-actions{display:flex;gap:4px;margin-top:6px;}
+  .due-quick-btn{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:3px 6px;border-radius:3px;border:1px solid var(--line);background:#fff;color:var(--muted);cursor:pointer;white-space:nowrap;}
+  .due-quick-btn:hover{border-color:var(--accent);color:var(--text);}
 
   .section-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;margin:28px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--line);}
   .table-wrap{overflow-x:auto;}
@@ -165,13 +171,18 @@
     <button class="filter-btn" data-filter="all">All</button>
     <button class="filter-btn" data-filter="history">History</button>
     <div class="spacer"></div>
+    <select id="securityFilter"><option value="">All Securities</option></select>
+    <select id="taskTypeFilter"><option value="">All Task Types</option></select>
+    <button class="toggle-btn" id="addTaskBtn">➕ New Task</button>
+  </div>
+
+  <div class="search-row">
     <div class="search-wrap">
       <input type="text" id="taskSearch" placeholder="🔎 Task, Security oder Datum suchen…">
       <button type="button" id="taskSearchClear" class="search-clear-btn" title="Suche löschen" style="display:none;">✕</button>
     </div>
-    <select id="securityFilter"><option value="">All Securities</option></select>
-    <button class="toggle-btn" id="addTaskBtn">➕ New Task</button>
   </div>
+  <div class="task-count" id="taskCountText"></div>
 
   <div class="task-form" id="taskForm">
     <div class="full">
@@ -197,6 +208,11 @@
     <div>
       <label>Date Due</label>
       <input type="date" id="tfDateDue">
+      <div class="due-quick-actions">
+        <button type="button" class="due-quick-btn" data-due-shift="saturday" title="Nächster Samstag">→ SA</button>
+        <button type="button" class="due-quick-btn" data-due-shift="10" title="+10 Tage">+10D</button>
+        <button type="button" class="due-quick-btn" data-due-shift="30" title="+30 Tage">+30D</button>
+      </div>
     </div>
     <div>
       <label>Recurring</label>
@@ -323,6 +339,18 @@ function fmtDdMmYyyy(isoDate){
   return `${m[3]}.${m[2]}.${m[1]}`;
 }
 
+function addDaysIso(dateIso, days){
+  const d = dateIso ? new Date(dateIso + 'T00:00:00') : new Date(todayIso() + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0,10);
+}
+function nextSaturdayIso(dateIso){
+  const d = dateIso ? new Date(dateIso + 'T00:00:00') : new Date(todayIso() + 'T00:00:00');
+  const diff = (6 - d.getDay() + 7) % 7; // 0 if already Saturday
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().slice(0,10);
+}
+
 function nextDueDate(currentDue, recurring){
   const d = currentDue ? new Date(currentDue + 'T00:00:00') : new Date();
   if(recurring === 'Bi-Annual'){
@@ -406,13 +434,22 @@ function populateSecuritySelects(){
   document.getElementById('securityFilter').innerHTML = `<option value="">All Securities</option>${opts}`;
 }
 
+function populateTaskTypeFilterSelect(){
+  const sel = document.getElementById('taskTypeFilter');
+  if(!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">All Task Types</option>`
+    + taskTypeOpts.map(o => `<option value="${o.ParameterID}">${o.ParameterName}</option>`).join('');
+  sel.value = cur;
+}
+
 function resetTaskForm(){
   editingTaskId = null;
   document.getElementById('tfSave').textContent = 'Save';
   document.getElementById('tfName').value = '';
   document.getElementById('tfDescription').value = '';
   document.getElementById('tfSecurity').value = '';
-  document.getElementById('tfDateDue').value = todayIso();
+  document.getElementById('tfDateDue').value = addDaysIso(todayIso(), 14);
   document.getElementById('tfRecurring').value = 'n/a';
   document.getElementById('tfPriority').value = 'Medium';
   document.getElementById('tfCustomTaskTypeWrap').style.display = 'none';
@@ -457,11 +494,13 @@ async function renderTasks(){
   }
 
   const secFilter = document.getElementById('securityFilter').value;
+  const typeFilter = document.getElementById('taskTypeFilter') ? document.getElementById('taskTypeFilter').value : '';
 
   let rows = tasksAll.filter(t => {
     if(curFilter === 'open' && t.Completed) return false;
     if(curFilter === 'done' && !t.Completed) return false;
     if(secFilter && String(t.SecurityID) !== String(secFilter)) return false;
+    if(typeFilter && String(t.TaskTypeID) !== String(typeFilter)) return false;
     if(search){
       const secName = (securityName(t.SecurityID) || '').toLowerCase();
       const typeName = taskTypeName(t.TaskTypeID) || '';
@@ -480,6 +519,15 @@ async function renderTasks(){
     if(a.Completed) return (b.CompletedAt||'').localeCompare(a.CompletedAt||'');
     return dueSortDir === 'asc' ? da.localeCompare(db) : db.localeCompare(da);
   });
+
+  const totalInFilter = tasksAll.filter(t => {
+    if(curFilter === 'open') return !t.Completed;
+    if(curFilter === 'done') return !!t.Completed;
+    return true;
+  }).length;
+  const filterLabel = curFilter === 'open' ? 'Open' : curFilter === 'done' ? 'Done' : 'All';
+  const countEl = document.getElementById('taskCountText');
+  if(countEl) countEl.textContent = `Selected ${rows.length} – Total ${filterLabel} ${totalInFilter} Tasks`;
 
   if(!rows.length){ wrap.innerHTML = '<div class="empty">Keine Tasks in dieser Ansicht.</div>'; return; }
 
@@ -551,6 +599,9 @@ async function renderHistory(wrap, search){
       return [r.TaskName||'', secName, r.CompletedAt||'', r.DateDue||''].join(' ').toLowerCase().includes(search);
     });
   }
+
+  const countEl = document.getElementById('taskCountText');
+  if(countEl) countEl.textContent = `Selected ${rows.length} – Total History ${completionHistory.length} Tasks`;
 
   if(!rows.length){ wrap.innerHTML = '<div class="empty">Noch keine erledigten Tasks protokolliert.</div>'; return; }
 
@@ -646,6 +697,7 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
   });
 });
 document.getElementById('securityFilter').addEventListener('change', renderTasks);
+document.getElementById('taskTypeFilter').addEventListener('change', renderTasks);
 document.getElementById('taskSearch').addEventListener('input', (e) => {
   document.getElementById('taskSearchClear').style.display = e.target.value ? '' : 'none';
   renderTasks();
@@ -666,6 +718,15 @@ document.getElementById('addTaskBtn').addEventListener('click', () => {
 document.getElementById('tfCancel').addEventListener('click', () => {
   document.getElementById('taskForm').classList.remove('show');
   resetTaskForm();
+});
+
+document.querySelectorAll('[data-due-shift]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const field = document.getElementById('tfDateDue');
+    const cur = field.value;
+    const kind = btn.dataset.dueShift;
+    field.value = (kind === 'saturday') ? nextSaturdayIso(cur) : addDaysIso(cur, parseInt(kind, 10));
+  });
 });
 
 document.getElementById('tfSave').addEventListener('click', async () => {
@@ -698,6 +759,7 @@ document.getElementById('tfSave').addEventListener('click', async () => {
     document.getElementById('taskForm').classList.remove('show');
     resetTaskForm();
     taskTypeOpts = await tursoParameterOptions('security_tasks', 'TaskType', 0);
+    populateTaskTypeFilterSelect();
     await loadTasks();
   } catch(e) {
     msg.textContent = 'Fehler: ' + e.message; msg.className = 'msg error';
@@ -715,6 +777,7 @@ async function load(){
     masterAll = await tursoQuery('SELECT SecurityID, SecurityName FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC', [], 3600000);
     taskTypeOpts = await tursoParameterOptions('security_tasks', 'TaskType', 0);
     populateSecuritySelects();
+    populateTaskTypeFilterSelect();
     resetTaskForm();
     await loadTasks();
     document.getElementById('statusText').textContent = `${tasksAll.length} Task(s)`;
