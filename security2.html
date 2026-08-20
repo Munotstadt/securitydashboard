@@ -339,6 +339,9 @@
     <tbody id="perfBodyPrice"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
   </table>
   </div>
+
+  <div class="section-title" id="analystTargetsTitle" style="margin-top:24px;">Analyst Targets</div>
+  <div class="chart-wrap" id="analystChartWrap"></div>
   </div>
 
   <div class="tab-panel" data-tab="returns" id="tabPanelReturns">
@@ -441,9 +444,6 @@
     <div class="section-title">Fundamentals</div>
     <div class="fundamentals-grid" id="sharesFundamentalsGrid"></div>
     <div class="detail-meta" id="sharesDataAsOf" style="margin-top:8px;"></div>
-
-    <div class="section-title" id="analystTargetsTitle" style="margin-top:24px;">Analyst Targets</div>
-    <div class="chart-wrap" id="analystChartWrap"></div>
   </div>
   </div>
 
@@ -1531,12 +1531,14 @@ async function loadInstrumentSpecificData(master, last, decimals, high52wRow, lo
     document.getElementById('sharesFundamentalsGrid').innerHTML =
       `<div class="empty">Keine Zeilen mit DataType beginnend "Fundamental" gefunden. Vorhandene DataTypes für diese Security: ${otherTypes.join(', ') || '—'}.</div>`;
     document.getElementById('analystChartWrap').innerHTML = '';
+    document.getElementById('analystTargetsTitle').classList.add('hidden');
   } else {
     // No security_data rows at all for this SecurityID.
     document.getElementById('sharesSection').classList.remove('hidden');
     document.getElementById('sharesFundamentalsGrid').innerHTML =
       `<div class="empty">Keine security_data-Einträge für SecurityID ${master.SecurityID} gefunden (0 Zeilen total).</div>`;
     document.getElementById('analystChartWrap').innerHTML = '';
+    document.getElementById('analystTargetsTitle').classList.add('hidden');
   }
 
   // New Market Cap / Total Assets tile (LC Mrd, header tile row). Searched
@@ -1916,18 +1918,22 @@ function renderTaskStatusBadge(){
   const pending = securityTasksAll.filter(t => !t.Completed);
   const overdueCount = pending.filter(t => { const d = taskDaysUntil(t.DateDue); return d !== null && d <= 0; }).length;
   const dueSoonCount = pending.filter(t => { const d = taskDaysUntil(t.DateDue); return d !== null && d > 0 && d <= 7; }).length;
+  // Only overdue/fällig-or-due-soon tasks trigger the flag - pending tasks due
+  // further out ("künftige") stay silent, both in the header badge and the
+  // Tasks tab count.
+  const flaggedCount = overdueCount + dueSoonCount;
   badge.classList.remove('tasks-overdue','tasks-due-soon');
-  if(!pending.length){
+  if(!flaggedCount){
     badge.classList.add('hidden');
     badge.textContent = '';
   } else {
     badge.classList.remove('hidden');
-    badge.textContent = `Tasks: ${pending.length}`;
+    badge.textContent = `Tasks: ${flaggedCount}`;
     if(overdueCount > 0) badge.classList.add('tasks-overdue');
-    else if(dueSoonCount > 0) badge.classList.add('tasks-due-soon');
+    else badge.classList.add('tasks-due-soon');
   }
   if(tabCount){
-    if(pending.length){ tabCount.classList.remove('hidden'); tabCount.textContent = pending.length; }
+    if(flaggedCount){ tabCount.classList.remove('hidden'); tabCount.textContent = flaggedCount; }
     else { tabCount.classList.add('hidden'); tabCount.textContent = ''; }
   }
 }
