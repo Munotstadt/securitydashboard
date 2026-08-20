@@ -761,32 +761,53 @@ let ubsCurrentMaster = null;
 // Enforced 1:1: ExternalName is PRIMARY KEY (one Name -> one SecurityID) and
 // we additionally check SecurityID uniqueness ourselves (see computeUbsConflicts)
 // since SQLite has no simple two-way-unique constraint across a mutable pair.
-let ubsMappingTableReady = false;
-async function ensureNameMappingTable(){
-  if (ubsMappingTableReady) return;
-  await tursoRun(`CREATE TABLE IF NOT EXISTS security_name_mapping (
-    ExternalName TEXT PRIMARY KEY,
-    SecurityID INTEGER NOT NULL,
-    Source TEXT,
-    created_at TEXT,
-    updated_at TEXT
-  )`);
+// Matching is stored directly in security_data as a regular field:
+// FieldNameID = 143 ("UBS Quotes Name"), FieldValue = the Excel "Name",
+// SecurityID = the matched security. DataType/FieldName are taken from the
+// security_parameter row for ParameterID 143 (same table parameters_editor.html
+// manages) so this stays in sync if that label/section is ever renamed.
+// Kept to one row per SecurityID: on import an existing row is UPDATEd
+// in place rather than duplicated (see importUbsQuotes).
+let ubsIndexReady = false;
+async function ensureUbsPriceIndex(){
+  if (ubsIndexReady) return;
   // Speeds up the SecurityID IN (...) duplicate lookup (and any other page
   // filtering security_prices by SecurityID/date) — idempotent, safe on an
   // existing table.
   await tursoRun(`CREATE INDEX IF NOT EXISTS idx_security_prices_secid_date ON security_prices(SecurityID, PriceDate)`);
-  ubsMappingTableReady = true;
+  ubsIndexReady = true;
 }
-let nameMappingCache = null;        // ExternalName -> SecurityID
-let nameMappingReverseCache = null; // SecurityID -> ExternalName
-async function ensureNameMapping(){
-  await ensureNameMappingTable();
-  if (!nameMappingCache) {
-    const rows = await tursoQuery('SELECT ExternalName, SecurityID FROM security_name_mapping');
-    nameMappingCache = new Map(rows.map(r => [r.ExternalName, r.SecurityID]));
-    nameMappingReverseCache = new Map(rows.map(r => [r.SecurityID, r.ExternalName]));
+
+let ubs143Meta = null; // { dataType, fieldName } from security_parameter, ParameterID=143
+async function ensureUbs143Meta(){
+  if (ubs143Meta) return ubs143Meta;
+  let meta = null;
+  try {
+    const rows = await tursoQuery('SELECT ParaTable, ParaField, ParameterName FROM security_parameter WHERE ParameterID = ?', [143]);
+    if (rows.length) meta = { dataType: rows[0].ParaField, fieldName: rows[0].ParameterName };
+  } catch (e) { console.warn('security_parameter lookup for ParameterID 143 failed:', e); }
+  ubs143Meta = meta || { dataType: 'Identifiers', fieldName: 'UBS Quotes Name' }; // fallback if 143 isn't defined yet
+  return ubs143Meta;
+}
+
+let ubsFieldMapCache = null;        // FieldValue (Excel Name) -> SecurityID
+let ubsFieldMapReverseCache = null; // SecurityID -> { fieldValue, rowId }
+async function ensureUbsFieldMapping(){
+  await ensureUbsPriceIndex();
+  if (!ubsFieldMapCache) {
+    const rows = await tursoQuery(
+      `SELECT rowid AS RowId, SecurityID, FieldValue FROM security_data WHERE FieldNameID = 143 ORDER BY rowid ASC`
+    );
+    ubsFieldMapCache = new Map();
+    ubsFieldMapReverseCache = new Map();
+    rows.forEach(r => {
+      const val = (r.FieldValue || '').toString().trim();
+      if (!val) return;
+      ubsFieldMapCache.set(val, r.SecurityID);
+      ubsFieldMapReverseCache.set(r.SecurityID, { fieldValue: val, rowId: r.RowId }); // ordered ASC, so last write wins = latest row
+    });
   }
-  return nameMappingCache;
+  return ubsFieldMapCache;
 }
 
 // Value of the "Datum des Files" input as a local Date (midnight), used as
@@ -850,7 +871,7 @@ async function handleUbsFile(file){
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array' });
     const master = await ensureMasterForUpload();
-    const mapping = await ensureNameMapping();
+    const mapping = await ensureUbsFieldMapping();
     const refDate = getUbsFileDate();
 
     const raw = [];
@@ -896,7 +917,8 @@ async function handleUbsFile(file){
 // Enforces 1:1 Name<->SecurityID:
 // - two different Excel names in this file pointing at the same Security -> conflict
 // - the same Excel name pointing at two different Securities in this file -> conflict
-// - a Security already learned under a different name in security_name_mapping -> conflict
+// - a Security already learned under a different name in security_data (FieldNameID=143) -> conflict
+// - a Name already learned pointing at a different Security in security_data -> conflict
 function computeUbsConflicts(parsed){
   const byName = new Map(); // excelName -> Set(secId)
   const bySec = new Map();  // secId -> Set(excelName)
@@ -912,8 +934,10 @@ function computeUbsConflicts(parsed){
     if (!p.secId) return;
     if (byName.get(p.excelName).size > 1) { p.conflict = `Name "${p.excelName}" ist in dieser Datei mehreren Securities zugeordnet`; return; }
     if (bySec.get(p.secId).size > 1) { p.conflict = `Diese Security ist in dieser Datei mehreren Namen zugeordnet`; return; }
-    const savedName = nameMappingReverseCache && nameMappingReverseCache.get(p.secId);
-    if (savedName && savedName !== p.excelName) { p.conflict = `Security ist bereits dem Namen "${savedName}" zugeordnet`; }
+    const savedName = ubsFieldMapReverseCache && ubsFieldMapReverseCache.get(p.secId)?.fieldValue;
+    if (savedName && savedName !== p.excelName) { p.conflict = `Security ist bereits dem Namen "${savedName}" zugeordnet`; return; }
+    const savedSecId = ubsFieldMapCache && ubsFieldMapCache.get(p.excelName);
+    if (savedSecId !== undefined && String(savedSecId) !== String(p.secId)) { p.conflict = `Name "${p.excelName}" ist bereits SecurityID ${savedSecId} zugeordnet`; }
   });
 }
 
@@ -1160,22 +1184,36 @@ async function importUbsQuotes(parsed){
     args: [p.secId, p.price, p.priceDateIso, UBS_SOURCE, now],
   }));
 
-  // Learn/refresh Name -> SecurityID mapping for every row matched this run
-  // (manually or automatically by exact name), so future uploads skip the dropdown.
-  const learn = new Map();
+  // Learn/refresh the Name -> SecurityID matching for every row matched this
+  // run (manually or automatically by exact name), stored directly in
+  // security_data (FieldNameID=143), so future uploads skip the dropdown.
+  // One row per SecurityID: an existing row is UPDATEd in place (kept
+  // current), a SecurityID without one yet gets a new row.
+  const meta = await ensureUbs143Meta();
+  const asOfDate = nowZurichIsoDateString();
+  const learn = new Map(); // excelName -> secId
   parsed.forEach(p => { if (p.secId && p.excelName && (p.matchType === 'manual' || p.matchType === 'auto')) learn.set(p.excelName, p.secId); });
-  const mapStmts = [...learn.entries()].map(([name, secId]) => ({
-    sql: `INSERT INTO security_name_mapping (ExternalName, SecurityID, Source, created_at, updated_at) VALUES (?,?,?,?,?)
-          ON CONFLICT(ExternalName) DO UPDATE SET SecurityID=excluded.SecurityID, updated_at=excluded.updated_at`,
-    args: [name, secId, UBS_SOURCE, now, now],
-  }));
+  const mapStmts = [...learn.entries()].map(([name, secId]) => {
+    const existing = ubsFieldMapReverseCache && ubsFieldMapReverseCache.get(secId);
+    if (existing) {
+      return {
+        sql: `UPDATE security_data SET FieldValue=?, DataType=?, FieldName=?, AsOfDate=?, Source=? WHERE rowid=?`,
+        args: [name, meta.dataType, meta.fieldName, asOfDate, UBS_SOURCE, existing.rowId],
+      };
+    }
+    return {
+      sql: `INSERT INTO security_data (SecurityID, DataType, FieldName, FieldNameID, FieldValue, NumericValue, Unit, AsOfDate, Source, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      args: [secId, meta.dataType, meta.fieldName, 143, name, null, null, asOfDate, UBS_SOURCE, now],
+    };
+  });
 
   await batchInChunks([...priceStmts, ...mapStmts]);
   valid.forEach(p => {
     if (!ubsPriceKeyCache.has(p.secId)) ubsPriceKeyCache.set(p.secId, new Set());
     ubsPriceKeyCache.get(p.secId).add(`${p.priceDateIso.slice(0, 10)}|${p.price.toFixed(6)}`);
   });
-  nameMappingCache = null; // reload learned mappings next time
+  ubsFieldMapCache = null; ubsFieldMapReverseCache = null; // reload learned matching (incl. new rowids) next time
   load();
 }
 
