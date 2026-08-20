@@ -386,7 +386,7 @@
         <tbody id="riskBody"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
       </table>
       </div>
-      <div class="detail-meta" style="margin-top:10px;">Max Drawdown Since Inception: <span id="mddInception">—</span></div>
+      <div class="detail-meta" style="margin-top:10px;">Max Drawdown Since Inception: <span id="mddInception">—</span><span id="mddInceptionTieredMark"></span></div>
     </div>
     <div class="risk-flex-col">
       <div class="detail-meta" style="margin-bottom:6px;">Rolling 1-Year Volatility (annualized)</div>
@@ -660,6 +660,66 @@ let portfolioGroupingOpts = [];
 let statusOpts = [];
 let currentPriceRange = '90D';
 let currentDistRange = '24M';
+let priceHistoryTiered = false; // true when the loaded history uses the daily/monthly tiering below (long-history securities)
+
+// ---- Tiered price-history loading (security2.html-only optimization) ----
+// Goal: avoid pulling the full daily price history for long-lived securities
+// on every load, without ever silently corrupting date-based logic.
+//
+// Why not a plain "WHERE PriceDate >= ?" cutoff: security_prices.PriceDate is
+// NOT stored in one consistent format - price_editor.html writes Swiss
+// "dd.mm.yyyy hh:mm:ss" for manual entries, while admin.html's CSV/UBS import
+// writes ISO "yyyy-mm-dd" (see toIsoDate() in turso-data.js). A SQL string
+// comparison across that mix sorts wrong (e.g. "05.03.2020" > "2024-01-01"
+// lexically). So date filtering happens here in JS, using the same
+// parseSwissDateTime() the rest of the app already trusts - SQL is only ever
+// used for an exact `id IN (...)` match, which is format-agnostic and safe.
+//
+// Approach: fetch id+PriceDate only (2 columns, cheap) for every row, parse
+// dates in JS, then fetch full rows for: (a) everything within the last ~5
+// years [this is the longest window any calculation on this page needs -
+// Risk tab's 1/3/5Y volatility/drawdown columns, Price tab's period-return
+// columns - all daily-accurate], plus (b) one representative (last-of-month)
+// row per calendar month further back [exactly what Annual Returns, the
+// Monthly heatmap, and IRR-since-inception need - they only ever compare
+// period-boundary prices, not intra-period daily paths], plus (c) the very
+// first-ever row (exact inception price, not a monthly approximation).
+// Below ~1500 total rows (roughly 6 years of daily data) the saving isn't
+// worth a second round trip, so it just fetches everything in one query.
+//
+// Known accuracy trade-off (disclosed in the UI, see mddInception below):
+// "Max Drawdown Since Inception" can understate a drawdown that occurred
+// and fully recovered *within* a single month more than 5 years ago, since
+// only that month's last price is retained that far back.
+const PRICE_TIER_SMALL_HISTORY_THRESHOLD = 1500;
+const PRICE_TIER_DAILY_YEARS = 5;
+async function loadTieredPriceHistory(secId){
+  const idx = await tursoQuery('SELECT id, PriceDate FROM security_prices WHERE SecurityID = ?', [secId], 600000);
+  if(!idx.length) { priceHistoryTiered = false; return []; }
+  const parsed = idx.map(r => ({ id: r.id, dt: parseSwissDateTime(r.PriceDate) })).filter(r => r.dt).sort((a,b) => a.dt-b.dt);
+  if(!parsed.length) { priceHistoryTiered = false; return []; }
+
+  if(parsed.length <= PRICE_TIER_SMALL_HISTORY_THRESHOLD){
+    priceHistoryTiered = false;
+    return tursoQuery('SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices WHERE SecurityID = ?', [secId], 600000);
+  }
+
+  const dailyCutoff = daysAgo(new Date(), Math.round(PRICE_TIER_DAILY_YEARS*365.25) + 30); // small buffer past 5y
+  const dailyIds = [];
+  const monthEndIdByKey = new Map(); // "year-month" -> id of the last (date-ascending) row seen for that month
+  for(const p of parsed){
+    if(p.dt >= dailyCutoff){ dailyIds.push(p.id); continue; }
+    const mk = `${p.dt.getFullYear()}-${p.dt.getMonth()}`;
+    monthEndIdByKey.set(mk, p.id); // parsed is date-ascending, so the last write per key is that month's latest row
+  }
+  const idList = [...new Set([parsed[0].id, ...monthEndIdByKey.values(), ...dailyIds])]; // parsed[0].id = true inception point, exact
+  priceHistoryTiered = true;
+  const placeholders = idList.map(() => '?').join(',');
+  return tursoQuery(
+    `SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices WHERE SecurityID = ? AND id IN (${placeholders})`,
+    [secId, ...idList], 600000
+  );
+}
 
 // ---- FX: rate at/before a cutoff date, with fallback to oldest available (marked approx) ----
 function fxRateOnDateWithFallback(fxCloses, cutoff){
@@ -834,6 +894,13 @@ function renderRiskSection(daily, today, decimals){
     <tr><td>Max Drawdown</td>${mddRow(mdds)}</tr>
   `;
   document.getElementById('mddInception').textContent = mddInception!==null ? (mddInception*100).toFixed(2)+'%' : '—';
+  // Disclosure for tiered (>5y) history: everything older than ~5 years is
+  // sampled at month-end only (see loadTieredPriceHistory), so a drawdown
+  // that occurred and fully recovered within a single month back then could
+  // be understated. Nothing within the 5Y window is affected.
+  document.getElementById('mddInceptionTieredMark').innerHTML = priceHistoryTiered
+    ? ' <span title="Basiert ab ca. 5 Jahren Historie auf Monatsend-Kursen (Datenreduktion) - ein Einbruch, der innerhalb eines einzelnen Monats vor mehr als 5 Jahren entstand und sich im selben Monat wieder erholte, wäre hier ggf. nicht sichtbar.">*</span>'
+    : '';
 
   const volChartWrap = document.getElementById('volChartWrap');
   const rollingVolFull = rollingVolatility1Y(daily);
@@ -1099,12 +1166,15 @@ async function loadSecurity(secId){
   else { badge.textContent = 'Active'; badge.classList.add('status-active'); }
   badge.style.display = '';
 
+  // Price history uses tiered loading (see loadTieredPriceHistory) instead of
+  // always pulling the full daily series - safe to run in parallel with the
+  // other two since it resolves to its own query/queries independently.
   const [prices, dists, txns] = await Promise.all([
-    tursoQuery('SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices WHERE SecurityID = ?', [secId]),
-    tursoQuery('SELECT id, SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source FROM security_distributions WHERE SecurityID = ?', [secId]),
+    loadTieredPriceHistory(secId),
+    tursoQuery('SELECT id, SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source FROM security_distributions WHERE SecurityID = ?', [secId], 300000),
     tursoQuery(`SELECT t.DateTrx, t.Quantity, t.AmtCHF, t.AmtLC, t.Source, ta.ParameterName AS TrxArtName
                 FROM security_transactions t LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt
-                WHERE t.SecurityID = ?`, [secId]),
+                WHERE t.SecurityID = ?`, [secId], 300000),
   ]);
   priceRows = prices;
   distRows = dists.map(d => ({ exDate: parseSwissDate(d.ExDate), payDate: parseSwissDate(d.PayDate), amount: parseFloat(d.DistributionAmount), currency: d.Currency || master.Currency, source: d.Source||'' }))
@@ -1146,6 +1216,7 @@ async function loadSecurity(secId){
     document.getElementById('monthlyToggleWrap').innerHTML = '';
     document.getElementById('riskBody').innerHTML = '<tr><td colspan="4" class="empty">Keine Daten.</td></tr>';
     document.getElementById('mddInception').textContent = '—';
+    document.getElementById('mddInceptionTieredMark').innerHTML = '';
     document.getElementById('volChartWrap').innerHTML = '<div class="chart-empty">Keine Kursdaten.</div>';
     const url = new URL(location.href); url.searchParams.set('id', secId); history.replaceState(null,'',url);
     return;
@@ -1253,13 +1324,24 @@ async function loadSecurity(secId){
 
   // FX securities ("XXX/CHF") price history, daily-collapsed, ascending.
   // Batched into a single query instead of one per currency (this runs on every security switch).
+  // Only fetch the FX pair(s) actually needed for THIS security's CHF
+  // conversion - previously this pulled the full price history of EVERY
+  // tracked "XXX/CHF" pair on every single security load, regardless of
+  // whether that pair was relevant (e.g. a CHF-denominated security with
+  // CHF-only distributions triggered zero FX need but fetched all of them
+  // anyway). Needed set = the security's own quote currency (if not CHF)
+  // plus any distribution currency that differs from CHF.
+  const neededCcys = new Set();
+  if(master.Currency && master.Currency.toUpperCase() !== 'CHF') neededCcys.add(master.Currency.toUpperCase());
+  distRows.forEach(d => { const c=(d.currency||'').toUpperCase(); if(c && c!=='CHF') neededCcys.add(c); });
+
   const fxCloses = {};
   const fxMatches = masterAll
     .map(m => ({ id: m.SecurityID, ccy: (m.SecurityName||'').trim().match(/^([A-Za-z]{3})\/CHF$/i) }))
-    .filter(x => x.ccy);
+    .filter(x => x.ccy && neededCcys.has(x.ccy[1].toUpperCase()));
   if (fxMatches.length) {
     const placeholders = fxMatches.map(() => '?').join(',');
-    const fxPricesAll = await tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices WHERE SecurityID IN (${placeholders})`, fxMatches.map(x => x.id));
+    const fxPricesAll = await tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices WHERE SecurityID IN (${placeholders})`, fxMatches.map(x => x.id), 600000);
     const fxPricesBySecId = new Map();
     for (const p of fxPricesAll) { if (!fxPricesBySecId.has(p.SecurityID)) fxPricesBySecId.set(p.SecurityID, []); fxPricesBySecId.get(p.SecurityID).push(p); }
     for (const x of fxMatches) fxCloses[x.ccy[1].toUpperCase()] = dailyCloses(fxPricesBySecId.get(x.id) || []);
