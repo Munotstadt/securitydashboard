@@ -27,8 +27,8 @@
   th[data-sort]{cursor:pointer;user-select:none;}
   th[data-sort]:hover{color:var(--text);}
   th .arrow{color:var(--accent);margin-left:2px;}
-  td{padding:2px 6px;border-bottom:1px solid var(--line);vertical-align:middle;}
-  td input, td select{width:100%;padding:5px 7px;font-size:12.5px;}
+  td{padding:1px 6px;border-bottom:1px solid var(--line);vertical-align:middle;line-height:1.2;}
+  td input, td select{width:100%;padding:3px 6px;font-size:12px;}
   tr.new-row td{background:rgba(227,6,19,0.04);}
   .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;}
   .status.error{color:#C0293D;} .status.ok{color:#1F8A6E;}
@@ -73,6 +73,7 @@
       <a href="price_editor.html" class="active">✏️ Prices</a>
       <a href="transactions_editor.html">📋 Transactions</a>
       <a href="distribution_editor.html">💰 Distributions</a>
+      <a href="parameters_editor.html">⚙️ Parameters</a>
       <a href="security_data.html">🔎 Security Data</a>
       <a href="admin.html">⚙️ Admin</a>
     </div>
@@ -111,8 +112,8 @@
 <div class="wrap">
   <h1>Security Prices · Editor</h1>
   <div class="toolbar">
-    <input type="text" id="searchText" placeholder="Suche (Security, Source)…">
-    <select id="filterSecurity"><option value="">All securities…</option></select>
+    <input type="text" id="searchText" placeholder="Suche (Source, Price)…">
+    <select id="filterSecurity"><option value="">– Security wählen –</option></select>
     <div class="date-range">
       <input type="text" id="dateFrom" placeholder="DD.MM.YY">
       <span>–</span>
@@ -120,7 +121,7 @@
     </div>
     <a id="linkSecurityForm" class="disabled"><button disabled id="btnSecurityForm">📈 View Security</button></a>
     <a id="linkDistributions" class="disabled"><button disabled id="btnDistributions">💰 View Distributions</button></a>
-    <button id="addBtn">+ New Price</button>
+    <button id="addBtn" disabled>+ New Price</button>
     <button id="saveBtn" class="primary">Save</button>
   </div>
   <div class="count-line" id="countLine">Loading…</div>
@@ -138,7 +139,7 @@
   </table>
   </div>
   <div class="status" id="status"></div>
-  <p class="note">Zeigt die letzten 300 Einträge der Auswahl. Der Collector schreibt weiterhin regelmässig neue Zeilen in die DB; hier können einzelne Kurse manuell korrigiert oder ergänzt werden. Neu hinzugefügte Zeilen erscheinen immer zuoberst.</p>
+  <p class="note">Bitte zuerst oben eine Security auswählen — ohne Auswahl werden keine Preise geladen oder angezeigt. Geladen werden die letzten 90 Einträge der gewählten Security (neueste zuerst), um die Datenbankabfrage schlank zu halten. Der Collector schreibt weiterhin regelmässig neue Zeilen in die DB; hier können einzelne Kurse manuell korrigiert oder ergänzt werden. Neu hinzugefügte Zeilen erscheinen immer zuoberst.</p>
 
   <div class="footer">
     <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
@@ -224,6 +225,8 @@ let masterRows = [];
 let deleteQueue = [];
 let sortField = 'PriceDate';
 let sortDir = 'desc';
+let currentSecId = '';
+const PRICE_LOAD_LIMIT = 90; // cap per security — keeps the query/table small and fast
 
 function masterName(secId){ const m = masterRows.find(x => String(x.SecurityID)===String(secId)); return m ? m.SecurityName : ''; }
 function parseFilterDate(str){
@@ -279,21 +282,31 @@ function updateSortIndicators() {
   });
 }
 
-function renderAll(filterSecId='') {
+function renderAll(filterSecId=currentSecId) {
   const body = document.getElementById('body');
+  const addBtn = document.getElementById('addBtn');
+
+  updateSelectionLinks(filterSecId);
+  updateSortIndicators();
+
+  if (!filterSecId) {
+    // No security selected: show no prices at all (avoids loading/rendering the whole table).
+    document.getElementById('countLine').textContent = 'Bitte zuerst eine Security auswählen.';
+    body.innerHTML = '<tr><td colspan="5">Bitte oben eine Security auswählen, um Preise zu laden.</td></tr>';
+    addBtn.disabled = true;
+    return;
+  }
+  addBtn.disabled = false;
+
   const search = (document.getElementById('searchText').value || '').toLowerCase().trim();
   const dateFrom = parseFilterDate(document.getElementById('dateFrom').value);
   const dateTo = parseFilterDate(document.getElementById('dateTo').value);
   const dateToEnd = dateTo ? new Date(dateTo.getFullYear(), dateTo.getMonth(), dateTo.getDate(), 23,59,59) : null;
 
   let filtered = rows.map((r,i)=>({r,i}))
-    .filter(({r}) => !filterSecId || String(r.SecurityID) === String(filterSecId))
-    .filter(({r}) => !search || masterName(r.SecurityID).toLowerCase().includes(search) || (r.Source||'').toLowerCase().includes(search))
+    .filter(({r}) => !search || (r.Source||'').toLowerCase().includes(search) || String(r.Price??'').toLowerCase().includes(search))
     .filter(({r}) => { if(!dateFrom) return true; const dt = parseSwissDateTime(r.PriceDate); return dt && dt >= dateFrom; })
     .filter(({r}) => { if(!dateToEnd) return true; const dt = parseSwissDateTime(r.PriceDate); return dt && dt <= dateToEnd; });
-
-  updateSelectionLinks(filterSecId);
-  updateSortIndicators();
 
   // New (unsaved) rows always pinned to top; the rest sorted by the active column.
   const newOnes = filtered.filter(({r}) => r._new);
@@ -307,9 +320,9 @@ function renderAll(filterSecId='') {
     const minD = new Date(Math.min(...dates)), maxD = new Date(Math.max(...dates));
     rangeText = ` · ${toSwissDate(minD)} – ${toSwissDate(maxD)}`;
   }
-  document.getElementById('countLine').textContent = `Total ${rows.length} · ${filtered.length} ausgewählt${rangeText}`;
+  document.getElementById('countLine').textContent = `Geladen ${rows.length} (max ${PRICE_LOAD_LIMIT}) · ${filtered.length} angezeigt${rangeText}`;
 
-  body.innerHTML = ordered.length ? ordered.slice(0,300).map(({r,i}) => renderRow(r,i)).join('') : '<tr><td colspan="5">No entries.</td></tr>';
+  body.innerHTML = ordered.length ? ordered.map(({r,i}) => renderRow(r,i)).join('') : '<tr><td colspan="5">No entries.</td></tr>';
 
   body.querySelectorAll('input, select').forEach(el => {
     el.addEventListener('change', () => {
@@ -329,6 +342,38 @@ function renderAll(filterSecId='') {
   });
 }
 
+// Idempotent — keeps the SecurityID+PriceDate lookup below fast (index-only
+// scan instead of a full-table scan) without needing a separate migration step.
+let priceIndexReady = false;
+async function ensurePriceIndex() {
+  if (priceIndexReady) return;
+  try { await tursoRun('CREATE INDEX IF NOT EXISTS idx_security_prices_secid_date ON security_prices(SecurityID, PriceDate)'); } catch (e) {}
+  priceIndexReady = true;
+}
+
+// Loads only the selected security's most recent PRICE_LOAD_LIMIT rows — never
+// the whole security_prices table — to keep both the DB read and the render light.
+async function selectSecurity(secId) {
+  currentSecId = secId;
+  rows = [];
+  deleteQueue = [];
+  if (!secId) { renderAll(''); return; }
+  document.getElementById('countLine').textContent = 'Lade…';
+  document.getElementById('body').innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
+  try {
+    await ensurePriceIndex();
+    const priceRows = await tursoQuery(
+      'SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices WHERE SecurityID=? ORDER BY PriceDate DESC LIMIT ?',
+      [secId, PRICE_LOAD_LIMIT]
+    );
+    rows = priceRows.map(r => ({ ...r, PriceDate: toSwissDateTime(parseSwissDateTime(r.PriceDate)) || r.PriceDate, _dirty:false, _new:false }));
+  } catch (e) {
+    document.getElementById('body').innerHTML = `<tr><td colspan="5">Error: ${e.message}</td></tr>`;
+    return;
+  }
+  renderAll(secId);
+}
+
 async function load() {
   if (!tursoConfigured()) {
     document.getElementById('body').innerHTML = `<tr><td colspan="5">Bitte ⚙ Repo/Token setzen.</td></tr>`;
@@ -336,20 +381,22 @@ async function load() {
     return;
   }
   try {
-    const [priceRows, master] = await Promise.all([
-      tursoQuery('SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices'),
-      tursoQuery('SELECT SecurityID, SecurityName FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC', [], 3600000),
-    ]);
-    rows = priceRows.map(r => ({ ...r, PriceDate: toSwissDateTime(parseSwissDateTime(r.PriceDate)) || r.PriceDate, _dirty:false, _new:false }));
+    const master = await tursoQuery('SELECT SecurityID, SecurityName FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC', [], 3600000);
     masterRows = master;
+    rows = [];
     deleteQueue = [];
 
     const sel = document.getElementById('filterSecurity');
-    sel.innerHTML = '<option value="">All securities…</option>' + secOptions('');
+    sel.innerHTML = '<option value="">– Security wählen –</option>' + secOptions('');
 
     const urlId = new URLSearchParams(location.search).get('id');
-    if (urlId && masterRows.some(m => String(m.SecurityID) === urlId)) { sel.value = urlId; renderAll(urlId); }
-    else renderAll();
+    if (urlId && masterRows.some(m => String(m.SecurityID) === urlId)) {
+      sel.value = urlId;
+      await selectSecurity(urlId);
+    } else {
+      currentSecId = '';
+      renderAll('');
+    }
     if (new URLSearchParams(location.search).get('add') === '1') { document.getElementById('addBtn').click(); }
   } catch (e) {
     document.getElementById('body').innerHTML = `<tr><td colspan="5">Error: ${e.message}</td></tr>`;
@@ -357,7 +404,7 @@ async function load() {
 }
 function setStatus(msg, cls) { const s = document.getElementById('status'); s.textContent = msg; s.className = 'status ' + (cls||''); }
 
-document.getElementById('filterSecurity').addEventListener('change', (e) => renderAll(e.target.value));
+document.getElementById('filterSecurity').addEventListener('change', (e) => selectSecurity(e.target.value));
 document.getElementById('searchText').addEventListener('input', () => renderAll(document.getElementById('filterSecurity').value));
 document.getElementById('dateFrom').addEventListener('input', () => renderAll(document.getElementById('filterSecurity').value));
 document.getElementById('dateTo').addEventListener('input', () => renderAll(document.getElementById('filterSecurity').value));
@@ -372,9 +419,9 @@ document.querySelectorAll('#headerRow th[data-sort]').forEach(th => {
 });
 
 document.getElementById('addBtn').addEventListener('click', () => {
-  const secId = document.getElementById('filterSecurity').value || (masterRows[0] && masterRows[0].SecurityID) || '';
-  rows.push({ id:null, SecurityID: secId, Price:'', PriceDate: nowZurichString(), Source:'manual', _dirty:true, _new:true });
-  renderAll(document.getElementById('filterSecurity').value);
+  if (!currentSecId) { setStatus('Bitte zuerst eine Security auswählen.', 'error'); return; }
+  rows.push({ id:null, SecurityID: currentSecId, Price:'', PriceDate: nowZurichString(), Source:'manual', _dirty:true, _new:true });
+  renderAll(currentSecId);
 });
 
 document.getElementById('saveBtn').addEventListener('click', async () => {

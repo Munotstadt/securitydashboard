@@ -37,6 +37,7 @@
   .chg{font-family:'IBM Plex Mono',monospace;text-align:right;font-size:13px;white-space:nowrap;}
   .chg.up{color:var(--gain);} .chg.down{color:var(--loss);} .chg.flat{color:var(--muted);}
   .ccy{color:var(--muted);font-size:11px;margin-left:4px;}
+  .count-line{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin:0 0 10px;}
   .empty,.error{padding:40px 10px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
   .error{color:var(--loss);}
   .footer{margin-top:20px;display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
@@ -95,6 +96,7 @@
       <a href="price_editor.html">✏️ Prices</a>
       <a href="transactions_editor.html">📋 Transactions</a>
       <a href="distribution_editor.html">💰 Distributions</a>
+      <a href="parameters_editor.html">⚙️ Parameters</a>
       <a href="security_data.html">🔎 Security Data</a>
       <a href="admin.html">⚙️ Admin</a>
     </div>
@@ -140,6 +142,7 @@
   <label class="toggle-inactive-label">
     <input type="checkbox" id="showInactiveToggle"> Inactive / Terminated anzeigen
   </label>
+  <div class="count-line" id="listingCountLine"></div>
 
   <div class="settings" id="settingsPanel">
     <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
@@ -349,6 +352,13 @@ function renderBoard(){
     else cmp = (va<vb ? -1 : (va>vb ? 1 : 0));
     return sortDir === 'asc' ? cmp : -cmp;
   });
+
+  const countLine = document.getElementById('listingCountLine');
+  if (countLine) {
+    countLine.textContent = rows.length !== allRows.length
+      ? `${rows.length} von ${allRows.length} Securities ausgewählt`
+      : `${rows.length} Securities`;
+  }
 
   if(!rows.length){ body.innerHTML = '<tr><td colspan="7" class="empty">Keine Treffer.</td></tr>'; return; }
 

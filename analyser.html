@@ -41,6 +41,8 @@
   .chg{font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;white-space:nowrap;}
   .chg .abs{display:block;font-size:10px;color:var(--muted);}
   .chg.up{color:var(--gain);} .chg.down{color:var(--loss);} .chg.flat{color:var(--muted);}
+  .abs.vs-idx{font-weight:600;}
+  .abs.vs-idx.up{color:var(--gain);} .abs.vs-idx.down{color:var(--loss);}
   .empty,.error{padding:40px 10px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
   .error{color:var(--loss);}
   .note{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:10px;}
@@ -92,6 +94,7 @@
       <a href="price_editor.html">✏️ Prices</a>
       <a href="transactions_editor.html">📋 Transactions</a>
       <a href="distribution_editor.html">💰 Distributions</a>
+      <a href="parameters_editor.html">⚙️ Parameters</a>
       <a href="security_data.html">🔎 Security Data</a>
       <a href="admin.html">⚙️ Admin</a>
     </div>
@@ -581,13 +584,15 @@ function computeGroupAverages(rows, distBySecId, fxByCurrency){
   const avgPcts = PERIODS.map((pr,i) => { const vals = rowData.map(r=>r.pcts[i]).filter(v=>v!==null); return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null; });
   return { rowData, avgYield, avgPcts };
 }
+function pctCell(pct){ const f = fmtPct(pct); return `<td class="chg ${f.dir}">${f.text}</td>`; }
 function diffCell(pct, benchmarkPct){
   const f = fmtPct(pct);
   let diffHtml = '';
   if(benchmarkPct!==undefined && pct!==null && benchmarkPct!==null){
     const diff = pct - benchmarkPct;
     const df = fmtPct(diff);
-    diffHtml = `<span class="abs">${df.text} vs Idx</span>`;
+    const diffDir = diff>0 ? 'up' : (diff<0 ? 'down' : 'flat');
+    diffHtml = `<span class="abs vs-idx ${diffDir}">${df.text} vs Idx</span>`;
   }
   return `<td class="chg ${f.dir}">${f.text}${diffHtml}</td>`;
 }
@@ -597,8 +602,10 @@ function renderMarketGroupTable(groupLabel, candidates, distBySecId, fxByCurrenc
   if(!rows.length){ html += `<div class="mg-title">${groupLabel.toUpperCase()}</div><div class="empty" style="padding:16px 0;">No securities found.</div></div>`; return { html, avgPcts: null }; }
   html += `<div class="table-wrap"><table class="mg-table">${MG_COLGROUP}<thead><tr><th>Security</th><th class="num">Yield</th>${PERIODS.map(p=>`<th class="num">${p.label}</th>`).join('')}</tr></thead><tbody>`;
   const { rowData, avgYield, avgPcts } = computeGroupAverages(rows, distBySecId, fxByCurrency);
+  // vs. Index is a group-level comparison — only shown on the average row below,
+  // not repeated on every individual security row.
   for(const r of rowData){
-    const cells = r.pcts.map((pct,i) => diffCell(pct, indexAvgPcts ? indexAvgPcts[i] : undefined)).join('');
+    const cells = r.pcts.map((pct) => pctCell(pct)).join('');
     html += `<tr><td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>${yieldCell(r.yieldPct)}${cells}</tr>`;
   }
   const label = groupLabel === 'Index' ? 'INDEX - Average (Benchmark)' : `${groupLabel.toUpperCase()} - Average`;

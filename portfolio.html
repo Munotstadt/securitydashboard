@@ -57,13 +57,18 @@
   tbody tr.position-row td.name{padding-left:26px;}
   .chevron{display:inline-block;width:10px;margin-right:4px;transition:transform .15s;}
   tr.collapsed .chevron{transform:rotate(-90deg);}
-  .name{font-weight:500;}
+  .name{font-weight:500;border-left:3px solid transparent;}
   .name a{color:var(--text);text-decoration:none;border-bottom:1px dotted var(--muted);}
   .name a:hover{color:var(--accent);border-bottom-color:var(--accent);}
+  /* Gain/loss (based on the Δ Day column) called out on every row and subtotal,
+     not just the small delta figures — an accent bar on the name cell. */
+  tr.pf-up td.name{border-left-color:var(--gain);}
+  tr.pf-down td.name{border-left-color:var(--loss);}
   .price,.time{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
   .chg{font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;white-space:nowrap;}
-  .chg .pct{display:block;font-size:10px;color:var(--muted);}
+  .chg .pct{display:block;font-size:10px;}
   .chg.up{color:var(--gain);} .chg.down{color:var(--loss);} .chg.flat{color:var(--muted);}
+  .chg.up .pct{color:var(--gain);} .chg.down .pct{color:var(--loss);} .chg.flat .pct{color:var(--muted);}
   .ccy{color:var(--muted);font-size:11px;margin-left:4px;}
   .empty,.error{padding:40px 10px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
   .error{color:var(--loss);}
@@ -117,6 +122,7 @@
       <a href="price_editor.html">✏️ Prices</a>
       <a href="transactions_editor.html">📋 Transactions</a>
       <a href="distribution_editor.html">💰 Distributions</a>
+      <a href="parameters_editor.html">⚙️ Parameters</a>
       <a href="security_data.html">🔎 Security Data</a>
       <a href="admin.html">⚙️ Admin</a>
     </div>
@@ -529,7 +535,8 @@ function positionRow(r, total, ancestors, depth){
   const dDay=deltaOf1(r,'valDayChf'), dWtd=deltaOf1(r,'valWtdChf'), dTen=deltaOf1(r,'valTenChf'),
         dMtd=deltaOf1(r,'valMtdChf'), dNinety=deltaOf1(r,'valNinetyChf'), d360=deltaOf1(r,'val360Chf');
   const indent = 8 + (depth||0)*18;
-  return `<tr class="position-row" data-ancestors="${ancestors}">
+  const pfDir = dDay.delta===null ? '' : `pf-${fmtPct(dDay.pct).dir}`;
+  return `<tr class="position-row ${pfDir}" data-ancestors="${ancestors}">
     <td class="name" style="padding-left:${indent}px"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>
     <td class="price">${fmtDecimal(r.qty,4)}</td>
     <td class="price">${fmtDecimal(r.last ? r.last.Price : null, 2)}<span class="ccy">${r.currency||''}</span></td>
@@ -546,8 +553,9 @@ function groupRow(label, positions, total, key, ancestors, depth){
   const dDay=deltaFromPaired(positions,'valDayChf'), dWtd=deltaFromPaired(positions,'valWtdChf'), dTen=deltaFromPaired(positions,'valTenChf'),
         dMtd=deltaFromPaired(positions,'valMtdChf'), dNinety=deltaFromPaired(positions,'valNinetyChf'), d360=deltaFromPaired(positions,'val360Chf');
   const levelClass = `level-${Math.min(depth+1, 3)}`;
+  const pfDir = dDay.delta===null ? '' : `pf-${fmtPct(dDay.pct).dir}`;
   const indent = 8 + depth*18;
-  return `<tr class="section-row ${levelClass}" data-key="${key}" data-ancestors="${ancestors||''}">
+  return `<tr class="section-row ${levelClass} ${pfDir}" data-key="${key}" data-ancestors="${ancestors||''}">
     <td class="name" style="padding-left:${indent}px"><span class="chevron">▾</span>${label}</td><td></td><td></td>
     <td class="price">${pctPf!==null?pctPf.toFixed(1)+'%':'—'}</td>
     <td class="price">${fmtChf(sum)}</td>
@@ -559,7 +567,8 @@ function totalRow(positions, total){
   const sum = sumChf(positions);
   const dDay=deltaFromPaired(positions,'valDayChf'), dWtd=deltaFromPaired(positions,'valWtdChf'), dTen=deltaFromPaired(positions,'valTenChf'),
         dMtd=deltaFromPaired(positions,'valMtdChf'), dNinety=deltaFromPaired(positions,'valNinetyChf'), d360=deltaFromPaired(positions,'val360Chf');
-  return `<tr class="grand-total-row">
+  const pfDir = dDay.delta===null ? '' : `pf-${fmtPct(dDay.pct).dir}`;
+  return `<tr class="grand-total-row ${pfDir}">
     <td class="name">Total</td><td></td><td></td><td class="price">100.0%</td><td class="price">${fmtChf(sum)}</td>
     ${deltaCell(dDay.delta,dDay.pct)}${deltaCell(dWtd.delta,dWtd.pct)}${deltaCell(dTen.delta,dTen.pct)}
     ${deltaCell(dMtd.delta,dMtd.pct)}${deltaCell(dNinety.delta,dNinety.pct)}${deltaCell(d360.delta,d360.pct)}
