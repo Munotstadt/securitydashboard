@@ -211,9 +211,8 @@ if (typeof ensureSecurityCurrenciesSchema === 'undefined') {
   window.ensureSecurityCurrenciesSchema = async function(){
     try {
       await tursoRun(`CREATE TABLE IF NOT EXISTS security_currencies (
-        SecurityCurrencyID INTEGER PRIMARY KEY AUTOINCREMENT,
+        SecurityID INTEGER PRIMARY KEY AUTOINCREMENT,
         Cry TEXT,
-        SecurityID INTEGER NOT NULL,
         ConversionFactor REAL DEFAULT 1,
         Comments TEXT,
         created_at TEXT

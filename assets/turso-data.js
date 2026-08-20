@@ -148,48 +148,47 @@ async function ensureAssetComparisonSchema(){
   markSchemaEnsured('asset_comparison');
 }
 
-// Currencies used across securities, keyed per-SecurityID so each security can
-// carry its own price-quoting convention (e.g. a security quoted "per 100
-// units" gets ConversionFactor=100 - see Currency magnitude check.md).
+// A small currency reference/lookup list (one row PER CURRENCY, not per
+// security - ~10-20 rows total). SecurityID here is just this table's own
+// autoincrement primary key (per the live schema Philipp created) - it is
+// NOT a foreign key into security_master. ConversionFactor lets a currency
+// that's conventionally quoted "per 100 units" (see Currency magnitude
+// check.md) be flagged, e.g. JPY/KRW/IDR/HUF/VND/ISK/CLP -> 100.
 // Controls the Currency <select> lists app-wide (security.html, master_editor.html,
 // distribution_editor.html) instead of a hardcoded option list.
 async function ensureSecurityCurrenciesSchema(){
   if (schemaAlreadyEnsured('security_currencies')) return;
   try {
-    // Cry intentionally has no NOT NULL constraint: security_master.Currency is
-    // blank for some rows, and one such row must not be able to abort the whole
-    // backfill below (every security has to end up represented in this table,
-    // even ones with unresolved currency - that data gap gets fixed manually
-    // via Comments afterwards, not by silently dropping the row here).
     await tursoRun(`CREATE TABLE IF NOT EXISTS security_currencies (
-      SecurityCurrencyID INTEGER PRIMARY KEY AUTOINCREMENT,
+      SecurityID INTEGER PRIMARY KEY AUTOINCREMENT,
       Cry TEXT,
-      SecurityID INTEGER NOT NULL,
       ConversionFactor REAL DEFAULT 1,
       Comments TEXT,
       created_at TEXT
     )`);
   } catch(e) {}
-  // Backfill: one row per existing security_master row not yet represented here.
-  // Queried with NO status/active filter, so terminated/pending securities
-  // (e.g. a TWD-quoted security) aren't accidentally skipped. Each insert has
-  // its own try/catch so one problem row can't abort the rest of the backfill.
+  // Seed: one row per currency actually in use across security_master
+  // (DISTINCT Currency, no status filter so a terminated/pending security's
+  // currency - e.g. TWD - isn't missed), plus CHF explicitly since the home
+  // currency may have no security actually denominated in it. Each insert
+  // has its own try/catch so one problem row can't abort the rest.
   try {
     const LOW_VALUE_CCY = new Set(['JPY','KRW','IDR','HUF','VND','ISK','CLP']);
-    const [existing, masters] = await Promise.all([
-      tursoQuery('SELECT DISTINCT SecurityID FROM security_currencies', [], 0),
-      tursoQuery('SELECT SecurityID, Currency FROM security_master', [], 0),
+    const [existingRows, distinctCurrencies] = await Promise.all([
+      tursoQuery('SELECT Cry FROM security_currencies', [], 0),
+      tursoQuery("SELECT DISTINCT UPPER(TRIM(Currency)) AS Cry FROM security_master WHERE Currency IS NOT NULL AND TRIM(Currency) <> ''", [], 0),
     ]);
-    const existingIds = new Set(existing.map(r => String(r.SecurityID)));
+    const existingCry = new Set(existingRows.map(r => (r.Cry || '').toUpperCase()).filter(Boolean));
     const nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
-    for (const m of masters) {
-      if (existingIds.has(String(m.SecurityID))) continue;
-      const cry = (m.Currency || '').trim().toUpperCase() || null;
-      const factor = cry && LOW_VALUE_CCY.has(cry) ? 100 : 1;
+    const wanted = new Set(distinctCurrencies.map(r => r.Cry).filter(Boolean));
+    wanted.add('CHF');
+    for (const cry of wanted) {
+      if (existingCry.has(cry)) continue;
+      const factor = LOW_VALUE_CCY.has(cry) ? 100 : 1;
       try {
         await tursoRun(
-          'INSERT INTO security_currencies (Cry, SecurityID, ConversionFactor, Comments, created_at) VALUES (?,?,?,?,?)',
-          [cry, m.SecurityID, factor, null, nowIso]
+          'INSERT INTO security_currencies (Cry, ConversionFactor, Comments, created_at) VALUES (?,?,?,?)',
+          [cry, factor, null, nowIso]
         );
       } catch(rowErr) {}
     }
