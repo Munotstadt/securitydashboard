@@ -1072,7 +1072,11 @@ async function loadSecurity(secId){
   const prev = daily.length>=2 ? daily[daily.length-2] : null;
   const now = new Date();
 
-  const decimals = master.GroupName === 'Currency' ? 4 : 2;
+  // 4 decimals for anything grouped as Currency in DashboardGrouping, AND for
+  // any "XXX/CHF"-named FX security regardless of that grouping tag - some FX
+  // securities (e.g. KRW/CHF) weren't consistently tagged with the Currency
+  // DashboardGrouping, which silently rounded their rate to 2 decimals.
+  const decimals = (master.GroupName === 'Currency' || fxBaseCurrency(master.SecurityName)) ? 4 : 2;
 
   renderReturnsSection(daily, now);
   renderRiskSection(daily, now, decimals);

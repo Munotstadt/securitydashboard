@@ -328,7 +328,9 @@ function renderBoard(groups){
       const dMtd = fmtPct(pctChange(lastAmt, r.mtd ? r.mtd.Price : null));
       const dYtd = fmtPct(pctChange(lastAmt, r.ytd ? r.ytd.Price : null));
       const dirClass = dDay.dir;
-      const decimals = r.groupName === 'Currency' ? 4 : 2;
+      // See security.html: also treat "XXX/CHF"-named FX securities as
+      // Currency-precision even if DashboardGrouping wasn't tagged as such.
+      const decimals = (r.groupName === 'Currency' || fxBaseCurrency(r.name)) ? 4 : 2;
       const timeStr = r.last ? fmtShortDateTime(r.last.dt) : '—';
       const fx = fxDisplayPrice(lastAmt, r.name, factorMap, decimals);
       html += `<tr class="${dirClass}">
