@@ -149,49 +149,32 @@ async function ensureAssetComparisonSchema(){
 }
 
 // A small currency reference/lookup list (one row PER CURRENCY, not per
-// security - ~10-20 rows total). SecurityID here is just this table's own
-// autoincrement primary key (per the live schema Philipp created) - it is
-// NOT a foreign key into security_master. ConversionFactor lets a currency
-// that's conventionally quoted "per 100 units" (see Currency magnitude
-// check.md) be flagged, e.g. JPY/KRW/IDR/HUF/VND/ISK/CLP -> 100.
+// security - ~10-20 rows total). SecurityID is a real FOREIGN KEY into
+// security_master(SecurityID): every currency row is pinned to the actual
+// "Currency"-instrument security that represents it in the master data
+// (e.g. CHF -> SecurityID 100003), never an arbitrary/auto-generated id.
+// ConversionFactor lets a currency that's conventionally quoted "per 100
+// units" (see Currency magnitude check.md) be flagged, e.g.
+// JPY/KRW/IDR/HUF/VND/ISK/CLP -> 100.
 // Controls the Currency <select> lists app-wide (security.html, master_editor.html,
 // distribution_editor.html) instead of a hardcoded option list.
+//
+// NOTE: this only creates the table. Seeding rows requires looking up each
+// currency's real SecurityID in security_master first (done once, by hand/
+// via a reviewed script) - it is deliberately NOT auto-backfilled on page
+// load, since inserting a wrong/guessed SecurityID into a FK column in the
+// live DB is exactly the kind of thing that shouldn't happen silently.
 async function ensureSecurityCurrenciesSchema(){
   if (schemaAlreadyEnsured('security_currencies')) return;
   try {
     await tursoRun(`CREATE TABLE IF NOT EXISTS security_currencies (
-      SecurityID INTEGER PRIMARY KEY AUTOINCREMENT,
+      SecurityID INTEGER PRIMARY KEY,
       Cry TEXT,
       ConversionFactor REAL DEFAULT 1,
       Comments TEXT,
-      created_at TEXT
+      created_at TEXT,
+      FOREIGN KEY (SecurityID) REFERENCES security_master(SecurityID)
     )`);
-  } catch(e) {}
-  // Seed: one row per currency actually in use across security_master
-  // (DISTINCT Currency, no status filter so a terminated/pending security's
-  // currency - e.g. TWD - isn't missed), plus CHF explicitly since the home
-  // currency may have no security actually denominated in it. Each insert
-  // has its own try/catch so one problem row can't abort the rest.
-  try {
-    const LOW_VALUE_CCY = new Set(['JPY','KRW','IDR','HUF','VND','ISK','CLP']);
-    const [existingRows, distinctCurrencies] = await Promise.all([
-      tursoQuery('SELECT Cry FROM security_currencies', [], 0),
-      tursoQuery("SELECT DISTINCT UPPER(TRIM(Currency)) AS Cry FROM security_master WHERE Currency IS NOT NULL AND TRIM(Currency) <> ''", [], 0),
-    ]);
-    const existingCry = new Set(existingRows.map(r => (r.Cry || '').toUpperCase()).filter(Boolean));
-    const nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
-    const wanted = new Set(distinctCurrencies.map(r => r.Cry).filter(Boolean));
-    wanted.add('CHF');
-    for (const cry of wanted) {
-      if (existingCry.has(cry)) continue;
-      const factor = LOW_VALUE_CCY.has(cry) ? 100 : 1;
-      try {
-        await tursoRun(
-          'INSERT INTO security_currencies (Cry, ConversionFactor, Comments, created_at) VALUES (?,?,?,?)',
-          [cry, factor, null, nowIso]
-        );
-      } catch(rowErr) {}
-    }
   } catch(e) {}
   markSchemaEnsured('security_currencies');
 }

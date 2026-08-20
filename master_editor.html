@@ -219,11 +219,12 @@ if (typeof ensureSecurityCurrenciesSchema === 'undefined') {
   window.ensureSecurityCurrenciesSchema = async function(){
     try {
       await tursoRun(`CREATE TABLE IF NOT EXISTS security_currencies (
-        SecurityID INTEGER PRIMARY KEY AUTOINCREMENT,
+        SecurityID INTEGER PRIMARY KEY,
         Cry TEXT,
         ConversionFactor REAL DEFAULT 1,
         Comments TEXT,
-        created_at TEXT
+        created_at TEXT,
+        FOREIGN KEY (SecurityID) REFERENCES security_master(SecurityID)
       )`);
     } catch(e) {}
   };
