@@ -197,6 +197,62 @@ async function tursoCurrencyOptions(){
   }
 }
 
+// ============ Currency conversion-factor lookup (security_currencies.ConversionFactor) ============
+// Low-value currencies (JPY, KRW, IDR, HUF, VND, ISK, CLP, ...) are stored in
+// security_prices at their raw per-1-unit rate (e.g. 1 JPY = 0.0052 CHF) -
+// canonical and calculation-friendly, see Currency magnitude check.md - but
+// that's an unreadable number for a human. security_currencies.ConversionFactor
+// (100 for these, 1 for normal currencies) says how many units they're
+// conventionally quoted per. This lookup backs BOTH the admin.html import
+// magnitude-check hint AND the "XXX/CHF"-security price display (×factor +
+// "(factor/CHF)" label) everywhere such a price is shown. Display-only -
+// never mutates stored data.
+let currencyFactorCache = null;
+async function currencyFactors(){
+  if (currencyFactorCache) return currencyFactorCache;
+  currencyFactorCache = new Map();
+  try {
+    await ensureSecurityCurrenciesSchema();
+    const rows = await tursoQuery(
+      "SELECT Cry, ConversionFactor FROM security_currencies WHERE Cry IS NOT NULL AND Cry <> ''",
+      [], 3600000
+    );
+    rows.forEach(r => {
+      const f = Number(r.ConversionFactor);
+      currencyFactorCache.set(String(r.Cry).toUpperCase().trim(), (isFinite(f) && f > 0) ? f : 1);
+    });
+  } catch (e) { /* leave cache empty -> every lookup below falls back to factor 1 */ }
+  return currencyFactorCache;
+}
+function currencyFactorFor(factorMap, ccy){
+  if (!ccy || !factorMap) return 1;
+  return factorMap.get(String(ccy).toUpperCase().trim()) || 1;
+}
+
+// Extracts the base currency from an FX-security's SecurityName ("JPY/CHF"
+// -> "JPY"). Mirrors the pattern security.html already uses to find FX-rate
+// securities for cross-currency conversion (see fxMatches there).
+function fxBaseCurrency(securityName){
+  const m = (securityName || '').trim().match(/^([A-Za-z]{3})\/CHF$/i);
+  return m ? m[1].toUpperCase() : null;
+}
+
+// Formats a stored FX rate for display. rawPrice is always the canonical
+// per-1-unit rate as stored in security_prices - this is presentation-only,
+// it never changes what's in the DB. For a low-value base currency
+// (ConversionFactor > 1) this returns the "per N units" figure instead of
+// the raw, unreadably small per-1 rate, e.g. 0.0052 -> "0.5233" with
+// suffix "(100/CHF)". For everything else (non-FX securities, or FX pairs
+// with factor 1) suffix is null and the caller should show its normal
+// currency label instead.
+function fxDisplayPrice(rawPrice, securityName, factorMap, decimals = 4){
+  if (rawPrice === null || rawPrice === undefined || isNaN(rawPrice)) return { text: '—', suffix: null };
+  const base = fxBaseCurrency(securityName);
+  const factor = currencyFactorFor(factorMap, base);
+  if (!base || factor === 1) return { text: fmtDecimal(rawPrice, decimals), suffix: null };
+  return { text: fmtDecimal(rawPrice * factor, decimals), suffix: `(${factor}/CHF)` };
+}
+
 // ============ Core exec — pass several {sql, args} statements, executed in one round trip ============
 async function tursoBatch(statements) {
   if (!tursoConfigured()) throw new Error('Turso Datenbank-URL/Token nicht konfiguriert (⚙ Repo/Token).');
