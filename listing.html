@@ -237,6 +237,7 @@ let allRows = [];
 let sortKey = 'name';
 let sortDir = 'asc';
 let showInactiveTerminated = false;
+let factorMap = new Map(); // Cry -> ConversionFactor, see assets/turso-data.js currencyFactors()
 
 async function load(){
   if (!tursoConfigured()) {
@@ -247,7 +248,7 @@ async function load(){
   }
   try{
     await ensureSecurityTasksSchema();
-    const [masterRows, priceRows, openTasks] = await Promise.all([
+    const [masterRows, priceRows, openTasks, factors] = await Promise.all([
       tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.DateTerminated, sm.Status,
                          ip.ParameterName AS InstrumentName, sp.ParameterName AS StatusName
               FROM security_master sm
@@ -256,7 +257,9 @@ async function load(){
               ORDER BY sm.SecurityName COLLATE NOCASE ASC`, [], 3600000),
       tursoQuery(`SELECT SecurityID, Price, PriceDate, Source FROM security_prices`, [], 3600000),
       tursoQuery(`SELECT SecurityID, DateDue FROM security_tasks WHERE Completed = 0 AND SecurityID IS NOT NULL`, [], 0),
+      currencyFactors(),
     ]);
+    factorMap = factors;
 
     const pricesBySecurity = new Map();
     for (const r of priceRows) {
@@ -349,12 +352,15 @@ function renderBoard(){
 
   if(!rows.length){ body.innerHTML = '<tr><td colspan="7" class="empty">Keine Treffer.</td></tr>'; return; }
 
-  const decimals = 2;
   body.innerHTML = rows.map(r => {
     const lastAmt = r.last ? r.last.Price : null;
     const dMtd = fmtPct(pctChange(lastAmt, r.mtd ? r.mtd.Price : null));
     const dYtd = fmtPct(pctChange(lastAmt, r.ytd ? r.ytd.Price : null));
     const timeStr = r.last ? fmtShortDateTime(r.last.dt) : '—';
+    // FX securities ("XXX/CHF") get 4 decimals like dashboard.html/security.html -
+    // 2 decimals would round a raw rate like 0.0052 down to "0.01".
+    const decimals = fxBaseCurrency(r.name) ? 4 : 2;
+    const fx = fxDisplayPrice(lastAmt, r.name, factorMap, decimals);
     const taskFlagHtml = r.taskFlag
       ? `<a href="security.html?id=${encodeURIComponent(r.secId)}#securityTasksSection" class="task-label ${r.taskFlag}" title="${r.taskFlag === 'overdue' ? 'Überfälliger Task' : 'Task fällig in den nächsten 7 Tagen'}">Task</a>`
       : '';
@@ -367,7 +373,7 @@ function renderBoard(){
       </td>
       <td>${r.instrumentName}</td>
       <td><span class="status-pill status-${r.statusFlag}">${r.statusLabel}</span></td>
-      <td class="price">${lastAmt!==null ? fmtDecimal(lastAmt, decimals) : '—'}<span class="ccy">${r.currency||''}</span></td>
+      <td class="price">${fx.text}${fx.suffix ? ` <span class="ccy">${fx.suffix}</span>` : `<span class="ccy">${r.currency||''}</span>`}</td>
       <td class="chg ${dMtd.dir}">${dMtd.text}</td>
       <td class="chg ${dYtd.dir}">${dYtd.text}</td>
       <td class="time">${timeStr}</td>

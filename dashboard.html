@@ -242,6 +242,7 @@ function isoToday(){
 }
 
 let currentGroups = {};
+let factorMap = new Map(); // Cry -> ConversionFactor, see assets/turso-data.js currencyFactors()
 
 async function load(){
   if (!tursoConfigured()) {
@@ -252,7 +253,7 @@ async function load(){
   }
   try{
     await ensureSecurityTasksSchema();
-    const [masterRows, priceRows, openTasks] = await Promise.all([
+    const [masterRows, priceRows, openTasks, factors] = await Promise.all([
       tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sp.ParameterName AS GroupName
               FROM security_master sm
               LEFT JOIN security_parameter sp ON sp.ParameterID = sm.DashboardGrouping
@@ -260,7 +261,9 @@ async function load(){
               ORDER BY (sp.ParameterID IS NULL), sp.ParameterID ASC, sm.SecurityName COLLATE NOCASE ASC`, [], 3600000),
       tursoQuery(`SELECT SecurityID, Price, PriceDate, Source FROM security_prices`, [], 3600000),
       tursoQuery(`SELECT SecurityID, DateDue FROM security_tasks WHERE Completed = 0 AND SecurityID IS NOT NULL`, [], 0),
+      currencyFactors(),
     ]);
+    factorMap = factors;
 
     const pricesBySecurity = new Map();
     for (const r of priceRows) {
@@ -327,6 +330,7 @@ function renderBoard(groups){
       const dirClass = dDay.dir;
       const decimals = r.groupName === 'Currency' ? 4 : 2;
       const timeStr = r.last ? fmtShortDateTime(r.last.dt) : '—';
+      const fx = fxDisplayPrice(lastAmt, r.name, factorMap, decimals);
       html += `<tr class="${dirClass}">
         <td class="name">
           <div class="name-cell">
@@ -334,7 +338,7 @@ function renderBoard(groups){
             ${r.taskFlag ? `<a href="security.html?id=${encodeURIComponent(r.secId)}#securityTasksSection" class="task-label ${r.taskFlag}" title="${r.taskFlag === 'overdue' ? 'Überfälliger Task' : 'Task fällig in den nächsten 7 Tagen'}">Task</a>` : ''}
           </div>
         </td>
-        <td class="price">${lastAmt!==null ? fmtDecimal(lastAmt, decimals) : '—'}<span class="ccy">${r.currency||''}</span></td>
+        <td class="price">${fx.text}${fx.suffix ? ` <span class="ccy">${fx.suffix}</span>` : `<span class="ccy">${r.currency||''}</span>`}</td>
         <td class="chg ${dDay.dir}">${dDay.text}</td>
         <td class="chg ${dWtd.dir}">${dWtd.text}</td>
         <td class="chg ${dMtd.dir}">${dMtd.text}</td>

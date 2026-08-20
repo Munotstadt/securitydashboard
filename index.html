@@ -386,6 +386,7 @@ function findMasterMatch(master, id){
 }
 
 let currentGroups = {};
+let factorMap = new Map(); // Cry -> ConversionFactor, see assets/turso-data.js currencyFactors()
 function renderBoard(groups){
   currentGroups = groups;
   const body = document.getElementById('boardBody');
@@ -406,9 +407,10 @@ function renderBoard(groups){
       const dYtd = fmtPct(pctChange(lastAmt, r.ytd ? r.ytd.Price : null));
       const decimals = groupName === 'Currency' ? 4 : 2;
       const timeStr = r.last ? fmtShortDateTime(r.last.dt) : '—';
+      const fx = fxDisplayPrice(lastAmt, r.match.SecurityName, factorMap, decimals);
       html += `<tr class="${dDay.dir}">
         <td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.match.SecurityName}</a></td>
-        <td class="price">${lastAmt!==null ? fmtDecimal(lastAmt, decimals) : '—'}<span class="ccy">${r.match.Currency||''}</span></td>
+        <td class="price">${fx.text}${fx.suffix ? ` <span class="ccy">${fx.suffix}</span>` : `<span class="ccy">${r.match.Currency||''}</span>`}</td>
         <td class="chg ${dDay.dir}">${dDay.text}</td>
         <td class="chg ${dWtd.dir}">${dWtd.text}</td>
         <td class="chg ${dMtd.dir}">${dMtd.text}</td>
@@ -429,7 +431,7 @@ async function load(){
     return;
   }
   try{
-    const [master, txns, prices] = await Promise.all([
+    const [master, txns, prices, factors] = await Promise.all([
       tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, pg.ParameterName AS PortfolioGroupName
                   FROM security_master sm
                   LEFT JOIN security_parameter pg ON pg.ParameterID = sm.PortfolioGrouping`, [], 3600000),
@@ -437,7 +439,9 @@ async function load(){
                   FROM security_transactions t
                   LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt`),
       tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices`, [], 3600000),
+      currencyFactors(),
     ]);
+    factorMap = factors;
 
     const pricesBySecId = new Map();
     for(const p of prices){ if(!pricesBySecId.has(p.SecurityID)) pricesBySecId.set(p.SecurityID, []); pricesBySecId.get(p.SecurityID).push(p); }

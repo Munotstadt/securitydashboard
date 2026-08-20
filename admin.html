@@ -473,18 +473,22 @@ function resolveSecurity(row, master) {
 // ============ Currency/magnitude sanity check ============
 // Manual CSV price lists and the UBS quote export don't reliably agree on
 // which convention a price uses, and some currencies (JPY, KRW, IDR, HUF,
-// VND, ISK, CLP …) are conventionally quoted "per 100 units" by some
-// providers. Imported as-is, that silently produces a price ~100x too high
-// or too low. Rather than maintaining a per-source whitelist of who uses
-// which convention (fragile, drifts as sources change), every incoming
-// price is checked against the security's own last stored price: a genuine
-// single-import jump of ~100x (or ~1/100x) essentially never happens for
-// anything tracked here, so that specific jump is almost always a
-// quoting-convention or decimal mistake rather than a real market move.
-// Low-value currencies are surfaced only as a corroborating hint in the
-// warning text, never as a requirement for flagging — this also catches
-// plain fat-finger/decimal-shift errors on any currency.
-const LOW_VALUE_CCY = new Set(['JPY', 'KRW', 'IDR', 'HUF', 'VND', 'ISK', 'CLP']);
+// VND, ISK, CLP …, see security_currencies.ConversionFactor) are
+// conventionally quoted "per 100 units" by some providers. Imported as-is,
+// that silently produces a price ~100x too high or too low. Rather than
+// maintaining a per-source whitelist of who uses which convention (fragile,
+// drifts as sources change), every incoming price is checked against the
+// security's own last stored price: a genuine single-import jump of ~100x
+// (or ~1/100x) essentially never happens for anything tracked here, so that
+// specific jump is almost always a quoting-convention or decimal mistake
+// rather than a real market move.
+// The low-value-currency flag is surfaced only as a corroborating hint in
+// the warning text, never as a requirement for flagging — this also catches
+// plain fat-finger/decimal-shift errors on any currency. Sourced from
+// security_currencies.ConversionFactor (via currencyFactors() in
+// assets/turso-data.js) instead of a hardcoded list, so it stays in sync
+// with the same table security.html/master_editor.html use for the
+// Currency dropdown.
 
 let lastPriceCache = new Map(); // SecurityID -> { price:number, date:string(Swiss display) } | null
 async function ensureLastPrices(secIds) {
@@ -513,7 +517,7 @@ async function ensureLastPrices(secIds) {
 // always a clean factor of exactly 100, but deliberately far from normal
 // day-to-day price moves (which are essentially never >10x for anything
 // this dashboard tracks) so it doesn't fire on genuine volatility.
-function checkMagnitude(secId, price, currency) {
+function checkMagnitude(secId, price, currency, factorMap) {
   const last = lastPriceCache.get(secId);
   if (!last || !last.price || !price) return null;
   const ratio = price / last.price;
@@ -527,7 +531,7 @@ function checkMagnitude(secId, price, currency) {
     suggested: price / factor,
     lastPrice: last.price,
     lastDate: last.date,
-    lowValueCcy: LOW_VALUE_CCY.has((currency || '').toUpperCase().trim()),
+    lowValueCcy: currencyFactorFor(factorMap, currency) > 1,
   };
 }
 function magnitudeLabel(mag) {
@@ -563,11 +567,11 @@ async function handlePriceFile(file){
     });
 
     const secIds = [...new Set(parsed.filter(p => p.secId).map(p => p.secId))];
-    await ensureLastPrices(secIds);
+    const [, factorMap] = await Promise.all([ensureLastPrices(secIds), currencyFactors()]);
     parsed.forEach(p => {
       if (p.secId && !isNaN(p.price) && p.price !== undefined) {
         const currency = (master.find(m => m.SecurityID === p.secId) || {}).Currency;
-        p.magnitudeWarning = checkMagnitude(p.secId, p.price, currency);
+        p.magnitudeWarning = checkMagnitude(p.secId, p.price, currency, factorMap);
       }
     });
 
@@ -982,12 +986,12 @@ async function markUbsDuplicates(parsed){
 // silently carry over to a different value.
 async function markUbsMagnitudeWarnings(parsed, master){
   const secIds = [...new Set(parsed.filter(p => p.secId).map(p => p.secId))];
-  if (secIds.length) await ensureLastPrices(secIds);
+  const [, factorMap] = await Promise.all([secIds.length ? ensureLastPrices(secIds) : null, currencyFactors()]);
   parsed.forEach(p => {
     p.magnitudeResolved = false;
     if (!p.secId || p.price === null) { p.magnitudeWarning = null; return; }
     const currency = (master.find(m => m.SecurityID === p.secId) || {}).Currency;
-    p.magnitudeWarning = checkMagnitude(p.secId, p.price, currency);
+    p.magnitudeWarning = checkMagnitude(p.secId, p.price, currency, factorMap);
   });
 }
 

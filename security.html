@@ -924,18 +924,21 @@ function filterDistByRange(dist, range){
   return dist.filter(d => d.exDate >= cutoff);
 }
 
-function renderRange52w(highRow, lowRow, last, decimals){
+// `factor` scales all three displayed prices consistently (52w low/high/
+// current all come from the same raw per-1 rate) - the position % is
+// unaffected since it's a ratio between values sharing the same factor.
+function renderRange52w(highRow, lowRow, last, decimals, factor = 1){
   const el = document.getElementById('range52wWrap');
   if(!highRow || !lowRow || !last){ el.innerHTML = ''; return; }
   const lowVal = lowRow.Price, highVal = highRow.Price;
   let pct = highVal > lowVal ? ((last.Price-lowVal)/(highVal-lowVal))*100 : 50;
   pct = Math.max(0, Math.min(100, pct));
   el.innerHTML = `
-    <div class="range52w-current" style="left:${pct.toFixed(1)}%">${fmtDecimal(last.Price,decimals)}</div>
+    <div class="range52w-current" style="left:${pct.toFixed(1)}%">${fmtDecimal(last.Price*factor,decimals)}</div>
     <div class="range52w-bar"><div class="range52w-marker" style="left:${pct.toFixed(1)}%">▼</div></div>
     <div class="range52w-labels">
-      <div><span class="range52w-value">${fmtDecimal(lowVal,decimals)}</span><span class="range52w-date">${fmtDateDDMM(lowRow.dt)}</span></div>
-      <div style="text-align:right"><span class="range52w-value">${fmtDecimal(highVal,decimals)}</span><span class="range52w-date">${fmtDateDDMM(highRow.dt)}</span></div>
+      <div><span class="range52w-value">${fmtDecimal(lowVal*factor,decimals)}</span><span class="range52w-date">${fmtDateDDMM(lowRow.dt)}</span></div>
+      <div style="text-align:right"><span class="range52w-value">${fmtDecimal(highVal*factor,decimals)}</span><span class="range52w-date">${fmtDateDDMM(highRow.dt)}</span></div>
     </div>`;
 }
 
@@ -988,6 +991,7 @@ async function loadSecurity(secId){
   curSecId = secId;
   const master = masterAll.find(m => String(m.SecurityID) === String(secId));
   if(!master){ document.getElementById('detailName').textContent = 'Security nicht gefunden.'; return; }
+  const factorMap = await currencyFactors();
 
   document.getElementById('linkPriceHistory').href = `price_editor.html?id=${secId}`;
   document.getElementById('linkPriceAdd').href = `price_editor.html?id=${secId}&add=1`;
@@ -1105,7 +1109,9 @@ async function loadSecurity(secId){
   const high52wRow = last52w.length ? last52w.reduce((a,b)=> b.Price>a.Price ? b : a) : null;
   const low52wRow = last52w.length ? last52w.reduce((a,b)=> b.Price<a.Price ? b : a) : null;
 
-  document.getElementById('detailPrice').textContent = fmtDecimal(last.Price, decimals);
+  const detailFx = fxDisplayPrice(last.Price, master.SecurityName, factorMap, decimals);
+  document.getElementById('detailPrice').textContent = detailFx.text;
+  document.getElementById('detailCcy').textContent = detailFx.suffix || (master.Currency || '');
   const valorLabel = master.ID_Valor ? `VN ${master.ID_Valor}` : `ID ${master.SecurityID}`;
   const launchTerm = [
     master.DateLaunch ? `Launch: ${fmtIsoDateDDMM(master.DateLaunch)}` : null,
@@ -1138,7 +1144,7 @@ async function loadSecurity(secId){
   returnsHtml += `<div class="return-box"><span class="return-label">Yield</span><span class="return-value ${yieldPct!==null&&yieldPct>0?'up':'flat'}">${yieldPct?yieldPct.toFixed(2)+'%':'-'}</span></div>`;
   document.getElementById('returnsBoxes').innerHTML = returnsHtml;
 
-  renderRange52w(high52wRow, low52wRow, last, decimals);
+  renderRange52w(high52wRow, low52wRow, last, decimals, currencyFactorFor(factorMap, fxBaseCurrency(master.SecurityName)));
   loadInstrumentSpecificData(master, last, decimals, high52wRow, low52wRow).catch(e => console.error('Fundamentals load error:', e));
   loadSecurityTasks(secId).catch(e => console.error('Tasks load error:', e));
 
@@ -1242,10 +1248,12 @@ async function loadSecurity(secId){
 
   const priceChartWrap = document.getElementById('priceChartWrap');
   const distChartWrap = document.getElementById('distChartWrap');
+  const fxFactor = currencyFactorFor(factorMap, fxBaseCurrency(master.SecurityName));
   function renderPriceChart(){
     const tooltip = document.createElement('div'); tooltip.className='chart-tooltip';
     const pts = filterByRange(daily, withDt, currentPriceRange);
-    drawLineChart(priceChartWrap, tooltip, pts, decimals, master.Currency);
+    const scaledPts = fxFactor === 1 ? pts : pts.map(p => ({ ...p, Price: p.Price * fxFactor }));
+    drawLineChart(priceChartWrap, tooltip, scaledPts, decimals, detailFx.suffix ? detailFx.suffix : master.Currency);
   }
   function renderDistChart(){
     const tooltip = document.createElement('div'); tooltip.className='chart-tooltip';
