@@ -72,8 +72,9 @@
   .name a:hover{color:var(--accent);border-bottom-color:var(--accent);}
   .cell-good{color:var(--gain);font-weight:600;}
   .cell-bad{color:var(--loss);font-weight:600;}
-  th.sector-col,td.sector-col{width:34px;max-width:34px;font-size:10px;padding-left:4px;padding-right:4px;}
+  th.sector-col,td.sector-col{width:48px;max-width:48px;font-size:11px;padding-left:4px;padding-right:4px;}
   td.sector-col.sector-max{font-weight:700;}
+  th.sector-col{writing-mode:vertical-rl;transform:rotate(180deg);text-align:left;vertical-align:bottom;height:110px;padding-bottom:8px;white-space:nowrap;}
   .rm-link{color:var(--muted);text-decoration:none;font-family:'IBM Plex Mono',monospace;font-size:11px;}
   .rm-link:hover{color:var(--loss);}
   .edit-link{color:var(--muted);text-decoration:none;font-family:'IBM Plex Mono',monospace;font-size:11px;}
@@ -254,6 +255,25 @@ let sortState = { key: 'name', dir: 1 };
 const TER_PARAM_ID = 133;
 const TRXCRY_PARAM_ID = 134;
 const SPREAD_PARAM_ID = 135;
+
+const SECTOR_ABBR_RULES = [
+  { re:/technolog/i, abbr:'Tech' },
+  { re:/financ/i, abbr:'Fin' },
+  { re:/communicat/i, abbr:'Comm' },
+  { re:/consumer\s*cyclic|cyclical|discretion/i, abbr:'ConsCycl' },
+  { re:/health/i, abbr:'Health' },
+  { re:/industr/i, abbr:'Indu' },
+  { re:/consumer\s*staple|defensive/i, abbr:'ConsStap' },
+  { re:/energy/i, abbr:'Energy' },
+  { re:/utilit/i, abbr:'Utility' },
+  { re:/real\s*estate/i, abbr:'RealE' },
+  { re:/material/i, abbr:'Mat' },
+];
+function sectorAbbr(name){
+  if(!name) return name;
+  const rule = SECTOR_ABBR_RULES.find(r => r.re.test(name));
+  return rule ? rule.abbr : name;
+}
 
 function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); return d; }
 function endOfYear(y){ return new Date(y, 11, 31, 23, 59, 59); }
@@ -517,7 +537,9 @@ async function renderComparison(){
       const cls = ['sortable-th'];
       if(c.sectorCol) cls.push('sector-col');
       if(c.type === 'num') cls.push('num');
-      return `<th class="${cls.join(' ')}" data-sort-key="${c.key}">${c.label}${arrow}</th>`;
+      const label = c.sectorCol ? sectorAbbr(c.label) : c.label;
+      const titleAttr = c.sectorCol ? ` title="${c.label}"` : '';
+      return `<th class="${cls.join(' ')}" data-sort-key="${c.key}"${titleAttr}>${label}${arrow}</th>`;
     }).join('');
   }
 
