@@ -9,7 +9,7 @@
   :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613;--gain:#1F8A6E;--loss:#C0293D; }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:32px 16px 80px;display:flex;flex-direction:column;align-items:center;}
-  .topnav{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;align-items:center;max-width:1200px;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;scrollbar-width:none;}
+  .topnav{display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;align-items:center;max-width:none;width:100%;margin:0 auto 24px;padding:0 0 10px;border-bottom:1px solid var(--line);font-family:"IBM Plex Mono",monospace;font-size:12px;scrollbar-width:none;}
   .topnav::-webkit-scrollbar{display:none;}
   .topnav a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:3px;border:1px solid transparent;white-space:nowrap;}
   .topnav a:hover{color:var(--text);border-color:var(--line);}
@@ -24,15 +24,16 @@
   .dd-menu a.active{color:var(--text);font-weight:600;background:rgba(227,6,19,0.06);}
   .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
 
-  .board{width:100%;max-width:1200px;}
+  .board{width:100%;max-width:none;}
   .eyebrow{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:2px solid var(--accent);flex-wrap:wrap;gap:8px;}
   .brand h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;text-transform:uppercase;letter-spacing:.02em;margin:0;}
   .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
 
   .toggle-btn{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;}
   .toggle-btn:hover{border-color:var(--muted);color:var(--text);}
-  .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;}
-  .improvement-input{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);background:#fff;border:1px solid var(--line);border-radius:3px;padding:6px 10px;min-width:200px;vertical-align:middle;}
+  .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;flex-direction:column;align-items:flex-end;gap:16px;}
+  .footer-row{display:flex;gap:8px;width:100%;justify-content:flex-end;}
+  .improvement-input{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);background:#fff;border:1px solid var(--line);border-radius:3px;padding:6px 10px;flex:1;min-width:280px;max-width:none;vertical-align:middle;}
   .improvement-input::placeholder{color:var(--muted);}
   #improvementSaveBtn{font-family:'IBM Plex Mono',monospace;font-size:12px;}
 
@@ -61,7 +62,9 @@
   tbody td{padding:9px 8px;border-bottom:1px solid var(--line);font-size:13px;white-space:nowrap;}
   tbody td.num{font-family:'IBM Plex Mono',monospace;text-align:right;}
   tbody tr.summary-row td{font-weight:600;background:var(--panel);border-top:1px solid var(--line);}
-  .name{font-weight:500;white-space:normal;min-width:160px;}
+  .name{font-weight:500;white-space:normal;min-width:340px;}
+  th.sortable-th{cursor:pointer;user-select:none;}
+  th.sortable-th:hover{color:var(--text);}
   .table-wrap table th:first-child,.table-wrap table td.name{position:sticky;left:0;z-index:2;background:#fff;box-shadow:2px 0 4px rgba(0,0,0,.06);}
   .table-wrap table thead th:first-child{z-index:3;background:var(--bg);}
   .table-wrap table tbody tr.summary-row td.name{background:var(--panel);}
@@ -69,6 +72,8 @@
   .name a:hover{color:var(--accent);border-bottom-color:var(--accent);}
   .cell-good{color:var(--gain);font-weight:600;}
   .cell-bad{color:var(--loss);font-weight:600;}
+  th.sector-col,td.sector-col{width:34px;max-width:34px;font-size:10px;padding-left:4px;padding-right:4px;}
+  td.sector-col.sector-max{font-weight:700;}
   .rm-link{color:var(--muted);text-decoration:none;font-family:'IBM Plex Mono',monospace;font-size:11px;}
   .rm-link:hover{color:var(--loss);}
   .edit-link{color:var(--muted);text-decoration:none;font-family:'IBM Plex Mono',monospace;font-size:11px;}
@@ -166,9 +171,13 @@
   </div>
 
   <div class="footer">
-    <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
-    <button type="button" class="toggle-btn" id="improvementSaveBtn">💡 Save</button>
-    <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
+    <div class="footer-row">
+      <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
+      <button type="button" class="toggle-btn" id="improvementSaveBtn">💡 Save</button>
+    </div>
+    <div class="footer-row">
+      <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
+    </div>
   </div>
 </div>
 
@@ -240,6 +249,7 @@ if (typeof ensureAssetComparisonSchema === 'undefined') {
 let masterAll = [];
 let groups = [];
 let curGroupId = null;
+let sortState = { key: 'name', dir: 1 };
 
 const TER_PARAM_ID = 133;
 const TRXCRY_PARAM_ID = 134;
@@ -256,6 +266,7 @@ const TR_PERIODS = [
   { key:'y2023',label:'2023', type:'year', year:2023 },
   { key:'y2022',label:'2022', type:'year', year:2022 },
   { key:'y2021',label:'2021', type:'year', year:2021 },
+  { key:'irr10y', label:'IRR 10y', type:'irr10y' },
 ];
 
 function distSumInRange(distList, fromExclusive, toInclusive){
@@ -274,6 +285,24 @@ function computeTotalReturn(closes, distList, today, period){
   if(!startClose || !endClose || !startClose.Price) return null;
   const distSum = distSumInRange(distList, startCutoff, endCutoff);
   return ((endClose.Price + distSum) / startClose.Price - 1) * 100;
+}
+
+function monthEndOnOrBefore(date){ return new Date(date.getFullYear(), date.getMonth(), 0, 23, 59, 59); }
+
+function computeIRR10y(closes, distList, today){
+  const minus10y = new Date(today);
+  minus10y.setFullYear(minus10y.getFullYear() - 10);
+  const startCutoff = monthEndOnOrBefore(minus10y);
+  const endCutoff = today;
+  const startClose = latestOnOrBefore(closes, startCutoff);
+  const endClose = latestOnOrBefore(closes, endCutoff);
+  if(!startClose || !endClose || !startClose.Price) return null;
+  const distSum = distSumInRange(distList, startCutoff, endCutoff);
+  const totalFactor = (endClose.Price + distSum) / startClose.Price;
+  if(totalFactor <= 0) return null;
+  const years = (endCutoff - startCutoff) / (365.25 * 24 * 3600 * 1000);
+  if(years <= 0) return null;
+  return (Math.pow(totalFactor, 1 / years) - 1) * 100;
 }
 
 function computeYield(closes, distList, today){
@@ -422,7 +451,7 @@ async function renderComparison(){
     const trxCry = trxCryRow ? (trxCryRow.FieldValue || trxCryRow.ParameterName || (trxCryRow.NumericValue!==null?String(trxCryRow.NumericValue):null)) : null;
     const yieldPct = computeYield(closes, distList, today);
     const trByPeriod = {};
-    for(const p of TR_PERIODS) trByPeriod[p.key] = computeTotalReturn(closes, distList, today, p);
+    for(const p of TR_PERIODS) trByPeriod[p.key] = (p.type === 'irr10y') ? computeIRR10y(closes, distList, today) : computeTotalReturn(closes, distList, today, p);
     const sectorMap = {};
     for(const s of (sectorsBySecId.get(m.SecurityID) || [])) sectorMap[s.name] = s.weight;
     return { secId:m.SecurityID, name:m.SecurityName, ter, spread, trxCry, yieldPct, trByPeriod, sectorMap };
@@ -447,69 +476,127 @@ async function renderComparison(){
     return vals.length ? vals.reduce((s,v)=>s+v,0)/vals.length : null;
   }
 
-  const trHeaders = TR_PERIODS.map(p => `<th class="num">${p.label}</th>`).join('');
-  const sectorHeaders = allSectorNames.map(s => `<th class="num">${s}</th>`).join('');
+  const sectorMaxByName = {};
+  for(const s of allSectorNames){
+    const vals = perSecurity.map(r => r.sectorMap[s]).filter(v => v!==null && v!==undefined && !isNaN(v));
+    sectorMaxByName[s] = vals.length ? Math.max(...vals) : null;
+  }
 
-  const bodyRows = perSecurity.map(r => {
-    const terCls = minMaxClass(r.ter, terRange.min, terRange.max);
-    const spreadCls = minMaxClass(r.spread, spreadRange.min, spreadRange.max);
-    const terStyle = shadeStyle(r.ter, terRange.min, terRange.max);
-    const spreadStyle = shadeStyle(r.spread, spreadRange.min, spreadRange.max);
-    const trCells = TR_PERIODS.map(p => {
-      const range = trRanges[p.key];
-      const cls = minMaxClass(r.trByPeriod[p.key], range.min, range.max, true);
-      const style = shadeStyle(r.trByPeriod[p.key], range.min, range.max, true);
-      return `<td class="num ${cls}"${style}>${fmtReturnCell(r.trByPeriod[p.key])}</td>`;
-    }).join('');
-    const sectorCells = allSectorNames.map(s => `<td class="num">${fmtIntPctCell(r.sectorMap[s])}</td>`).join('');
-    return `<tr>
-      <td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>
-      <td class="num ${terCls}"${terStyle}>${fmtPctCell(r.ter)}</td>
-      <td class="num ${spreadCls}"${spreadStyle}>${fmtPctCell(r.spread)}</td>
-      <td class="num">${r.trxCry || '—'}</td>
-      <td class="num">${fmtYieldCell(r.yieldPct)}</td>
-      ${trCells}
-      ${sectorCells}
-      <td class="num">
-        <a class="edit-link" href="security_data.html?id=${encodeURIComponent(r.secId)}">✏️ Edit</a>
-        &nbsp;<a class="rm-link" href="#" data-remove-secid="${r.secId}">✕ Remove</a>
-      </td>
-    </tr>`;
-  }).join('');
+  // ---- Column definitions drive both the header row and sorting ----
+  const columns = [
+    { key:'name', label:'SecurityName', type:'string', get:r=>r.name },
+    { key:'ter', label:'TER', type:'num', get:r=>r.ter },
+    { key:'spread', label:'Spread', type:'num', get:r=>r.spread },
+    { key:'trxCry', label:'TrxCry', type:'string', get:r=>r.trxCry },
+    { key:'yieldPct', label:'Yield', type:'num', get:r=>r.yieldPct },
+    ...TR_PERIODS.map(p => ({ key:'tr_'+p.key, label:p.label, type:'num', get:r=>r.trByPeriod[p.key] })),
+    ...allSectorNames.map(s => ({ key:'sector_'+s, label:s, type:'num', sectorCol:true, get:r=>r.sectorMap[s] })),
+  ];
+  if(!columns.some(c => c.key === sortState.key)) sortState = { key:'name', dir:1 };
 
-  const avgRow = `<tr class="summary-row">
-    <td class="name">Average</td>
-    <td class="num">${fmtPctCell(avgOf(perSecurity.map(r=>r.ter)))}</td>
-    <td class="num">${fmtPctCell(avgOf(perSecurity.map(r=>r.spread)))}</td>
-    <td class="num">—</td>
-    <td class="num">${fmtYieldCell(avgOf(perSecurity.map(r=>r.yieldPct)))}</td>
-    ${TR_PERIODS.map(p => `<td class="num">${fmtReturnCell(avgOf(perSecurity.map(r=>r.trByPeriod[p.key])))}</td>`).join('')}
-    ${allSectorNames.map(s => `<td class="num">${fmtIntPctCell(avgOf(perSecurity.map(r=>r.sectorMap[s])))}</td>`).join('')}
-    <td></td>
-  </tr>`;
-
-  wrap.innerHTML = `
-    <div class="section-title">Comparison</div>
-    <div class="table-wrap">
-    <table>
-      <thead><tr>
-        <th>SecurityName</th><th class="num">TER</th><th class="num">Spread</th><th class="num">TrxCry</th><th class="num">Yield</th>
-        ${trHeaders}${sectorHeaders}<th></th>
-      </tr></thead>
-      <tbody>${bodyRows}${avgRow}</tbody>
-    </table>
-    </div>
-  `;
-
-  wrap.querySelectorAll('[data-remove-secid]').forEach(a => {
-    a.addEventListener('click', async (e) => {
-      e.preventDefault();
-      const secId = e.target.dataset.removeSecid;
-      await tursoRun('DELETE FROM asset_comparison_member WHERE GroupID = ? AND SecurityID = ?', [curGroupId, secId]);
-      tursoClearCache();
-      await renderComparison();
+  function sortedRows(){
+    const col = columns.find(c => c.key === sortState.key);
+    if(!col) return perSecurity.slice();
+    const dir = sortState.dir;
+    return perSecurity.slice().sort((a,b) => {
+      const va = col.get(a), vb = col.get(b);
+      const aEmpty = (va===null||va===undefined||va===''||(typeof va==='number'&&isNaN(va)));
+      const bEmpty = (vb===null||vb===undefined||vb===''||(typeof vb==='number'&&isNaN(vb)));
+      if(aEmpty && bEmpty) return 0;
+      if(aEmpty) return 1;
+      if(bEmpty) return -1;
+      if(col.type === 'string') return dir * String(va).localeCompare(String(vb), 'de');
+      return dir * (va - vb);
     });
-  });
+  }
+
+  function headerCellsHtml(){
+    return columns.map(c => {
+      const active = sortState.key === c.key;
+      const arrow = active ? (sortState.dir === 1 ? ' ▲' : ' ▼') : '';
+      const cls = ['sortable-th'];
+      if(c.sectorCol) cls.push('sector-col');
+      if(c.type === 'num') cls.push('num');
+      return `<th class="${cls.join(' ')}" data-sort-key="${c.key}">${c.label}${arrow}</th>`;
+    }).join('');
+  }
+
+  function draw(){
+    const rows = sortedRows();
+    const bodyRows = rows.map(r => {
+      const terCls = minMaxClass(r.ter, terRange.min, terRange.max);
+      const spreadCls = minMaxClass(r.spread, spreadRange.min, spreadRange.max);
+      const terStyle = shadeStyle(r.ter, terRange.min, terRange.max);
+      const spreadStyle = shadeStyle(r.spread, spreadRange.min, spreadRange.max);
+      const trCells = TR_PERIODS.map(p => {
+        const range = trRanges[p.key];
+        const cls = minMaxClass(r.trByPeriod[p.key], range.min, range.max, true);
+        const style = shadeStyle(r.trByPeriod[p.key], range.min, range.max, true);
+        return `<td class="num ${cls}"${style}>${fmtReturnCell(r.trByPeriod[p.key])}</td>`;
+      }).join('');
+      const sectorCells = allSectorNames.map(s => {
+        const v = r.sectorMap[s];
+        const isMax = v!==null && v!==undefined && !isNaN(v) && sectorMaxByName[s]!==null && v === sectorMaxByName[s];
+        return `<td class="num sector-col${isMax?' sector-max':''}">${fmtIntPctCell(v)}</td>`;
+      }).join('');
+      return `<tr>
+        <td class="name"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>
+        <td class="num ${terCls}"${terStyle}>${fmtPctCell(r.ter)}</td>
+        <td class="num ${spreadCls}"${spreadStyle}>${fmtPctCell(r.spread)}</td>
+        <td class="num">${r.trxCry || '—'}</td>
+        <td class="num">${fmtYieldCell(r.yieldPct)}</td>
+        ${trCells}
+        ${sectorCells}
+        <td class="num">
+          <a class="edit-link" href="security_data.html?id=${encodeURIComponent(r.secId)}">✏️ Edit</a>
+          &nbsp;<a class="rm-link" href="#" data-remove-secid="${r.secId}">✕ Remove</a>
+        </td>
+      </tr>`;
+    }).join('');
+
+    const avgRow = `<tr class="summary-row">
+      <td class="name">Average</td>
+      <td class="num">${fmtPctCell(avgOf(perSecurity.map(r=>r.ter)))}</td>
+      <td class="num">${fmtPctCell(avgOf(perSecurity.map(r=>r.spread)))}</td>
+      <td class="num">—</td>
+      <td class="num">${fmtYieldCell(avgOf(perSecurity.map(r=>r.yieldPct)))}</td>
+      ${TR_PERIODS.map(p => `<td class="num">${fmtReturnCell(avgOf(perSecurity.map(r=>r.trByPeriod[p.key])))}</td>`).join('')}
+      ${allSectorNames.map(s => `<td class="num sector-col">${fmtIntPctCell(avgOf(perSecurity.map(r=>r.sectorMap[s])))}</td>`).join('')}
+      <td></td>
+    </tr>`;
+
+    wrap.innerHTML = `
+      <div class="section-title">Comparison</div>
+      <div class="table-wrap">
+      <table>
+        <thead><tr>
+          ${headerCellsHtml()}<th></th>
+        </tr></thead>
+        <tbody>${bodyRows}${avgRow}</tbody>
+      </table>
+      </div>
+    `;
+
+    wrap.querySelectorAll('[data-sort-key]').forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.sortKey;
+        if(sortState.key === key) sortState.dir *= -1; else sortState = { key, dir: 1 };
+        draw();
+      });
+    });
+
+    wrap.querySelectorAll('[data-remove-secid]').forEach(a => {
+      a.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const secId = e.target.dataset.removeSecid;
+        await tursoRun('DELETE FROM asset_comparison_member WHERE GroupID = ? AND SecurityID = ?', [curGroupId, secId]);
+        tursoClearCache();
+        await renderComparison();
+      });
+    });
+  }
+
+  draw();
 }
 
 async function load(){
