@@ -57,18 +57,13 @@
   tbody tr.position-row td.name{padding-left:26px;}
   .chevron{display:inline-block;width:10px;margin-right:4px;transition:transform .15s;}
   tr.collapsed .chevron{transform:rotate(-90deg);}
-  .name{font-weight:500;border-left:3px solid transparent;}
+  .name{font-weight:500;}
   .name a{color:var(--text);text-decoration:none;border-bottom:1px dotted var(--muted);}
   .name a:hover{color:var(--accent);border-bottom-color:var(--accent);}
-  /* Gain/loss (based on the Δ Day column) called out on every row and subtotal,
-     not just the small delta figures — an accent bar on the name cell. */
-  tr.pf-up td.name{border-left-color:var(--gain);}
-  tr.pf-down td.name{border-left-color:var(--loss);}
   .price,.time{font-family:'IBM Plex Mono',monospace;text-align:right;white-space:nowrap;}
   .chg{font-family:'IBM Plex Mono',monospace;text-align:right;font-size:12px;white-space:nowrap;}
-  .chg .pct{display:block;font-size:10px;}
+  .chg .pct{display:block;font-size:10px;color:var(--muted);}
   .chg.up{color:var(--gain);} .chg.down{color:var(--loss);} .chg.flat{color:var(--muted);}
-  .chg.up .pct{color:var(--gain);} .chg.down .pct{color:var(--loss);} .chg.flat .pct{color:var(--muted);}
   .ccy{color:var(--muted);font-size:11px;margin-left:4px;}
   .empty,.error{padding:40px 10px;text-align:center;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:13px;}
   .error{color:var(--loss);}
@@ -122,7 +117,6 @@
       <a href="price_editor.html">✏️ Prices</a>
       <a href="transactions_editor.html">📋 Transactions</a>
       <a href="distribution_editor.html">💰 Distributions</a>
-      <a href="parameters_editor.html">⚙️ Parameters</a>
       <a href="security_data.html">🔎 Security Data</a>
       <a href="admin.html">⚙️ Admin</a>
     </div>
@@ -217,6 +211,7 @@
   <div class="footer">
     <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
     <button type="button" id="improvementSaveBtn">💡 Save</button>
+    <button type="button" id="exportValuationBtn">⬇ Valuation CSV</button>
     <button id="settingsBtn">⚙ Repo/Token</button>
     <button id="refreshBtn">Refresh</button>
   </div>
@@ -295,6 +290,10 @@ function fmtChfDelta(v){ if(v===null||v===undefined||isNaN(v)) return {text:'—
 const GROUP_COLORS = {
   'Shares':'#1F6FA8','Bonds':'#8A5B4B','Alternative':'#2E9E76','Ohne Gruppe':'#A3A9B0',
 };
+
+// Positions from the most recent load(), kept at module scope so the CSV
+// export button can read them without re-querying Turso.
+let latestPositions = [];
 const CCY_COLORS = { CHF:'#E30613', USD:'#1F8A6E', EUR:'#1F6FA8', OTH:'#E8A33D' };
 
 // Same closing-price-per-day + latest-on-or-before logic as dashboard.html,
@@ -359,7 +358,7 @@ async function load(){
       tursoQuery(`SELECT t.SecurityID, t.Quantity, ta.ParameterName AS TrxArtName
                   FROM security_transactions t
                   LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt`),
-      tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices`, [], 3600000),
+      tursoQuery(`SELECT SecurityID, Price, PriceDate, Source FROM security_prices`, [], 3600000),
     ]);
 
     const pricesBySecId = new Map();
@@ -439,6 +438,7 @@ async function load(){
     }
     const fxResults = { day: fxResultForPeriod('day'), wtd: fxResultForPeriod('wtd'), ten: fxResultForPeriod('ten'), mtd: fxResultForPeriod('mtd'), ninety: fxResultForPeriod('ninety'), threeSixty: fxResultForPeriod('threeSixty') };
 
+    latestPositions = positions;
     renderSummary(totalChf, positions, fxResults);
     renderPieChart('ccyChart', byCurrency, ['CHF','USD','EUR','OTH'], CCY_COLORS, totalChf);
     const byTopLevel = {};
@@ -535,8 +535,7 @@ function positionRow(r, total, ancestors, depth){
   const dDay=deltaOf1(r,'valDayChf'), dWtd=deltaOf1(r,'valWtdChf'), dTen=deltaOf1(r,'valTenChf'),
         dMtd=deltaOf1(r,'valMtdChf'), dNinety=deltaOf1(r,'valNinetyChf'), d360=deltaOf1(r,'val360Chf');
   const indent = 8 + (depth||0)*18;
-  const pfDir = dDay.delta===null ? '' : `pf-${fmtPct(dDay.pct).dir}`;
-  return `<tr class="position-row ${pfDir}" data-ancestors="${ancestors}">
+  return `<tr class="position-row" data-ancestors="${ancestors}">
     <td class="name" style="padding-left:${indent}px"><a href="security.html?id=${encodeURIComponent(r.secId)}">${r.name}</a></td>
     <td class="price">${fmtDecimal(r.qty,4)}</td>
     <td class="price">${fmtDecimal(r.last ? r.last.Price : null, 2)}<span class="ccy">${r.currency||''}</span></td>
@@ -553,9 +552,8 @@ function groupRow(label, positions, total, key, ancestors, depth){
   const dDay=deltaFromPaired(positions,'valDayChf'), dWtd=deltaFromPaired(positions,'valWtdChf'), dTen=deltaFromPaired(positions,'valTenChf'),
         dMtd=deltaFromPaired(positions,'valMtdChf'), dNinety=deltaFromPaired(positions,'valNinetyChf'), d360=deltaFromPaired(positions,'val360Chf');
   const levelClass = `level-${Math.min(depth+1, 3)}`;
-  const pfDir = dDay.delta===null ? '' : `pf-${fmtPct(dDay.pct).dir}`;
   const indent = 8 + depth*18;
-  return `<tr class="section-row ${levelClass} ${pfDir}" data-key="${key}" data-ancestors="${ancestors||''}">
+  return `<tr class="section-row ${levelClass}" data-key="${key}" data-ancestors="${ancestors||''}">
     <td class="name" style="padding-left:${indent}px"><span class="chevron">▾</span>${label}</td><td></td><td></td>
     <td class="price">${pctPf!==null?pctPf.toFixed(1)+'%':'—'}</td>
     <td class="price">${fmtChf(sum)}</td>
@@ -567,8 +565,7 @@ function totalRow(positions, total){
   const sum = sumChf(positions);
   const dDay=deltaFromPaired(positions,'valDayChf'), dWtd=deltaFromPaired(positions,'valWtdChf'), dTen=deltaFromPaired(positions,'valTenChf'),
         dMtd=deltaFromPaired(positions,'valMtdChf'), dNinety=deltaFromPaired(positions,'valNinetyChf'), d360=deltaFromPaired(positions,'val360Chf');
-  const pfDir = dDay.delta===null ? '' : `pf-${fmtPct(dDay.pct).dir}`;
-  return `<tr class="grand-total-row ${pfDir}">
+  return `<tr class="grand-total-row">
     <td class="name">Total</td><td></td><td></td><td class="price">100.0%</td><td class="price">${fmtChf(sum)}</td>
     ${deltaCell(dDay.delta,dDay.pct)}${deltaCell(dWtd.delta,dWtd.pct)}${deltaCell(dTen.delta,dTen.pct)}
     ${deltaCell(dMtd.delta,dMtd.pct)}${deltaCell(dNinety.delta,dNinety.pct)}${deltaCell(d360.delta,d360.pct)}
@@ -650,6 +647,42 @@ function renderBoard(positions, total){
   body.innerHTML = html;
   attachToggleHandlers(body);
 }
+
+// ============ Valuation CSV export (footer) ============
+// Exports the latest stored price per currently-held security (qty != 0),
+// i.e. the same rows shown in the Positions table, as
+// SecurityID,PriceDate,Price,Source — matching the price-upload format used
+// elsewhere in this app so the file can double as a re-import template.
+function csvField(v){
+  const s = v===null || v===undefined ? '' : String(v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
+}
+function buildValuationCsv(positions){
+  const rows = positions
+    .filter(p => Math.abs(p.qty) > 1e-9 && p.last)
+    .slice()
+    .sort((a,b) => Number(a.secId) - Number(b.secId));
+  const header = ['SecurityID','PriceDate','Price','Source'];
+  const lines = [header.join(',')];
+  for(const p of rows){
+    lines.push([csvField(p.secId), csvField(p.last.PriceDate), csvField(p.last.Price), csvField(p.last.Source)].join(','));
+  }
+  return lines.join('\r\n') + '\r\n';
+}
+document.getElementById('exportValuationBtn').addEventListener('click', () => {
+  if(!latestPositions.length){ alert('Keine Positionen geladen — bitte zuerst Refresh.'); return; }
+  const csv = buildValuationCsv(latestPositions);
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const dateStr = (typeof toIsoDate === 'function') ? toIsoDate(new Date()) : new Date().toISOString().slice(0,10);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `portfolio_valuation_${dateStr}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
 
 document.getElementById('refreshBtn').addEventListener('click', () => { tursoClearCache(); load(); });
 document.getElementById('settingsBtn').addEventListener('click', () => {
