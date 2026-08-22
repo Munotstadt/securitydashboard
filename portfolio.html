@@ -294,6 +294,9 @@ const GROUP_COLORS = {
 // Positions from the most recent load(), kept at module scope so the CSV
 // export button can read them without re-querying Turso.
 let latestPositions = [];
+// Rows eligible for the Valuation CSV export (held positions + securities
+// with DashboardGrouping set), also refreshed by each load().
+let latestExportRows = [];
 const CCY_COLORS = { CHF:'#E30613', USD:'#1F8A6E', EUR:'#1F6FA8', OTH:'#E8A33D' };
 
 // Same closing-price-per-day + latest-on-or-before logic as dashboard.html,
@@ -352,7 +355,7 @@ async function load(){
   }
   try{
     const [master, txns, prices] = await Promise.all([
-      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sp.ParameterName AS GroupName, sp.ParameterID AS GroupOrder
+      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.DashboardGrouping, sp.ParameterName AS GroupName, sp.ParameterID AS GroupOrder
                   FROM security_master sm
                   LEFT JOIN security_parameter sp ON sp.ParameterID = sm.PortfolioGrouping`, [], 3600000),
       tursoQuery(`SELECT t.SecurityID, t.Quantity, ta.ParameterName AS TrxArtName
@@ -389,11 +392,21 @@ async function load(){
     let totalChf = 0;
     const byCurrency = {};
     const byGroup = {};
+    // Valuation-CSV export scope is wider than the Positions table: it also
+    // includes securities that carry no current holding but are pinned to
+    // the Dashboard (security_master.DashboardGrouping IS NOT NULL) — e.g.
+    // benchmarks/FX rates shown there that still need their price exported.
+    const exportRows = [];
 
     for(const m of master){
       const qty = netQuantity(m.SecurityID, txns);
-      if(Math.abs(qty) < 1e-9) continue;
+      const inPortfolio = Math.abs(qty) >= 1e-9;
+      const onDashboard = m.DashboardGrouping !== null && m.DashboardGrouping !== undefined;
+      if(!inPortfolio && !onDashboard) continue;
       const periods = periodsBySecId.get(m.SecurityID);
+      if(periods && periods.last) exportRows.push({ secId: m.SecurityID, last: periods.last });
+
+      if(!inPortfolio) continue;
       if(!periods || !periods.last) continue;
 
       const valChf = valueAt(qty, periods, 'last', m.Currency);
@@ -439,6 +452,7 @@ async function load(){
     const fxResults = { day: fxResultForPeriod('day'), wtd: fxResultForPeriod('wtd'), ten: fxResultForPeriod('ten'), mtd: fxResultForPeriod('mtd'), ninety: fxResultForPeriod('ninety'), threeSixty: fxResultForPeriod('threeSixty') };
 
     latestPositions = positions;
+    latestExportRows = exportRows;
     renderSummary(totalChf, positions, fxResults);
     renderPieChart('ccyChart', byCurrency, ['CHF','USD','EUR','OTH'], CCY_COLORS, totalChf);
     const byTopLevel = {};
@@ -649,29 +663,30 @@ function renderBoard(positions, total){
 }
 
 // ============ Valuation CSV export (footer) ============
-// Exports the latest stored price per currently-held security (qty != 0),
-// i.e. the same rows shown in the Positions table, as
+// Exports the latest stored price for every security that is either
+// currently held (net qty != 0) or pinned to the Dashboard
+// (security_master.DashboardGrouping IS NOT NULL), as
 // SecurityID,PriceDate,Price,Source — matching the price-upload format used
 // elsewhere in this app so the file can double as a re-import template.
 function csvField(v){
   const s = v===null || v===undefined ? '' : String(v);
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
 }
-function buildValuationCsv(positions){
-  const rows = positions
-    .filter(p => Math.abs(p.qty) > 1e-9 && p.last)
+function buildValuationCsv(rows){
+  const sorted = rows
+    .filter(p => p.last)
     .slice()
     .sort((a,b) => Number(a.secId) - Number(b.secId));
   const header = ['SecurityID','PriceDate','Price','Source'];
   const lines = [header.join(',')];
-  for(const p of rows){
+  for(const p of sorted){
     lines.push([csvField(p.secId), csvField(p.last.PriceDate), csvField(p.last.Price), csvField(p.last.Source)].join(','));
   }
   return lines.join('\r\n') + '\r\n';
 }
 document.getElementById('exportValuationBtn').addEventListener('click', () => {
-  if(!latestPositions.length){ alert('Keine Positionen geladen — bitte zuerst Refresh.'); return; }
-  const csv = buildValuationCsv(latestPositions);
+  if(!latestExportRows.length){ alert('Keine Daten geladen — bitte zuerst Refresh.'); return; }
+  const csv = buildValuationCsv(latestExportRows);
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const dateStr = (typeof toIsoDate === 'function') ? toIsoDate(new Date()) : new Date().toISOString().slice(0,10);
