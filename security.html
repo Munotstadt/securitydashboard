@@ -449,12 +449,26 @@
   <div id="sharesSection" class="hidden">
     <div id="sharesStandardView">
       <div class="section-title">Fundamentals</div>
-      <div class="fundamentals-grid" id="fundMainGrid"></div>
+      <div class="fundamentals-grid" id="fundRow1"></div>
+      <div class="fundamentals-grid" id="fundRow2"></div>
+      <div class="fundamentals-grid" id="fundRow3"></div>
+      <div class="fundamentals-grid" id="fundRow4"></div>
+      <div class="fundamentals-grid" id="fundRow5"></div>
       <div class="section-title" id="analystViewTitle" style="margin-top:24px;">Analyst View</div>
       <div class="fundamentals-grid" id="fundAnalystGrid"></div>
       <div class="chart-wrap" id="analystChartWrap"></div>
-      <div class="section-title" id="otherFundamentalsTitle" style="margin-top:24px;">Other Fundamentals</div>
-      <div class="fundamentals-grid" id="fundRow8"></div>
+      <div class="section-title-row" id="otherFundamentalsTitle" style="margin-top:24px;">
+        <span class="section-title-text">Other Fundamentals</span>
+        <div class="chart-actions-inline">
+          <a class="chart-icon-btn" id="linkOtherFundamentalsEdit" href="security_data.html" title="Add/Edit Fundamentals">✏️</a>
+        </div>
+      </div>
+      <div class="table-wrap">
+      <table id="otherFundamentalsTable">
+        <thead><tr><th>Field</th><th class="num">Value</th><th>Date</th><th>Source</th></tr></thead>
+        <tbody id="fundRow8"></tbody>
+      </table>
+      </div>
     </div>
     <div id="fundDataView" class="hidden">
       <div class="section-title">Fund Overview</div>
@@ -656,6 +670,20 @@ if (typeof tursoCurrencyOptions === 'undefined') {
 </script>
 <script>
 function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); return d; }
+// Shared status classification for a security_master row - same logic used
+// for the detail-page status badge and for marking active securities in the
+// security switcher dropdown.
+function securityStatusInfo(m, todayIso){
+  const statusName = (m.StatusName || '').trim().toLowerCase();
+  const isTerminatedByDate = !!(m.DateTerminated && m.DateTerminated < todayIso);
+  const isInactive = statusName === 'inactive';
+  const isTerminated = statusName === 'terminated' || isTerminatedByDate;
+  const isPending = !m.Status && !isTerminatedByDate;
+  if(isTerminated) return 'terminated';
+  if(isInactive) return 'inactive';
+  if(isPending) return 'pending';
+  return 'active';
+}
 function fmtDateOnly(date){ const p = zurichParts(date); return `${p.day}.${p.month}.`; }
 function fmtMonthYear(date){ return `${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getFullYear()).slice(-2)}`; }
 function fmtDateDDMM(date){ const p = zurichParts(date); return `${p.day}.${p.month}.${p.year}`; }
@@ -1202,19 +1230,16 @@ async function loadSecurity(secId){
   document.getElementById('linkTransactionHistory').href = `transactions_editor.html?id=${secId}`;
   document.getElementById('linkTransactionAdd').href = `transactions_editor.html?id=${secId}&add=1`;
   document.getElementById('linkSecurityData').href = `security_data.html?id=${secId}`;
+  document.getElementById('linkOtherFundamentalsEdit').href = `security_data.html?id=${secId}`;
 
   const badge = document.getElementById('statusBadge');
-  const statusName = (master.StatusName || '').trim().toLowerCase();
   const todayIso = (typeof nowZurichIsoDateString === 'function') ? nowZurichIsoDateString()
     : (typeof zurichParts === 'function' ? (() => { const p = zurichParts(new Date()); return `${p.year}-${p.month}-${p.day}`; })() : new Date().toISOString().slice(0,10));
-  const isTerminatedByDate = !!(master.DateTerminated && master.DateTerminated < todayIso);
-  const isInactive = statusName === 'inactive';
-  const isTerminated = statusName === 'terminated' || isTerminatedByDate;
-  const isPending = !master.Status && !isTerminatedByDate;
+  const status = securityStatusInfo(master, todayIso);
   badge.classList.remove('status-active','status-inactive','status-terminated','status-pending');
-  if(isTerminated){ badge.textContent = 'Terminated'; badge.classList.add('status-terminated'); }
-  else if(isInactive){ badge.textContent = 'Inactive'; badge.classList.add('status-inactive'); }
-  else if(isPending){ badge.textContent = 'Pending'; badge.classList.add('status-pending'); }
+  if(status==='terminated'){ badge.textContent = 'Terminated'; badge.classList.add('status-terminated'); }
+  else if(status==='inactive'){ badge.textContent = 'Inactive'; badge.classList.add('status-inactive'); }
+  else if(status==='pending'){ badge.textContent = 'Pending'; badge.classList.add('status-pending'); }
   else { badge.textContent = 'Active'; badge.classList.add('status-active'); }
   badge.style.display = '';
 
@@ -1369,7 +1394,7 @@ async function loadSecurity(secId){
     : '';
   document.getElementById('secondaryTiles').innerHTML = `
     ${yieldTileHtml}
-    <div class="return-box" id="marketCapTileBox"><span class="return-label" id="marketCapTileLabel">Market Cap.</span><span class="return-value flat" id="marketCapTileValue">…</span></div>
+    <div class="return-box" id="marketCapTileBox"><span class="return-label" id="marketCapTileLabel">Market Cap.</span><span class="return-value neutral-black" id="marketCapTileValue">…</span></div>
   `;
 
   renderRange52w(high52wRow, low52wRow, last, decimals, currencyFactorFor(factorMap, fxBaseCurrency(master.SecurityName)));
@@ -1577,7 +1602,12 @@ async function load(){
 
     const sel = document.getElementById('securitySwitcher');
     const keepSel = sel.value;
-    sel.innerHTML = masterAll.map(m => `<option value="${m.SecurityID}">${m.SecurityName} · ${m.SecurityID}</option>`).join('');
+    const todayIsoForList = (typeof nowZurichIsoDateString === 'function') ? nowZurichIsoDateString()
+      : (typeof zurichParts === 'function' ? (() => { const p = zurichParts(new Date()); return `${p.year}-${p.month}-${p.day}`; })() : new Date().toISOString().slice(0,10));
+    sel.innerHTML = masterAll.map(m => {
+      const marker = securityStatusInfo(m, todayIsoForList) === 'active' ? '🟢 ' : '';
+      return `<option value="${m.SecurityID}">${marker}${m.SecurityName} · ${m.SecurityID}</option>`;
+    }).join('');
 
     const urlId = new URLSearchParams(location.search).get('id');
     const startId = curSecId || (urlId && masterAll.some(m=>String(m.SecurityID)===urlId) ? urlId : (masterAll[0] && masterAll[0].SecurityID));
@@ -1684,7 +1714,7 @@ async function loadInstrumentSpecificData(master, last, decimals, high52wRow, lo
     const otherTypes = [...new Set(data.map(r => r.DataType))];
     document.getElementById('sharesSection').classList.remove('hidden');
     showSharesStandardView();
-    document.getElementById('fundMainGrid').innerHTML =
+    document.getElementById('fundRow1').innerHTML =
       `<div class="empty">Keine Zeilen mit DataType beginnend "Fundamental" gefunden. Vorhandene DataTypes für diese Security: ${otherTypes.join(', ') || '—'}.</div>`;
     clearOtherFundRows();
     document.getElementById('analystChartWrap').innerHTML = '';
@@ -1694,7 +1724,7 @@ async function loadInstrumentSpecificData(master, last, decimals, high52wRow, lo
     // No security_data rows at all for this SecurityID.
     document.getElementById('sharesSection').classList.remove('hidden');
     showSharesStandardView();
-    document.getElementById('fundMainGrid').innerHTML =
+    document.getElementById('fundRow1').innerHTML =
       `<div class="empty">Keine security_data-Einträge für SecurityID ${master.SecurityID} gefunden (0 Zeilen total).</div>`;
     clearOtherFundRows();
     document.getElementById('analystChartWrap').innerHTML = '';
@@ -1738,12 +1768,12 @@ function renderMarketCapTile(dataRows, isFundInstrument, master){
   const field = findFundamental(latest, ...primaryAliases) || findFundamental(latest, ...otherAliases);
   if(!field || field.NumericValue === null || field.NumericValue === undefined){
     valueEl.textContent = '-';
-    valueEl.className = 'return-value flat';
+    valueEl.className = 'return-value neutral-black';
     return;
   }
   const bn = toBillions(field.NumericValue, field.Unit);
   valueEl.textContent = bn !== null ? `${fmtDecimal(bn,2)} Mrd ${master.Currency||''}`.trim() : '-';
-  valueEl.className = 'return-value flat';
+  valueEl.className = 'return-value neutral-black';
 }
 
 function renderFundSection(assetClassRows, sectorRows, holdingRows){
@@ -1801,7 +1831,7 @@ function findFundamental(rows, ...aliases){
 }
 
 function clearOtherFundRows(){
-  ['fundAnalystGrid','fundRow8'].forEach(id => {
+  ['fundRow2','fundRow3','fundRow4','fundRow5','fundAnalystGrid','fundRow8'].forEach(id => {
     const el = document.getElementById(id); if(el) el.innerHTML = '';
   });
 }
@@ -1928,7 +1958,11 @@ function renderRecommendationGauge(value){
 
 function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52wRow, isFundInstrument){
   const rows = latestByParameter(fundamentalsRows);
-  const mainGrid = document.getElementById('fundMainGrid');
+  const row1 = document.getElementById('fundRow1');
+  const row2 = document.getElementById('fundRow2');
+  const row3 = document.getElementById('fundRow3');
+  const row4 = document.getElementById('fundRow4');
+  const row5 = document.getElementById('fundRow5');
   const analystGrid = document.getElementById('fundAnalystGrid');
   const row8 = document.getElementById('fundRow8');
   const asOfEl = document.getElementById('sharesDataAsOf');
@@ -1946,9 +1980,10 @@ function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52
   }
 
   if(!rows.length){
-    mainGrid.innerHTML = '<div class="empty">No fundamentals collected yet for this security.</div>';
+    row1.innerHTML = '<div class="empty">No fundamentals collected yet for this security.</div>';
     clearOtherFundRows();
     if(otherFundamentalsTitle) otherFundamentalsTitle.classList.add('hidden');
+    row8.innerHTML = '';
     asOfEl.textContent = '';
     if(!isFundInstrument) analystChartWrap.innerHTML = '<div class="chart-empty">No fundamentals collected yet for this security.</div>';
     return;
@@ -1975,24 +2010,32 @@ function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52
   const analystCount = pick('numberofanalystopinions','number of analyst opinions','number of analysts','analyst count','no. of analysts','anzahl analysten');
   const recMean = pick('recommendationmean','recommendation mean');
 
-  // Main fundamentals: one continuous flow-grid so tiles wrap naturally
-  // (different number of tiles per row depending on available width), all
-  // tiles the same width via the shared .fund-stat/.fundamentals-grid CSS.
-  mainGrid.innerHTML = [
-    priceToBook ? fundStat('Price To Book', fmtFundValue(priceToBook)) : '',
+  // Rows 1-5: fixed, each its own grid row regardless of available width.
+  row1.innerHTML = priceToBook ? fundStat('Price To Book', fmtFundValue(priceToBook)) : '';
+
+  row2.innerHTML = [
     trailingPE ? fundStat('Trailing PE', fmtFundValue(trailingPE)) : '',
     forwardPE ? fundStat('Forward PE', fmtFundValue(forwardPE)) : '',
+  ].join('');
+
+  row3.innerHTML = [
     trailingEPS ? fundStat('Trailing EPS', fmtFundValue(trailingEPS)) : '',
     forwardEPS ? fundStat('Forward EPS', fmtFundValue(forwardEPS)) : '',
+  ].join('');
+
+  row4.innerHTML = [
     dividendRate ? fundStat('Dividend Rate', fmtFundValue(dividendRate)) : '',
     payoutRatio ? fundStat('Payout Ratio', fmtFundPercent(payoutRatio, 0)) : '',
     dividendYieldF ? fundStat('Dividend Yield', fmtFundPercent(dividendYieldF, 2)) : '',
-    marketCapF ? fundStat('Market Cap.', marketCapF.NumericValue!==null && marketCapF.NumericValue!==undefined
-        ? `${fmtDecimal(toBillions(marketCapF.NumericValue, marketCapF.Unit),2)} Mrd.`
-        : (marketCapF.FieldValue||'—')) : '',
   ].join('');
 
-  // Analyst View: Analyst No. (0 decimals) + Recommendation Mean gauge
+  row5.innerHTML = marketCapF
+    ? fundStat('Market Cap.', marketCapF.NumericValue!==null && marketCapF.NumericValue!==undefined
+        ? `${fmtDecimal(toBillions(marketCapF.NumericValue, marketCapF.Unit),2)} Mrd.`
+        : (marketCapF.FieldValue||'—'))
+    : '';
+
+  // Row 6ff. - Analysts: Analyst No. (0 decimals) + Recommendation Mean gauge
   // (wider tile) on the same flow-grid, so they share a row where space allows.
   analystGrid.innerHTML = [
     analystCount ? fundStat('Analyst No.', analystCount.NumericValue!==null && analystCount.NumericValue!==undefined
@@ -2001,11 +2044,15 @@ function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52
     (recMean && recMean.NumericValue!==null && recMean.NumericValue!==undefined) ? renderRecommendationGauge(recMean.NumericValue) : '',
   ].join('');
 
-  // Other Fundamentals: everything else, alphabetically (same as the
-  // previous full list), title hidden if nothing is left over.
+  // Other Fundamentals: everything else, as a list (not tiles) - Field |
+  // Value | Date | Source - with an Edit/Add button (linkOtherFundamentalsEdit)
+  // pointing at security_data.html for adding/changing values. Title hidden
+  // if nothing is left over.
   const leftover = rows.filter(r => !used.has(r));
   const sortedLeftover = [...leftover].sort((a,b) => (a.ParameterName||a.FieldName||'').localeCompare(b.ParameterName||b.FieldName||''));
-  row8.innerHTML = sortedLeftover.map(r => fundStat(r.ParameterName || r.FieldName || '—', fmtFundValue(r))).join('');
+  row8.innerHTML = sortedLeftover.length
+    ? sortedLeftover.map(r => `<tr><td>${r.ParameterName || r.FieldName || '—'}</td><td class="num">${fmtFundValue(r)}</td><td>${fmtIsoDateDDMM(r.AsOfDate)}</td><td>${r.Source||'—'}</td></tr>`).join('')
+    : `<tr><td colspan="4" class="empty">Keine weiteren Fundamentals-Felder.</td></tr>`;
   if(otherFundamentalsTitle) otherFundamentalsTitle.classList.toggle('hidden', sortedLeftover.length === 0);
 
   const newestDate = rows.reduce((max,r) => (r.AsOfDate>max?r.AsOfDate:max), rows[0].AsOfDate);
