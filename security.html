@@ -471,12 +471,42 @@
       </div>
     </div>
     <div id="fundDataView" class="hidden">
-      <div class="section-title">Fund Overview</div>
-      <div class="fundamentals-grid" id="fundOverviewGrid"></div>
-      <div class="section-title" style="margin-top:24px;">Fund Operations</div>
-      <div class="fundamentals-grid" id="fundOperationsGrid"></div>
-      <div class="section-title" style="margin-top:24px;">Fund Portfolio</div>
-      <div class="fundamentals-grid" id="fundPortfolioGrid"></div>
+      <div class="section-title-row">
+        <span class="section-title-text">Fund Overview</span>
+        <div class="chart-actions-inline">
+          <a class="chart-icon-btn" id="linkFundOverviewEdit" href="security_data.html" title="Add/Edit Fund Overview">✏️</a>
+        </div>
+      </div>
+      <div class="table-wrap">
+      <table id="fundOverviewTable">
+        <thead><tr><th>Field</th><th class="num">Value</th><th>Date</th><th>Source</th></tr></thead>
+        <tbody id="fundOverviewGrid"></tbody>
+      </table>
+      </div>
+      <div class="section-title-row" style="margin-top:24px;">
+        <span class="section-title-text">Fund Operations</span>
+        <div class="chart-actions-inline">
+          <a class="chart-icon-btn" id="linkFundOperationsEdit" href="security_data.html" title="Add/Edit Fund Operations">✏️</a>
+        </div>
+      </div>
+      <div class="table-wrap">
+      <table id="fundOperationsTable">
+        <thead><tr><th>Field</th><th class="num">Value</th><th>Date</th><th>Source</th></tr></thead>
+        <tbody id="fundOperationsGrid"></tbody>
+      </table>
+      </div>
+      <div class="section-title-row" style="margin-top:24px;">
+        <span class="section-title-text">Fund Portfolio</span>
+        <div class="chart-actions-inline">
+          <a class="chart-icon-btn" id="linkFundPortfolioEdit" href="security_data.html" title="Add/Edit Fund Portfolio">✏️</a>
+        </div>
+      </div>
+      <div class="table-wrap">
+      <table id="fundPortfolioTable">
+        <thead><tr><th>Field</th><th class="num">Value</th><th>Date</th><th>Source</th></tr></thead>
+        <tbody id="fundPortfolioGrid"></tbody>
+      </table>
+      </div>
     </div>
     <div class="detail-meta" id="sharesDataAsOf" style="margin-top:8px;"></div>
     <div class="section-title hidden" id="fundamentalsChangeLogTitle" style="margin-top:24px;">Change Log</div>
@@ -1231,6 +1261,9 @@ async function loadSecurity(secId){
   document.getElementById('linkTransactionAdd').href = `transactions_editor.html?id=${secId}&add=1`;
   document.getElementById('linkSecurityData').href = `security_data.html?id=${secId}`;
   document.getElementById('linkOtherFundamentalsEdit').href = `security_data.html?id=${secId}`;
+  document.getElementById('linkFundOverviewEdit').href = `security_data.html?id=${secId}`;
+  document.getElementById('linkFundOperationsEdit').href = `security_data.html?id=${secId}`;
+  document.getElementById('linkFundPortfolioEdit').href = `security_data.html?id=${secId}`;
 
   const badge = document.getElementById('statusBadge');
   const todayIso = (typeof nowZurichIsoDateString === 'function') ? nowZurichIsoDateString()
@@ -1854,9 +1887,9 @@ function showFundDataView(){
 
 function fundDataGridHtml(rows, emptyMsg){
   const latest = latestByParameter(rows);
-  if(!latest.length) return `<div class="empty">${emptyMsg}</div>`;
+  if(!latest.length) return `<tr><td colspan="4" class="empty">${emptyMsg}</td></tr>`;
   const sorted = [...latest].sort((a,b) => (a.ParameterName||a.FieldName||'').localeCompare(b.ParameterName||b.FieldName||''));
-  return sorted.map(r => fundStat(r.ParameterName || r.FieldName || '—', fmtFundValue(r))).join('');
+  return sorted.map(r => `<tr><td>${r.ParameterName || r.FieldName || '—'}</td><td class="num">${fmtFundValue(r)}</td><td>${fmtIsoDateDDMM(r.AsOfDate)}</td><td>${r.Source||'—'}</td></tr>`).join('');
 }
 function renderFundDataView(overviewRows, operationsRows, portfolioRows){
   document.getElementById('fundOverviewGrid').innerHTML = fundDataGridHtml(overviewRows, 'Keine Fund Overview Daten vorhanden.');
