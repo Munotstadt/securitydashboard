@@ -448,15 +448,12 @@
   <div class="tab-panel" data-tab="fundamentals" id="tabPanelFundamentals">
   <div id="sharesSection" class="hidden">
     <div class="section-title">Fundamentals</div>
-    <div class="fundamentals-grid" id="fundRow1"></div>
-    <div class="fundamentals-grid" id="fundRow2"></div>
-    <div class="fundamentals-grid" id="fundRow3"></div>
-    <div class="fundamentals-grid" id="fundRow4"></div>
-    <div class="fundamentals-grid" id="fundRow5"></div>
-    <div class="fundamentals-grid" id="fundRow6"></div>
-    <div class="section-title" id="analystTargetsTitle" style="margin-top:24px;">Analyst Targets</div>
+    <div class="fundamentals-grid" id="fundMainGrid"></div>
+    <div class="section-title" id="analystViewTitle" style="margin-top:24px;">Analyst View</div>
+    <div class="fundamentals-grid" id="fundAnalystGrid"></div>
     <div class="chart-wrap" id="analystChartWrap"></div>
-    <div class="fundamentals-grid" id="fundRow8" style="margin-top:20px;"></div>
+    <div class="section-title" id="otherFundamentalsTitle" style="margin-top:24px;">Other Fundamentals</div>
+    <div class="fundamentals-grid" id="fundRow8"></div>
     <div class="detail-meta" id="sharesDataAsOf" style="margin-top:8px;"></div>
   </div>
   </div>
@@ -1660,19 +1657,21 @@ async function loadInstrumentSpecificData(master, last, decimals, high52wRow, lo
     // DataType string can be spotted immediately.
     const otherTypes = [...new Set(data.map(r => r.DataType))];
     document.getElementById('sharesSection').classList.remove('hidden');
-    document.getElementById('fundRow1').innerHTML =
+    document.getElementById('fundMainGrid').innerHTML =
       `<div class="empty">Keine Zeilen mit DataType beginnend "Fundamental" gefunden. Vorhandene DataTypes für diese Security: ${otherTypes.join(', ') || '—'}.</div>`;
     clearOtherFundRows();
     document.getElementById('analystChartWrap').innerHTML = '';
-    document.getElementById('analystTargetsTitle').classList.add('hidden');
+    document.getElementById('analystViewTitle').classList.add('hidden');
+    document.getElementById('otherFundamentalsTitle').classList.add('hidden');
   } else {
     // No security_data rows at all for this SecurityID.
     document.getElementById('sharesSection').classList.remove('hidden');
-    document.getElementById('fundRow1').innerHTML =
+    document.getElementById('fundMainGrid').innerHTML =
       `<div class="empty">Keine security_data-Einträge für SecurityID ${master.SecurityID} gefunden (0 Zeilen total).</div>`;
     clearOtherFundRows();
     document.getElementById('analystChartWrap').innerHTML = '';
-    document.getElementById('analystTargetsTitle').classList.add('hidden');
+    document.getElementById('analystViewTitle').classList.add('hidden');
+    document.getElementById('otherFundamentalsTitle').classList.add('hidden');
   }
 
   // New Market Cap / Total Assets tile (LC Mrd, header tile row). Searched
@@ -1774,7 +1773,7 @@ function findFundamental(rows, ...aliases){
 }
 
 function clearOtherFundRows(){
-  ['fundRow2','fundRow3','fundRow4','fundRow5','fundRow6','fundRow8'].forEach(id => {
+  ['fundAnalystGrid','fundRow8'].forEach(id => {
     const el = document.getElementById(id); if(el) el.innerHTML = '';
   });
 }
@@ -1787,17 +1786,13 @@ function fmtFundValue(r){
     ? `${fmtDecimal(r.NumericValue,2)}${r.Unit?` ${r.Unit}`:''}`
     : (r.FieldValue || '—');
 }
-// Percent-style fields (Payout Ratio, Dividend Yield) - some sources store
-// these as a fraction (0.35) rather than already-scaled percent (35). If the
-// Unit doesn't already say "%" and the raw value looks like a fraction
-// (<=1.5), scale it up; otherwise trust the stored value as-is.
-function fmtFundPercent(r){
+// Percent-style fields (Payout Ratio, Dividend Yield). Values are stored
+// already as the percent number itself (e.g. 1.17 means 1.17%, not a 0-1
+// fraction) - no rescaling, just format with the given decimal precision.
+function fmtFundPercent(r, dec){
   if(!r) return '—';
   if(r.NumericValue === null || r.NumericValue === undefined) return r.FieldValue || '—';
-  const unit = (r.Unit||'').trim();
-  if(/%/.test(unit)) return `${fmtDecimal(r.NumericValue,2)}%`;
-  const v = Math.abs(r.NumericValue) <= 1.5 ? r.NumericValue*100 : r.NumericValue;
-  return `${fmtDecimal(v,2)}%`;
+  return `${fmtDecimal(r.NumericValue, dec===undefined?2:dec)}%`;
 }
 function recommendationLabel(v){
   if(v==null||isNaN(v)) return {en:'—', de:'—'};
@@ -1809,17 +1804,18 @@ function recommendationLabel(v){
 }
 function renderRecommendationGauge(value){
   const clamped = Math.max(1, Math.min(5, value));
-  const pct = ((clamped-1)/4)*100;
+  // Right = Buy/green (value 1), Left = Sell/red (value 5).
+  const pct = ((5-clamped)/4)*100;
   const info = recommendationLabel(value);
-  return `<div class="fund-stat" style="grid-column:1/-1;">
+  return `<div class="fund-stat" style="grid-column:span 2;">
     <div class="fund-stat-label">Recommendation Mean</div>
     <div class="rec-gauge">
       <div class="rec-gauge-bar">
-        <div class="rec-gauge-seg" style="background:#1F8A6E;"></div>
-        <div class="rec-gauge-seg" style="background:#6FBF8B;"></div>
-        <div class="rec-gauge-seg" style="background:#C7C9CC;"></div>
-        <div class="rec-gauge-seg" style="background:#E39A3B;"></div>
         <div class="rec-gauge-seg" style="background:#C0293D;"></div>
+        <div class="rec-gauge-seg" style="background:#E39A3B;"></div>
+        <div class="rec-gauge-seg" style="background:#C7C9CC;"></div>
+        <div class="rec-gauge-seg" style="background:#6FBF8B;"></div>
+        <div class="rec-gauge-seg" style="background:#1F8A6E;"></div>
       </div>
       <div class="rec-gauge-marker" style="left:${pct.toFixed(1)}%;"></div>
     </div>
@@ -1829,15 +1825,12 @@ function renderRecommendationGauge(value){
 
 function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52wRow, isFundInstrument){
   const rows = latestByParameter(fundamentalsRows);
-  const row1 = document.getElementById('fundRow1');
-  const row2 = document.getElementById('fundRow2');
-  const row3 = document.getElementById('fundRow3');
-  const row4 = document.getElementById('fundRow4');
-  const row5 = document.getElementById('fundRow5');
-  const row6 = document.getElementById('fundRow6');
+  const mainGrid = document.getElementById('fundMainGrid');
+  const analystGrid = document.getElementById('fundAnalystGrid');
   const row8 = document.getElementById('fundRow8');
   const asOfEl = document.getElementById('sharesDataAsOf');
-  const analystSectionTitle = document.getElementById('analystTargetsTitle');
+  const analystSectionTitle = document.getElementById('analystViewTitle');
+  const otherFundamentalsTitle = document.getElementById('otherFundamentalsTitle');
   const analystChartWrap = document.getElementById('analystChartWrap');
 
   if(isFundInstrument){
@@ -1850,15 +1843,16 @@ function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52
   }
 
   if(!rows.length){
-    row1.innerHTML = '<div class="empty">No fundamentals collected yet for this security.</div>';
+    mainGrid.innerHTML = '<div class="empty">No fundamentals collected yet for this security.</div>';
     clearOtherFundRows();
+    if(otherFundamentalsTitle) otherFundamentalsTitle.classList.add('hidden');
     asOfEl.textContent = '';
     if(!isFundInstrument) analystChartWrap.innerHTML = '<div class="chart-empty">No fundamentals collected yet for this security.</div>';
     return;
   }
 
-  // Rows 1-6: specific fields pulled out by alias, in the requested order.
-  // Anything matched here is excluded from the "übrige Fundamentals" row 8.
+  // Specific fields pulled out by alias, in the requested order. Anything
+  // matched here is excluded from the "Other Fundamentals" leftover list.
   const used = new Set();
   function pick(...aliases){
     const f = findFundamental(rows, ...aliases);
@@ -1878,39 +1872,38 @@ function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52
   const analystCount = pick('numberofanalystopinions','number of analyst opinions','number of analysts','analyst count','no. of analysts','anzahl analysten');
   const recMean = pick('recommendationmean','recommendation mean');
 
-  row1.innerHTML = priceToBook ? fundStat('Price To Book', fmtFundValue(priceToBook)) : '';
-
-  row2.innerHTML = [
+  // Main fundamentals: one continuous flow-grid so tiles wrap naturally
+  // (different number of tiles per row depending on available width), all
+  // tiles the same width via the shared .fund-stat/.fundamentals-grid CSS.
+  mainGrid.innerHTML = [
+    priceToBook ? fundStat('Price To Book', fmtFundValue(priceToBook)) : '',
     trailingPE ? fundStat('Trailing PE', fmtFundValue(trailingPE)) : '',
     forwardPE ? fundStat('Forward PE', fmtFundValue(forwardPE)) : '',
-  ].join('');
-
-  row3.innerHTML = [
     trailingEPS ? fundStat('Trailing EPS', fmtFundValue(trailingEPS)) : '',
     forwardEPS ? fundStat('Forward EPS', fmtFundValue(forwardEPS)) : '',
-  ].join('');
-
-  row4.innerHTML = [
     dividendRate ? fundStat('Dividend Rate', fmtFundValue(dividendRate)) : '',
-    payoutRatio ? fundStat('Payout Ratio', fmtFundPercent(payoutRatio)) : '',
-    dividendYieldF ? fundStat('Dividend Yield', fmtFundPercent(dividendYieldF)) : '',
+    payoutRatio ? fundStat('Payout Ratio', fmtFundPercent(payoutRatio, 0)) : '',
+    dividendYieldF ? fundStat('Dividend Yield', fmtFundPercent(dividendYieldF, 2)) : '',
+    marketCapF ? fundStat('Market Cap.', marketCapF.NumericValue!==null && marketCapF.NumericValue!==undefined
+        ? `${fmtDecimal(toBillions(marketCapF.NumericValue, marketCapF.Unit),2)} Mrd.`
+        : (marketCapF.FieldValue||'—')) : '',
   ].join('');
 
-  row5.innerHTML = marketCapF
-    ? fundStat('Market Cap.', marketCapF.NumericValue!==null && marketCapF.NumericValue!==undefined
-        ? `${fmtDecimal(toBillions(marketCapF.NumericValue, marketCapF.Unit),2)} Mrd.`
-        : (marketCapF.FieldValue||'—'))
-    : '';
-
-  row6.innerHTML = [
-    analystCount ? fundStat('Analyst No.', fmtFundValue(analystCount)) : '',
+  // Analyst View: Analyst No. (0 decimals) + Recommendation Mean gauge
+  // (wider tile) on the same flow-grid, so they share a row where space allows.
+  analystGrid.innerHTML = [
+    analystCount ? fundStat('Analyst No.', analystCount.NumericValue!==null && analystCount.NumericValue!==undefined
+        ? fmtDecimal(analystCount.NumericValue,0)
+        : (analystCount.FieldValue||'—')) : '',
     (recMean && recMean.NumericValue!==null && recMean.NumericValue!==undefined) ? renderRecommendationGauge(recMean.NumericValue) : '',
   ].join('');
 
-  // Row 8: everything else, alphabetically (same as the previous full list).
+  // Other Fundamentals: everything else, alphabetically (same as the
+  // previous full list), title hidden if nothing is left over.
   const leftover = rows.filter(r => !used.has(r));
   const sortedLeftover = [...leftover].sort((a,b) => (a.ParameterName||a.FieldName||'').localeCompare(b.ParameterName||b.FieldName||''));
   row8.innerHTML = sortedLeftover.map(r => fundStat(r.ParameterName || r.FieldName || '—', fmtFundValue(r))).join('');
+  if(otherFundamentalsTitle) otherFundamentalsTitle.classList.toggle('hidden', sortedLeftover.length === 0);
 
   const newestDate = rows.reduce((max,r) => (r.AsOfDate>max?r.AsOfDate:max), rows[0].AsOfDate);
   asOfEl.textContent = `Fundamentals as of ${fmtIsoDateDDMM(newestDate)} · Source: ${rows[0].Source||'—'}`;
