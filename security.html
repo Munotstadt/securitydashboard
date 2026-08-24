@@ -44,7 +44,7 @@
   .return-box{display:flex;flex-direction:column;gap:4px;padding:10px 14px;background:var(--panel);border:1px solid var(--line);border-radius:3px;min-width:80px;}
   .return-label{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
   .return-value{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;}
-  .return-value.up{color:var(--gain);} .return-value.down{color:var(--loss);} .return-value.flat{color:var(--muted);}
+  .return-value.up{color:var(--gain);} .return-value.down{color:var(--loss);} .return-value.flat{color:var(--muted);} .return-value.neutral-black{color:var(--text);}
 
   .range52w-wrap{position:relative;margin:24px 0 4px;padding:30px 4px 0;}
   .range52w-current{position:absolute;top:0;transform:translateX(-50%);font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:15px;color:var(--text);white-space:nowrap;}
@@ -70,7 +70,8 @@
   .toggle-row{display:flex;gap:6px;flex-wrap:wrap;margin:18px 0 4px;}
   .toggle-btn{background:none;border:1px solid var(--line);color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 12px;border-radius:3px;cursor:pointer;text-decoration:none;display:inline-block;}
   .toggle-btn:hover{border-color:var(--muted);color:var(--text);}
-  .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;}
+  .footer{margin-top:24px;padding-top:14px;border-top:1px solid var(--line);display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
+  .footer-row{display:flex;align-items:center;gap:8px;}
   .improvement-input{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);background:#fff;border:1px solid var(--line);border-radius:3px;padding:6px 10px;min-width:200px;vertical-align:middle;}
   .improvement-input::placeholder{color:var(--muted);}
   #improvementSaveBtn{font-family:'IBM Plex Mono',monospace;font-size:12px;}
@@ -95,6 +96,10 @@
   .fund-stat{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px 12px;}
   .fund-stat-label{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
   .fund-stat-value{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;margin-top:3px;}
+  .rec-gauge{position:relative;margin-top:8px;height:14px;}
+  .rec-gauge-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;}
+  .rec-gauge-seg{flex:1 1 0;}
+  .rec-gauge-marker{position:absolute;top:-3px;width:2px;height:14px;background:var(--text);transform:translateX(-1px);}
   .toggle-btn.active{background:var(--text);border-color:var(--text);color:#fff;font-weight:600;}
 
   .chart-wrap{margin:10px 0;background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:16px 12px 8px;position:relative;}
@@ -174,6 +179,9 @@
   .master-form input, .master-form select{width:100%;font-family:'Inter',sans-serif;font-size:13px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:7px 8px;outline:none;}
   .master-form input:disabled{color:var(--muted);background:#EFF1F4;}
   .master-form input:focus, .master-form select:focus{border-color:var(--accent);}
+  .master-form .date-input-wrap{position:relative;}
+  .master-form .date-display{width:100%;box-sizing:border-box;cursor:pointer;background:var(--panel);}
+  .master-form .date-hidden{position:absolute;inset:0;width:100%;height:100%;opacity:0;border:0;padding:0;margin:0;cursor:pointer;}
   .master-form textarea.mf-textarea{width:100%;font-family:'Inter',sans-serif;font-size:13px;line-height:1.4;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:3px;padding:7px 8px;outline:none;resize:none;overflow:hidden;min-height:34px;}
   .master-form textarea.mf-textarea:focus{border-color:var(--accent);}
   @media (max-width:560px){
@@ -340,8 +348,6 @@
   </table>
   </div>
 
-  <div class="section-title" id="analystTargetsTitle" style="margin-top:24px;">Analyst Targets</div>
-  <div class="chart-wrap" id="analystChartWrap"></div>
   </div>
 
   <div class="tab-panel" data-tab="returns" id="tabPanelReturns">
@@ -442,7 +448,15 @@
   <div class="tab-panel" data-tab="fundamentals" id="tabPanelFundamentals">
   <div id="sharesSection" class="hidden">
     <div class="section-title">Fundamentals</div>
-    <div class="fundamentals-grid" id="sharesFundamentalsGrid"></div>
+    <div class="fundamentals-grid" id="fundRow1"></div>
+    <div class="fundamentals-grid" id="fundRow2"></div>
+    <div class="fundamentals-grid" id="fundRow3"></div>
+    <div class="fundamentals-grid" id="fundRow4"></div>
+    <div class="fundamentals-grid" id="fundRow5"></div>
+    <div class="fundamentals-grid" id="fundRow6"></div>
+    <div class="section-title" id="analystTargetsTitle" style="margin-top:24px;">Analyst Targets</div>
+    <div class="chart-wrap" id="analystChartWrap"></div>
+    <div class="fundamentals-grid" id="fundRow8" style="margin-top:20px;"></div>
     <div class="detail-meta" id="sharesDataAsOf" style="margin-top:8px;"></div>
   </div>
   </div>
@@ -531,9 +545,13 @@
   </div>
 
   <div class="footer">
-    <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
-    <button type="button" class="toggle-btn" id="improvementSaveBtn">💡 Save</button>
-    <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
+    <div class="footer-row">
+      <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
+      <button type="button" class="toggle-btn" id="improvementSaveBtn">💡 Save</button>
+    </div>
+    <div class="footer-row">
+      <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
+    </div>
   </div>
 </div>
 
@@ -1117,8 +1135,8 @@ function renderMasterForm(master){
       <div class="field"><label>PortfolioGrouping</label><select id="mfPortfolioGrouping">${optionList(portfolioGroupingOpts, master.PortfolioGrouping, true)}</select></div>
     </div>
     <div class="mf-row cols-3">
-      <div class="field"><label>Date Launch</label><input type="date" id="mfDateLaunch" value="${master.DateLaunch||''}"></div>
-      <div class="field"><label>Date Terminated</label><input type="date" id="mfDateTerminated" value="${master.DateTerminated||''}"></div>
+      ${renderDateField('mfDateLaunch','Date Launch', master.DateLaunch)}
+      ${renderDateField('mfDateTerminated','Date Terminated', master.DateTerminated)}
       <div class="field"><label>Status</label><select id="mfStatus">${optionList(statusOpts, master.Status, true)}</select></div>
     </div>
     <div class="mf-row cols-1">
@@ -1131,6 +1149,31 @@ function renderMasterForm(master){
   const commentsEl = document.getElementById('mfComments');
   autoGrowTextarea(commentsEl);
   commentsEl.addEventListener('input', () => autoGrowTextarea(commentsEl));
+  wireDateField('mfDateLaunch');
+  wireDateField('mfDateTerminated');
+}
+
+// Date fields: display as DD.MM.YYYY (text, readonly) with a native
+// <input type="date"> transparently overlaid on top so tapping anywhere on
+// the field opens the platform date picker (works regardless of the
+// browser/OS locale format the native input would otherwise show).
+function renderDateField(id, label, isoValue){
+  const display = isoValue ? fmtIsoDateDDMM(isoValue) : '';
+  return `<div class="field">
+    <label>${label}</label>
+    <div class="date-input-wrap">
+      <input type="text" id="${id}_display" class="date-display" value="${display}" placeholder="TT.MM.JJJJ" readonly>
+      <input type="date" id="${id}" class="date-hidden" value="${isoValue||''}">
+    </div>
+  </div>`;
+}
+function wireDateField(id){
+  const hidden = document.getElementById(id);
+  const display = document.getElementById(id+'_display');
+  if(!hidden || !display) return;
+  hidden.addEventListener('change', () => {
+    display.value = hidden.value ? fmtIsoDateDDMM(hidden.value) : '';
+  });
 }
 function autoGrowTextarea(el){
   el.style.height = 'auto';
@@ -1308,8 +1351,15 @@ async function loadSecurity(secId){
   // Secondary tile row: Yield (moved out of the period-return row above) +
   // Market Cap / Total Assets (LC Mrd) - the latter is filled in async once
   // loadInstrumentSpecificData() resolves the Fundamentals/FundOverview data.
+  // Yield tile is shown in neutral black (not gain/loss green) and hidden
+  // entirely if there have been no distributions in the last 3 years.
+  const threeYearsAgo = daysAgo(now, 365*3);
+  const hasRecentDist = distRows.some(d => d.exDate > threeYearsAgo && d.exDate <= now);
+  const yieldTileHtml = hasRecentDist
+    ? `<div class="return-box"><span class="return-label">Yield</span><span class="return-value neutral-black">${yieldPct?yieldPct.toFixed(2)+'%':'-'}</span></div>`
+    : '';
   document.getElementById('secondaryTiles').innerHTML = `
-    <div class="return-box"><span class="return-label">Yield</span><span class="return-value ${yieldPct!==null&&yieldPct>0?'up':'flat'}">${yieldPct?yieldPct.toFixed(2)+'%':'-'}</span></div>
+    ${yieldTileHtml}
     <div class="return-box" id="marketCapTileBox"><span class="return-label" id="marketCapTileLabel">Market Cap.</span><span class="return-value flat" id="marketCapTileValue">…</span></div>
   `;
 
@@ -1610,15 +1660,17 @@ async function loadInstrumentSpecificData(master, last, decimals, high52wRow, lo
     // DataType string can be spotted immediately.
     const otherTypes = [...new Set(data.map(r => r.DataType))];
     document.getElementById('sharesSection').classList.remove('hidden');
-    document.getElementById('sharesFundamentalsGrid').innerHTML =
+    document.getElementById('fundRow1').innerHTML =
       `<div class="empty">Keine Zeilen mit DataType beginnend "Fundamental" gefunden. Vorhandene DataTypes für diese Security: ${otherTypes.join(', ') || '—'}.</div>`;
+    clearOtherFundRows();
     document.getElementById('analystChartWrap').innerHTML = '';
     document.getElementById('analystTargetsTitle').classList.add('hidden');
   } else {
     // No security_data rows at all for this SecurityID.
     document.getElementById('sharesSection').classList.remove('hidden');
-    document.getElementById('sharesFundamentalsGrid').innerHTML =
+    document.getElementById('fundRow1').innerHTML =
       `<div class="empty">Keine security_data-Einträge für SecurityID ${master.SecurityID} gefunden (0 Zeilen total).</div>`;
+    clearOtherFundRows();
     document.getElementById('analystChartWrap').innerHTML = '';
     document.getElementById('analystTargetsTitle').classList.add('hidden');
   }
@@ -1721,9 +1773,69 @@ function findFundamental(rows, ...aliases){
   });
 }
 
+function clearOtherFundRows(){
+  ['fundRow2','fundRow3','fundRow4','fundRow5','fundRow6','fundRow8'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.innerHTML = '';
+  });
+}
+
+// Generic value formatter matching the original behavior: numeric value +
+// optional Unit, falling back to the raw FieldValue string.
+function fmtFundValue(r){
+  if(!r) return '—';
+  return (r.NumericValue !== null && r.NumericValue !== undefined)
+    ? `${fmtDecimal(r.NumericValue,2)}${r.Unit?` ${r.Unit}`:''}`
+    : (r.FieldValue || '—');
+}
+// Percent-style fields (Payout Ratio, Dividend Yield) - some sources store
+// these as a fraction (0.35) rather than already-scaled percent (35). If the
+// Unit doesn't already say "%" and the raw value looks like a fraction
+// (<=1.5), scale it up; otherwise trust the stored value as-is.
+function fmtFundPercent(r){
+  if(!r) return '—';
+  if(r.NumericValue === null || r.NumericValue === undefined) return r.FieldValue || '—';
+  const unit = (r.Unit||'').trim();
+  if(/%/.test(unit)) return `${fmtDecimal(r.NumericValue,2)}%`;
+  const v = Math.abs(r.NumericValue) <= 1.5 ? r.NumericValue*100 : r.NumericValue;
+  return `${fmtDecimal(v,2)}%`;
+}
+function recommendationLabel(v){
+  if(v==null||isNaN(v)) return {en:'—', de:'—'};
+  if(v<=1.5) return {en:'Strong Buy', de:'Kräftig Kaufen / Kaufen'};
+  if(v<=2.5) return {en:'Buy', de:'Kaufen'};
+  if(v<=3.5) return {en:'Hold / Neutral', de:'Halten / Neutral'};
+  if(v<=4.5) return {en:'Underperform / Sell', de:'Untergewichten / Verkaufen'};
+  return {en:'Strong Sell', de:'Strikter Verkauf'};
+}
+function renderRecommendationGauge(value){
+  const clamped = Math.max(1, Math.min(5, value));
+  const pct = ((clamped-1)/4)*100;
+  const info = recommendationLabel(value);
+  return `<div class="fund-stat" style="grid-column:1/-1;">
+    <div class="fund-stat-label">Recommendation Mean</div>
+    <div class="rec-gauge">
+      <div class="rec-gauge-bar">
+        <div class="rec-gauge-seg" style="background:#1F8A6E;"></div>
+        <div class="rec-gauge-seg" style="background:#6FBF8B;"></div>
+        <div class="rec-gauge-seg" style="background:#C7C9CC;"></div>
+        <div class="rec-gauge-seg" style="background:#E39A3B;"></div>
+        <div class="rec-gauge-seg" style="background:#C0293D;"></div>
+      </div>
+      <div class="rec-gauge-marker" style="left:${pct.toFixed(1)}%;"></div>
+    </div>
+    <div class="fund-stat-value" style="margin-top:8px;">${fmtDecimal(value,2)} · ${info.de} (${info.en})</div>
+  </div>`;
+}
+
 function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52wRow, isFundInstrument){
   const rows = latestByParameter(fundamentalsRows);
-  const grid = document.getElementById('sharesFundamentalsGrid');
+  const row1 = document.getElementById('fundRow1');
+  const row2 = document.getElementById('fundRow2');
+  const row3 = document.getElementById('fundRow3');
+  const row4 = document.getElementById('fundRow4');
+  const row5 = document.getElementById('fundRow5');
+  const row6 = document.getElementById('fundRow6');
+  const row8 = document.getElementById('fundRow8');
   const asOfEl = document.getElementById('sharesDataAsOf');
   const analystSectionTitle = document.getElementById('analystTargetsTitle');
   const analystChartWrap = document.getElementById('analystChartWrap');
@@ -1738,20 +1850,67 @@ function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52
   }
 
   if(!rows.length){
-    grid.innerHTML = '<div class="empty">No fundamentals collected yet for this security.</div>';
+    row1.innerHTML = '<div class="empty">No fundamentals collected yet for this security.</div>';
+    clearOtherFundRows();
     asOfEl.textContent = '';
     if(!isFundInstrument) analystChartWrap.innerHTML = '<div class="chart-empty">No fundamentals collected yet for this security.</div>';
     return;
   }
 
-  const sorted = [...rows].sort((a,b) => (a.ParameterName||a.FieldName||'').localeCompare(b.ParameterName||b.FieldName||''));
-  grid.innerHTML = sorted.map(r => {
-    const name = r.ParameterName || r.FieldName || '—';
-    const value = (r.NumericValue !== null && r.NumericValue !== undefined)
-      ? `${fmtDecimal(r.NumericValue,2)}${r.Unit?` ${r.Unit}`:''}`
-      : (r.FieldValue || '—');
-    return fundStat(name, value);
-  }).join('');
+  // Rows 1-6: specific fields pulled out by alias, in the requested order.
+  // Anything matched here is excluded from the "übrige Fundamentals" row 8.
+  const used = new Set();
+  function pick(...aliases){
+    const f = findFundamental(rows, ...aliases);
+    if(f) used.add(f);
+    return f;
+  }
+
+  const priceToBook = pick('pricetobook','price to book','price/book','p/b ratio','p/b','kbv');
+  const trailingPE = pick('trailingpe','trailing pe','trailing p/e','pe ratio ttm','kgv ttm');
+  const forwardPE = pick('forwardpe','forward pe','forward p/e','kgv');
+  const trailingEPS = pick('trailingeps','trailing eps');
+  const forwardEPS = pick('forwardeps','forward eps');
+  const dividendRate = pick('dividendrate','dividend rate');
+  const payoutRatio = pick('payoutratio','payout ratio');
+  const dividendYieldF = pick('dividendyield','dividend yield');
+  const marketCapF = pick('marketcap','market cap','markt kapitalisierung','marktkapitalisierung');
+  const analystCount = pick('numberofanalystopinions','number of analyst opinions','number of analysts','analyst count','no. of analysts','anzahl analysten');
+  const recMean = pick('recommendationmean','recommendation mean');
+
+  row1.innerHTML = priceToBook ? fundStat('Price To Book', fmtFundValue(priceToBook)) : '';
+
+  row2.innerHTML = [
+    trailingPE ? fundStat('Trailing PE', fmtFundValue(trailingPE)) : '',
+    forwardPE ? fundStat('Forward PE', fmtFundValue(forwardPE)) : '',
+  ].join('');
+
+  row3.innerHTML = [
+    trailingEPS ? fundStat('Trailing EPS', fmtFundValue(trailingEPS)) : '',
+    forwardEPS ? fundStat('Forward EPS', fmtFundValue(forwardEPS)) : '',
+  ].join('');
+
+  row4.innerHTML = [
+    dividendRate ? fundStat('Dividend Rate', fmtFundValue(dividendRate)) : '',
+    payoutRatio ? fundStat('Payout Ratio', fmtFundPercent(payoutRatio)) : '',
+    dividendYieldF ? fundStat('Dividend Yield', fmtFundPercent(dividendYieldF)) : '',
+  ].join('');
+
+  row5.innerHTML = marketCapF
+    ? fundStat('Market Cap.', marketCapF.NumericValue!==null && marketCapF.NumericValue!==undefined
+        ? `${fmtDecimal(toBillions(marketCapF.NumericValue, marketCapF.Unit),2)} Mrd.`
+        : (marketCapF.FieldValue||'—'))
+    : '';
+
+  row6.innerHTML = [
+    analystCount ? fundStat('Analyst No.', fmtFundValue(analystCount)) : '',
+    (recMean && recMean.NumericValue!==null && recMean.NumericValue!==undefined) ? renderRecommendationGauge(recMean.NumericValue) : '',
+  ].join('');
+
+  // Row 8: everything else, alphabetically (same as the previous full list).
+  const leftover = rows.filter(r => !used.has(r));
+  const sortedLeftover = [...leftover].sort((a,b) => (a.ParameterName||a.FieldName||'').localeCompare(b.ParameterName||b.FieldName||''));
+  row8.innerHTML = sortedLeftover.map(r => fundStat(r.ParameterName || r.FieldName || '—', fmtFundValue(r))).join('');
 
   const newestDate = rows.reduce((max,r) => (r.AsOfDate>max?r.AsOfDate:max), rows[0].AsOfDate);
   asOfEl.textContent = `Fundamentals as of ${fmtIsoDateDDMM(newestDate)} · Source: ${rows[0].Source||'—'}`;
