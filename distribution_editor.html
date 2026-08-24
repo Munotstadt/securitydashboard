@@ -23,11 +23,14 @@
   .dd-menu a:hover{background:var(--panel);color:var(--text);}
   .dd-menu a.active{color:var(--text);font-weight:600;background:rgba(227,6,19,0.06);}
   .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
-  .wrap{max-width:1100px;width:100%;}
+  .wrap{max-width:none;width:100%;}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;text-transform:uppercase;letter-spacing:.02em;border-bottom:2px solid var(--accent);padding-bottom:14px;}
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 8px;}
   input[type=text], select, input[type=number]{font-family:'Inter',sans-serif;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);outline:none;}
   #filterSecurity{min-width:260px;}
+  .date-range{display:flex;gap:6px;align-items:center;}
+  .date-range label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);}
+  .date-range input[type=date]{width:140px;}
   button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--line);background:none;cursor:pointer;color:var(--text);}
   button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
   button:hover{border-color:var(--text);}
@@ -37,14 +40,14 @@
   #improvementSaveBtn{font-family:'IBM Plex Mono',monospace;font-size:12px;}
   button:disabled, a.disabled{opacity:.4;cursor:not-allowed;pointer-events:none;}
   .count-line{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin:0 0 14px;}
-  table{width:100%;border-collapse:collapse;font-size:13px;}
-  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);background:var(--panel);cursor:pointer;user-select:none;white-space:nowrap;}
+  table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;}
+  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px;border-bottom:1px solid var(--line);background:var(--panel);cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   th:hover{color:var(--text);}
   th[data-sort]::after{content:'';display:inline-block;width:0;height:0;margin-left:4px;vertical-align:middle;border-left:4px solid transparent;border-right:4px solid transparent;}
   th.sorted-asc::after{border-bottom:5px solid var(--accent);}
   th.sorted-desc::after{border-top:5px solid var(--accent);}
-  td{padding:3px 6px;border-bottom:1px solid var(--line);vertical-align:middle;}
-  td input, td select{width:100%;padding:5px 7px;}
+  td{padding:0 6px;border-bottom:1px solid var(--line);vertical-align:middle;line-height:1.05;}
+  td input, td select{width:100%;padding:2px 6px;font-size:12px;}
   .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;}
   .status.error{color:#C0293D;} .status.ok{color:#1F8A6E;}
   .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin-bottom:16px;display:none;gap:8px;}
@@ -109,6 +112,13 @@
   <h1>Security Distributions · Editor</h1>
   <div class="toolbar">
     <select id="filterSecurity"><option value="">Security wählen…</option></select>
+    <div class="date-range">
+      <label for="dateFrom">Von</label>
+      <input type="date" id="dateFrom">
+      <label for="dateTo">Bis</label>
+      <input type="date" id="dateTo">
+      <button id="dateApplyBtn">Apply</button>
+    </div>
     <a id="linkSecurityForm" class="disabled"><button disabled id="btnSecurityForm">📈 View Security</button></a>
     <a id="linkPrices" class="disabled"><button disabled id="btnPrices">✏️ View Prices</button></a>
     <button id="addBtn" disabled>+ New Distribution</button>
@@ -124,6 +134,15 @@
   <div class="count-line" id="countLine"></div>
   <div class="table-wrap">
   <table>
+    <colgroup>
+      <col style="width:260px">
+      <col style="width:100px">
+      <col style="width:70px">
+      <col style="width:110px">
+      <col style="width:110px">
+      <col>
+      <col style="width:36px">
+    </colgroup>
     <thead><tr>
       <th>Security</th>
       <th data-sort="DistributionAmount">Amount</th>
@@ -246,13 +265,30 @@ let CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD']; // 
 function secOptions(selected) {
   return masterRows.map(m => `<option value="${m.SecurityID}" ${String(m.SecurityID)===String(selected)?'selected':''}>${m.SecurityName} · ${m.SecurityID}</option>`).join('');
 }
+// Native <input type="date"> always yields ISO yyyy-mm-dd (or '').
+function parseIsoDateInput(str){
+  if(!str) return null;
+  const m = String(str).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m) return null;
+  const dt = new Date(Number(m[1]), Number(m[2])-1, Number(m[3]));
+  return isNaN(dt) ? null : dt;
+}
+// The date filter (on ExDate) only takes effect when "Apply" is pressed (or
+// Enter is pressed in one of the fields) — not on every keystroke/selection.
+let activeDateFrom = null;
+let activeDateTo = null;
+function applyDateFilter(){
+  activeDateFrom = parseIsoDateInput(document.getElementById('dateFrom').value);
+  activeDateTo = parseIsoDateInput(document.getElementById('dateTo').value);
+  renderAll(document.getElementById('filterSecurity').value);
+}
 function renderRow(row, idx) {
   return `<tr data-idx="${idx}">
     <td><select data-field="SecurityID">${secOptions(row.SecurityID)}</select></td>
-    <td><input type="number" step="any" data-field="DistributionAmount" value="${row.DistributionAmount??''}" style="width:100px"></td>
-    <td><select data-field="Currency" style="width:70px">${CURRENCY_OPTS.map(c => `<option value="${c}" ${c===row.Currency?'selected':''}>${c}</option>`).join('')}</select></td>
-    <td><input type="text" data-field="ExDate" value="${row.ExDate||''}" placeholder="dd.mm.yyyy" style="width:110px"></td>
-    <td><input type="text" data-field="PayDate" value="${row.PayDate||''}" placeholder="dd.mm.yyyy" style="width:110px"></td>
+    <td><input type="number" step="any" data-field="DistributionAmount" value="${row.DistributionAmount??''}"></td>
+    <td><select data-field="Currency">${CURRENCY_OPTS.map(c => `<option value="${c}" ${c===row.Currency?'selected':''}>${c}</option>`).join('')}</select></td>
+    <td><input type="text" data-field="ExDate" value="${row.ExDate||''}" placeholder="dd.mm.yyyy"></td>
+    <td><input type="text" data-field="PayDate" value="${row.PayDate||''}" placeholder="dd.mm.yyyy"></td>
     <td><input type="text" data-field="Source" value="${row.Source||''}"></td>
     <td><button data-del="${idx}">✕</button></td>
   </tr>`;
@@ -296,8 +332,12 @@ function renderAll(filterSecId='') {
     return;
   }
 
+  const dateToEnd = activeDateTo ? new Date(activeDateTo.getFullYear(), activeDateTo.getMonth(), activeDateTo.getDate(), 23,59,59) : null;
+
   const filtered = rows.map((r,i)=>({r,i}))
     .filter(({r}) => String(r.SecurityID) === String(filterSecId))
+    .filter(({r}) => { if(!activeDateFrom) return true; const dt = parseSwissDate(r.ExDate); return dt && dt >= activeDateFrom; })
+    .filter(({r}) => { if(!dateToEnd) return true; const dt = parseSwissDate(r.ExDate); return dt && dt <= dateToEnd; })
     .sort((a,b) => {
       const va = sortValue(a.r, sortKey), vb = sortValue(b.r, sortKey);
       let cmp = (typeof va === 'string') ? va.localeCompare(vb) : (va - vb);
@@ -379,6 +419,9 @@ async function load() {
 function setStatus(msg, cls) { const s = document.getElementById('status'); s.textContent = msg; s.className = 'status ' + (cls||''); }
 
 document.getElementById('filterSecurity').addEventListener('change', (e) => renderAll(e.target.value));
+document.getElementById('dateApplyBtn').addEventListener('click', applyDateFilter);
+document.getElementById('dateFrom').addEventListener('keydown', (e) => { if (e.key === 'Enter') applyDateFilter(); });
+document.getElementById('dateTo').addEventListener('keydown', (e) => { if (e.key === 'Enter') applyDateFilter(); });
 
 document.getElementById('addBtn').addEventListener('click', () => {
   const secId = document.getElementById('filterSecurity').value || (masterRows[0] && masterRows[0].SecurityID) || '';

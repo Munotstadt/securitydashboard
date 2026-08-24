@@ -9,11 +9,14 @@
   :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613; }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:32px 16px 80px;}
-  .wrap{max-width:1200px;margin:0 auto;}
+  .wrap{max-width:none;width:100%;}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;text-transform:uppercase;letter-spacing:.02em;border-bottom:2px solid var(--accent);padding-bottom:14px;}
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 8px;}
   input[type=text], select, input[type=number]{font-family:'Inter',sans-serif;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);outline:none;}
   #filterSecurity{min-width:260px;}
+  .date-range{display:flex;gap:6px;align-items:center;}
+  .date-range label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);}
+  .date-range input[type=date]{width:140px;}
   button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--line);background:none;cursor:pointer;color:var(--text);}
   button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
   button:hover{border-color:var(--text);}
@@ -23,10 +26,10 @@
   #improvementSaveBtn{font-family:'IBM Plex Mono',monospace;font-size:12px;}
   button:disabled, a.disabled{opacity:.4;cursor:not-allowed;pointer-events:none;}
   .count-line{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin:0 0 14px;}
-  table{width:100%;border-collapse:collapse;font-size:13px;}
-  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);background:var(--panel);}
-  td{padding:6px;border-bottom:1px solid var(--line);vertical-align:middle;}
-  td input, td select{width:100%;}
+  table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;}
+  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px;border-bottom:1px solid var(--line);background:var(--panel);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  td{padding:0 6px;border-bottom:1px solid var(--line);vertical-align:middle;line-height:1.05;}
+  td input, td select{width:100%;padding:2px 6px;font-size:12px;}
   .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;}
   .status.error{color:#C0293D;} .status.ok{color:#1F8A6E;}
   .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin-bottom:16px;display:none;gap:8px;}
@@ -105,6 +108,13 @@
   <h1>Security Transactions · Editor</h1>
   <div class="toolbar">
     <select id="filterSecurity"><option value="">All securities…</option></select>
+    <div class="date-range">
+      <label for="dateFrom">Von</label>
+      <input type="date" id="dateFrom">
+      <label for="dateTo">Bis</label>
+      <input type="date" id="dateTo">
+      <button id="dateApplyBtn">Apply</button>
+    </div>
     <a id="linkSecurityForm" class="disabled"><button disabled id="btnSecurityForm">📈 View Security</button></a>
     <button id="addBtn">+ New Transaction</button>
     <button id="saveBtn" class="primary">Save</button>
@@ -119,6 +129,21 @@
   </div>
   <div class="table-wrap">
   <table>
+    <colgroup>
+      <col style="width:260px">
+      <col style="width:130px">
+      <col style="width:100px">
+      <col style="width:100px">
+      <col style="width:90px">
+      <col style="width:90px">
+      <col style="width:90px">
+      <col style="width:80px">
+      <col style="width:80px">
+      <col style="width:90px">
+      <col>
+      <col style="width:90px">
+      <col style="width:36px">
+    </colgroup>
     <thead><tr>
       <th>Security</th><th>Art</th><th>DateTrx</th><th>DateValuta</th><th>Quantity</th>
       <th>AmtCHF</th><th>AmtLC</th><th>ExpCHF</th><th>ExpLC</th><th>Source</th><th>Comment</th><th>Reference</th><th></th>
@@ -208,6 +233,23 @@ let deleteQueue = [];
 function secOptions(selected) {
   return masterRows.map(m => `<option value="${m.SecurityID}" ${String(m.SecurityID)===String(selected)?'selected':''}>${m.SecurityName} · ${m.SecurityID}</option>`).join('');
 }
+// Native <input type="date"> always yields ISO yyyy-mm-dd (or '').
+function parseIsoDateInput(str){
+  if(!str) return null;
+  const m = String(str).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m) return null;
+  const dt = new Date(Number(m[1]), Number(m[2])-1, Number(m[3]));
+  return isNaN(dt) ? null : dt;
+}
+// The date filter (on DateTrx) only takes effect when "Apply" is pressed (or
+// Enter is pressed in one of the fields) — not on every keystroke/selection.
+let activeDateFrom = null;
+let activeDateTo = null;
+function applyDateFilter(){
+  activeDateFrom = parseIsoDateInput(document.getElementById('dateFrom').value);
+  activeDateTo = parseIsoDateInput(document.getElementById('dateTo').value);
+  renderAll(document.getElementById('filterSecurity').value);
+}
 function trxArtOptions(selected) {
   return trxArtOpts.map(o => `<option value="${o.ParameterID}" ${String(o.ParameterID)===String(selected)?'selected':''}>${o.ParameterName}</option>`).join('');
 }
@@ -215,16 +257,16 @@ function renderRow(row, idx) {
   return `<tr data-idx="${idx}">
     <td><select data-field="SecurityID">${secOptions(row.SecurityID)}</select></td>
     <td><select data-field="TrxArt">${trxArtOptions(row.TrxArt)}</select></td>
-    <td><input type="text" data-field="DateTrx" value="${row.DateTrx||''}" placeholder="dd.mm.yyyy" style="width:100px"></td>
-    <td><input type="text" data-field="DateValuta" value="${row.DateValuta||''}" placeholder="dd.mm.yyyy" style="width:100px"></td>
-    <td><input type="number" step="any" data-field="Quantity" value="${row.Quantity??''}" style="width:90px"></td>
-    <td><input type="number" step="any" data-field="AmtCHF" value="${row.AmtCHF??''}" style="width:90px"></td>
-    <td><input type="number" step="any" data-field="AmtLC" value="${row.AmtLC??''}" style="width:90px"></td>
-    <td><input type="number" step="any" data-field="ExpenseCHF" value="${row.ExpenseCHF??''}" style="width:80px"></td>
-    <td><input type="number" step="any" data-field="ExpenseLC" value="${row.ExpenseLC??''}" style="width:80px"></td>
-    <td><input type="text" data-field="Source" value="${row.Source||''}" style="width:90px"></td>
+    <td><input type="text" data-field="DateTrx" value="${row.DateTrx||''}" placeholder="dd.mm.yyyy"></td>
+    <td><input type="text" data-field="DateValuta" value="${row.DateValuta||''}" placeholder="dd.mm.yyyy"></td>
+    <td><input type="number" step="any" data-field="Quantity" value="${row.Quantity??''}"></td>
+    <td><input type="number" step="any" data-field="AmtCHF" value="${row.AmtCHF??''}"></td>
+    <td><input type="number" step="any" data-field="AmtLC" value="${row.AmtLC??''}"></td>
+    <td><input type="number" step="any" data-field="ExpenseCHF" value="${row.ExpenseCHF??''}"></td>
+    <td><input type="number" step="any" data-field="ExpenseLC" value="${row.ExpenseLC??''}"></td>
+    <td><input type="text" data-field="Source" value="${row.Source||''}"></td>
     <td><input type="text" data-field="Comments" value="${row.Comments||''}"></td>
-    <td><input type="text" data-field="TrxReference" value="${row.TrxReference||''}" style="width:90px"></td>
+    <td><input type="text" data-field="TrxReference" value="${row.TrxReference||''}"></td>
     <td><button data-del="${idx}">✕</button></td>
   </tr>`;
 }
@@ -240,8 +282,12 @@ function updateSelectionLinks(secId) {
 }
 function renderAll(filterSecId='') {
   const body = document.getElementById('body');
+  const dateToEnd = activeDateTo ? new Date(activeDateTo.getFullYear(), activeDateTo.getMonth(), activeDateTo.getDate(), 23,59,59) : null;
+
   const filtered = rows.map((r,i)=>({r,i}))
     .filter(({r}) => !filterSecId || String(r.SecurityID) === String(filterSecId))
+    .filter(({r}) => { if(!activeDateFrom) return true; const dt = parseSwissDate(r.DateTrx); return dt && dt >= activeDateFrom; })
+    .filter(({r}) => { if(!dateToEnd) return true; const dt = parseSwissDate(r.DateTrx); return dt && dt <= dateToEnd; })
     .sort((a,b) => (parseSwissDate(b.r.DateTrx)||0) - (parseSwissDate(a.r.DateTrx)||0));
 
   document.getElementById('countLine').textContent = `Total ${rows.length} · ${filtered.length} selected`;
@@ -299,6 +345,9 @@ async function load() {
 function setStatus(msg, cls) { const s = document.getElementById('status'); s.textContent = msg; s.className = 'status ' + (cls||''); }
 
 document.getElementById('filterSecurity').addEventListener('change', (e) => renderAll(e.target.value));
+document.getElementById('dateApplyBtn').addEventListener('click', applyDateFilter);
+document.getElementById('dateFrom').addEventListener('keydown', (e) => { if (e.key === 'Enter') applyDateFilter(); });
+document.getElementById('dateTo').addEventListener('keydown', (e) => { if (e.key === 'Enter') applyDateFilter(); });
 
 document.getElementById('addBtn').addEventListener('click', () => {
   const secId = document.getElementById('filterSecurity').value || (masterRows[0] && masterRows[0].SecurityID) || '';

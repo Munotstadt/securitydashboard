@@ -9,26 +9,27 @@
   :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613; }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;padding:32px 16px 80px;}
-  .wrap{max-width:1100px;margin:0 auto;}
+  .wrap{max-width:none;width:100%;}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;text-transform:uppercase;letter-spacing:.02em;border-bottom:2px solid var(--accent);padding-bottom:14px;}
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:16px 0 8px;}
   input[type=text], select, input[type=number]{font-family:'Inter',sans-serif;font-size:14px;padding:8px 9px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);outline:none;}
   #filterSecurity{min-width:220px;}
   #searchText{min-width:160px;}
-  .date-range{display:flex;gap:4px;align-items:center;}
-  .date-range input{width:90px;}
+  .date-range{display:flex;gap:6px;align-items:center;}
+  .date-range label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);}
+  .date-range input[type=date]{width:140px;}
   button{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:8px 14px;border-radius:3px;border:1px solid var(--line);background:none;cursor:pointer;color:var(--text);}
   button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;}
   button:hover{border-color:var(--text);}
   button:disabled, a.disabled{opacity:.4;cursor:not-allowed;pointer-events:none;}
   .count-line{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin:0 0 14px;}
-  table{width:100%;border-collapse:collapse;font-size:13px;}
-  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px;border-bottom:1px solid var(--line);background:var(--panel);}
+  table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;}
+  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px;border-bottom:1px solid var(--line);background:var(--panel);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   th[data-sort]{cursor:pointer;user-select:none;}
   th[data-sort]:hover{color:var(--text);}
   th .arrow{color:var(--accent);margin-left:2px;}
-  td{padding:1px 6px;border-bottom:1px solid var(--line);vertical-align:middle;line-height:1.2;}
-  td input, td select{width:100%;padding:3px 6px;font-size:12px;}
+  td{padding:0 6px;border-bottom:1px solid var(--line);vertical-align:middle;line-height:1.05;}
+  td input, td select{width:100%;padding:2px 6px;font-size:12px;}
   tr.new-row td{background:rgba(227,6,19,0.04);}
   .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;}
   .status.error{color:#C0293D;} .status.ok{color:#1F8A6E;}
@@ -115,9 +116,11 @@
     <input type="text" id="searchText" placeholder="Suche (Source, Price)…">
     <select id="filterSecurity"><option value="">– Security wählen –</option></select>
     <div class="date-range">
-      <input type="text" id="dateFrom" placeholder="DD.MM.YY">
-      <span>–</span>
-      <input type="text" id="dateTo" placeholder="DD.MM.YY">
+      <label for="dateFrom">Von</label>
+      <input type="date" id="dateFrom">
+      <label for="dateTo">Bis</label>
+      <input type="date" id="dateTo">
+      <button id="dateApplyBtn">Apply</button>
     </div>
     <a id="linkSecurityForm" class="disabled"><button disabled id="btnSecurityForm">📈 View Security</button></a>
     <a id="linkDistributions" class="disabled"><button disabled id="btnDistributions">💰 View Distributions</button></a>
@@ -128,10 +131,17 @@
 
   <div class="table-wrap">
   <table>
+    <colgroup>
+      <col style="width:260px">
+      <col style="width:100px">
+      <col style="width:170px">
+      <col>
+      <col style="width:36px">
+    </colgroup>
     <thead><tr id="headerRow">
       <th data-sort="SecurityName">Security</th>
       <th data-sort="Price">Price</th>
-      <th data-sort="PriceDate" style="min-width:170px;">PriceDate</th>
+      <th data-sort="PriceDate">PriceDate</th>
       <th data-sort="Source">Source</th>
       <th></th>
     </tr></thead>
@@ -229,14 +239,23 @@ let currentSecId = '';
 const PRICE_LOAD_LIMIT = 90; // cap per security — keeps the query/table small and fast
 
 function masterName(secId){ const m = masterRows.find(x => String(x.SecurityID)===String(secId)); return m ? m.SecurityName : ''; }
-function parseFilterDate(str){
+// Native <input type="date"> always yields ISO yyyy-mm-dd (or '').
+function parseIsoDateInput(str){
   if(!str) return null;
-  const m = String(str).trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})$/);
+  const m = String(str).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if(!m) return null;
-  let [, d, mo, y] = m;
-  if(y.length === 2) y = (Number(y) <= 69 ? '20' : '19') + y;
-  const dt = new Date(Number(y), Number(mo)-1, Number(d));
+  const dt = new Date(Number(m[1]), Number(m[2])-1, Number(m[3]));
   return isNaN(dt) ? null : dt;
+}
+// The date filter only takes effect when "Apply" is pressed (or Enter is
+// pressed in one of the fields) — not on every keystroke/selection — so the
+// user can finish entering both dates before the table re-filters.
+let activeDateFrom = null;
+let activeDateTo = null;
+function applyDateFilter(){
+  activeDateFrom = parseIsoDateInput(document.getElementById('dateFrom').value);
+  activeDateTo = parseIsoDateInput(document.getElementById('dateTo').value);
+  renderAll(document.getElementById('filterSecurity').value);
 }
 function secOptions(selected) {
   return masterRows.map(m => `<option value="${m.SecurityID}" ${String(m.SecurityID)===String(selected)?'selected':''}>${m.SecurityName} · ${m.SecurityID}</option>`).join('');
@@ -244,8 +263,8 @@ function secOptions(selected) {
 function renderRow(row, idx) {
   return `<tr data-idx="${idx}" class="${row._new?'new-row':''}">
     <td><select data-field="SecurityID">${secOptions(row.SecurityID)}</select></td>
-    <td><input type="number" step="any" data-field="Price" value="${row.Price??''}" style="width:100px"></td>
-    <td><input type="text" data-field="PriceDate" value="${row.PriceDate||''}" placeholder="dd.mm.yyyy hh:mm:ss" style="width:170px"></td>
+    <td><input type="number" step="any" data-field="Price" value="${row.Price??''}"></td>
+    <td><input type="text" data-field="PriceDate" value="${row.PriceDate||''}" placeholder="dd.mm.yyyy hh:mm:ss"></td>
     <td><input type="text" data-field="Source" value="${row.Source||''}"></td>
     <td><button data-del="${idx}">✕</button></td>
   </tr>`;
@@ -299,9 +318,8 @@ function renderAll(filterSecId=currentSecId) {
   addBtn.disabled = false;
 
   const search = (document.getElementById('searchText').value || '').toLowerCase().trim();
-  const dateFrom = parseFilterDate(document.getElementById('dateFrom').value);
-  const dateTo = parseFilterDate(document.getElementById('dateTo').value);
-  const dateToEnd = dateTo ? new Date(dateTo.getFullYear(), dateTo.getMonth(), dateTo.getDate(), 23,59,59) : null;
+  const dateFrom = activeDateFrom;
+  const dateToEnd = activeDateTo ? new Date(activeDateTo.getFullYear(), activeDateTo.getMonth(), activeDateTo.getDate(), 23,59,59) : null;
 
   let filtered = rows.map((r,i)=>({r,i}))
     .filter(({r}) => !search || (r.Source||'').toLowerCase().includes(search) || String(r.Price??'').toLowerCase().includes(search))
@@ -406,8 +424,9 @@ function setStatus(msg, cls) { const s = document.getElementById('status'); s.te
 
 document.getElementById('filterSecurity').addEventListener('change', (e) => selectSecurity(e.target.value));
 document.getElementById('searchText').addEventListener('input', () => renderAll(document.getElementById('filterSecurity').value));
-document.getElementById('dateFrom').addEventListener('input', () => renderAll(document.getElementById('filterSecurity').value));
-document.getElementById('dateTo').addEventListener('input', () => renderAll(document.getElementById('filterSecurity').value));
+document.getElementById('dateApplyBtn').addEventListener('click', applyDateFilter);
+document.getElementById('dateFrom').addEventListener('keydown', (e) => { if (e.key === 'Enter') applyDateFilter(); });
+document.getElementById('dateTo').addEventListener('keydown', (e) => { if (e.key === 'Enter') applyDateFilter(); });
 
 document.querySelectorAll('#headerRow th[data-sort]').forEach(th => {
   th.addEventListener('click', () => {
