@@ -29,7 +29,8 @@
   th[data-sort]:hover{color:var(--text);}
   th .arrow{color:var(--accent);margin-left:2px;}
   td{padding:0 6px;border-bottom:1px solid var(--line);vertical-align:middle;line-height:1.05;}
-  td input, td select{width:100%;padding:2px 6px;font-size:12px;}
+  td input, td select{width:100%;padding:2px 6px;font-size:13px;font-family:'IBM Plex Mono',monospace;line-height:1.3;}
+  td .price-input{text-align:right;font-variant-numeric:tabular-nums;}
   tr.new-row td{background:rgba(227,6,19,0.04);}
   .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;}
   .status.error{color:#C0293D;} .status.ok{color:#1F8A6E;}
@@ -39,6 +40,8 @@
   .note{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin:24px 0 0;padding-top:14px;border-top:1px solid var(--line);}
   .table-wrap{overflow-x:auto;max-height:60vh;overflow-y:auto;}
   .footer{margin-top:14px;}
+  .footer-row{display:flex;align-items:center;gap:8px;margin-top:8px;}
+  .footer-row:first-child{margin-top:0;}
   .improvement-input{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text);background:#fff;border:1px solid var(--line);border-radius:3px;padding:6px 10px;min-width:200px;vertical-align:middle;}
   .improvement-input::placeholder{color:var(--muted);}
   #improvementSaveBtn{font-family:'IBM Plex Mono',monospace;font-size:12px;}
@@ -132,7 +135,7 @@
   <div class="table-wrap">
   <table>
     <colgroup>
-      <col style="width:260px">
+      <col style="width:170px">
       <col style="width:100px">
       <col style="width:170px">
       <col>
@@ -149,12 +152,16 @@
   </table>
   </div>
   <div class="status" id="status"></div>
-  <p class="note">Bitte zuerst oben eine Security auswählen — ohne Auswahl werden keine Preise geladen oder angezeigt. Geladen werden die letzten 90 Einträge der gewählten Security (neueste zuerst), um die Datenbankabfrage schlank zu halten. Der Collector schreibt weiterhin regelmässig neue Zeilen in die DB; hier können einzelne Kurse manuell korrigiert oder ergänzt werden. Neu hinzugefügte Zeilen erscheinen immer zuoberst.</p>
+  <p class="note">Bitte zuerst oben eine Security auswählen — ohne Auswahl werden keine Preise geladen oder angezeigt. Standardmässig werden die letzten 90 Einträge der gewählten Security geladen (neueste zuerst), um die Datenbankabfrage schlank zu halten. Wird oben ein Von/Bis-Datum gesetzt und "Apply" gedrückt, wird stattdessen direkt der gewählte Zeitraum aus der Datenbank nachgeladen (auch wenn er weiter als 90 Einträge zurückliegt). Der Collector schreibt weiterhin regelmässig neue Zeilen in die DB; hier können einzelne Kurse manuell korrigiert oder ergänzt werden. Neu hinzugefügte Zeilen erscheinen immer zuoberst.</p>
 
   <div class="footer">
-    <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
-    <button type="button" id="improvementSaveBtn">💡 Save</button>
-    <button id="settingsBtn">⚙ Repo/Token</button>
+    <div class="footer-row">
+      <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
+      <button type="button" id="improvementSaveBtn">💡 Save</button>
+    </div>
+    <div class="footer-row">
+      <button id="settingsBtn">⚙ Repo/Token</button>
+    </div>
   </div>
   <div class="settings" id="settingsPanel">
     <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
@@ -252,18 +259,65 @@ function parseIsoDateInput(str){
 // user can finish entering both dates before the table re-filters.
 let activeDateFrom = null;
 let activeDateTo = null;
-function applyDateFilter(){
+// Tracks how `rows` was last populated, purely for the "Geladen X (max Y)"
+// status line — 'limit' = fast default (last PRICE_LOAD_LIMIT rows),
+// 'range' = server-side date-range query triggered by the Von/Bis filter.
+let loadMode = 'limit';
+async function applyDateFilter(){
   activeDateFrom = parseIsoDateInput(document.getElementById('dateFrom').value);
   activeDateTo = parseIsoDateInput(document.getElementById('dateTo').value);
-  renderAll(document.getElementById('filterSecurity').value);
+  const secId = document.getElementById('filterSecurity').value;
+  if (!secId) { renderAll(''); return; }
+
+  if (!activeDateFrom && !activeDateTo) {
+    // Filter cleared: go back to the fast default (last PRICE_LOAD_LIMIT rows).
+    if (loadMode !== 'limit') await selectSecurity(secId);
+    else renderAll(secId);
+    return;
+  }
+
+  // A Von/Bis range is active: the in-memory `rows` may only hold the most
+  // recent PRICE_LOAD_LIMIT entries, which can silently exclude everything
+  // older. Re-query the DB directly for the requested range instead of
+  // filtering client-side against the capped set.
+  document.getElementById('countLine').textContent = 'Lade Zeitraum…';
+  try {
+    await ensurePriceIndex();
+    const fromIso = activeDateFrom ? toIsoDate(activeDateFrom) : null;
+    const toIso = activeDateTo ? toIsoDate(activeDateTo) : null;
+    let sql = 'SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices WHERE SecurityID=?';
+    const params = [secId];
+    if (fromIso) { sql += ' AND PriceDate >= ?'; params.push(fromIso); }
+    if (toIso) { sql += ' AND PriceDate <= ?'; params.push(toIso + ' 23:59:59'); }
+    sql += ' ORDER BY PriceDate DESC';
+    const priceRows = await tursoQuery(sql, params);
+    rows = priceRows.map(r => ({ ...r, PriceDate: toSwissDateTime(parseSwissDateTime(r.PriceDate)) || r.PriceDate, _dirty:false, _new:false }));
+    loadMode = 'range';
+  } catch (e) {
+    document.getElementById('body').innerHTML = `<tr><td colspan="5">Error: ${e.message}</td></tr>`;
+    return;
+  }
+  renderAll(secId);
 }
 function secOptions(selected) {
   return masterRows.map(m => `<option value="${m.SecurityID}" ${String(m.SecurityID)===String(selected)?'selected':''}>${m.SecurityName} · ${m.SecurityID}</option>`).join('');
 }
+// Formats a numeric price for display: at least 2 decimals, but preserves
+// extra precision if the stored value has more (e.g. 12.3456 stays as-is,
+// 12 -> 12.00, 12.5 -> 12.50).
+function fmtPriceInput(v) {
+  if (v === null || v === undefined || v === '') return '';
+  const n = Number(v);
+  if (isNaN(n)) return v;
+  const s = String(v);
+  const dotIdx = s.indexOf('.');
+  const decimals = dotIdx === -1 ? 0 : s.length - dotIdx - 1;
+  return n.toFixed(Math.max(2, decimals));
+}
 function renderRow(row, idx) {
   return `<tr data-idx="${idx}" class="${row._new?'new-row':''}">
     <td><select data-field="SecurityID">${secOptions(row.SecurityID)}</select></td>
-    <td><input type="number" step="any" data-field="Price" value="${row.Price??''}"></td>
+    <td><input type="number" step="any" class="price-input" data-field="Price" value="${fmtPriceInput(row.Price)}"></td>
     <td><input type="text" data-field="PriceDate" value="${row.PriceDate||''}" placeholder="dd.mm.yyyy hh:mm:ss"></td>
     <td><input type="text" data-field="Source" value="${row.Source||''}"></td>
     <td><button data-del="${idx}">✕</button></td>
@@ -338,7 +392,8 @@ function renderAll(filterSecId=currentSecId) {
     const minD = new Date(Math.min(...dates)), maxD = new Date(Math.max(...dates));
     rangeText = ` · ${toSwissDate(minD)} – ${toSwissDate(maxD)}`;
   }
-  document.getElementById('countLine').textContent = `Geladen ${rows.length} (max ${PRICE_LOAD_LIMIT}) · ${filtered.length} angezeigt${rangeText}`;
+  const loadedText = loadMode === 'range' ? `Geladen ${rows.length} (Zeitraum, kein Limit)` : `Geladen ${rows.length} (max ${PRICE_LOAD_LIMIT})`;
+  document.getElementById('countLine').textContent = `${loadedText} · ${filtered.length} angezeigt${rangeText}`;
 
   body.innerHTML = ordered.length ? ordered.map(({r,i}) => renderRow(r,i)).join('') : '<tr><td colspan="5">No entries.</td></tr>';
 
@@ -375,6 +430,7 @@ async function selectSecurity(secId) {
   currentSecId = secId;
   rows = [];
   deleteQueue = [];
+  loadMode = 'limit';
   if (!secId) { renderAll(''); return; }
   document.getElementById('countLine').textContent = 'Lade…';
   document.getElementById('body').innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
