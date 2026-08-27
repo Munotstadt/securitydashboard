@@ -314,6 +314,7 @@
     <button type="button" class="subnav-tab" data-tab="dividends">Dividenden</button>
     <button type="button" class="subnav-tab" data-tab="risk">Risk</button>
     <button type="button" class="subnav-tab" data-tab="fundamentals">Fundamentals</button>
+    <button type="button" class="subnav-tab" data-tab="notes">Notes</button>
     <button type="button" class="subnav-tab" data-tab="allocation">Asset Allocation</button>
     <button type="button" class="subnav-tab" data-tab="tasks">Tasks<span class="tab-count hidden" id="tasksTabCount"></span></button>
     <button type="button" class="subnav-tab" data-tab="masterdata">Masterdata</button>
@@ -511,6 +512,14 @@
     <div class="detail-meta" id="sharesDataAsOf" style="margin-top:8px;"></div>
     <div class="section-title hidden" id="fundamentalsChangeLogTitle" style="margin-top:24px;">Change Log</div>
     <div id="fundamentalsChangeLogWrap" class="table-wrap hidden"></div>
+  </div>
+  </div>
+
+  <div class="tab-panel" data-tab="notes" id="tabPanelNotes">
+  <div class="section-title-row"><span class="section-title-text">Notes Log</span></div>
+  <div id="notesLogEmbedWrap" class="table-wrap">
+    <div class="detail-meta" style="margin-bottom:10px;">Notes zu dieser Security aus dem Notes Log (notes.munot.app). Öffnet in einem eigenen Tab (separates Login), damit Erstellen/Bearbeiten dort direkt funktioniert.</div>
+    <a class="toggle-btn" id="linkNotesLog" href="#" target="_blank" rel="noopener" style="display:inline-block;">📝 Notes Log für diese Security öffnen</a>
   </div>
   </div>
 
@@ -1261,6 +1270,7 @@ async function loadSecurity(secId){
   document.getElementById('linkTransactionAdd').href = `transactions_editor.html?id=${secId}&add=1`;
   document.getElementById('linkSecurityData').href = `security_data.html?id=${secId}`;
   document.getElementById('linkOtherFundamentalsEdit').href = `security_data.html?id=${secId}`;
+  document.getElementById('linkNotesLog').href = `https://notes.munot.app/?securityId=${secId}`;
   document.getElementById('linkFundOverviewEdit').href = `security_data.html?id=${secId}`;
   document.getElementById('linkFundOperationsEdit').href = `security_data.html?id=${secId}`;
   document.getElementById('linkFundPortfolioEdit').href = `security_data.html?id=${secId}`;
