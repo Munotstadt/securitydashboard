@@ -144,8 +144,8 @@
       <col style="width:90px">
       <col style="width:128px">
       <col style="width:128px">
-      <col style="width:130px">
       <col style="width:110px">
+      <col style="width:130px">
       <col style="width:44px">
     </colgroup>
     <thead><tr>
@@ -154,8 +154,8 @@
       <th>Currency</th>
       <th data-sort="ExDate">ExDate</th>
       <th data-sort="PayDate">PayDate</th>
-      <th data-sort="Source">Source</th>
       <th data-sort="DistributionType">Type</th>
+      <th data-sort="Source">Source</th>
       <th></th>
     </tr></thead>
     <tbody id="body"><tr><td colspan="8">Loading…</td></tr></tbody>
@@ -298,12 +298,12 @@ function renderRow(row, idx) {
     <td><select data-field="Currency">${CURRENCY_OPTS.map(c => `<option value="${c}" ${c===row.Currency?'selected':''}>${c}</option>`).join('')}</select></td>
     <td><input type="date" data-field="ExDate" value="${row.ExDate||''}"></td>
     <td><input type="date" data-field="PayDate" value="${row.PayDate||''}"></td>
-    <td><input type="text" class="src-input" data-field="Source" value="${row.Source||''}" title="${row.Source||''}"></td>
     <td><select data-field="DistributionType">
       <option value="" ${!row.DistributionType?'selected':''}></option>
       <option value="Distribution" ${row.DistributionType==='Distribution'?'selected':''}>Distribution</option>
       <option value="Capital" ${row.DistributionType==='Capital'?'selected':''}>Capital</option>
     </select></td>
+    <td><input type="text" class="src-input" data-field="Source" value="${row.Source||''}" title="${row.Source||''}"></td>
     <td><button class="del-btn" data-del="${idx}">✕</button></td>
   </tr>`;
 }
