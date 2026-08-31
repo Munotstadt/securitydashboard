@@ -23,7 +23,7 @@
   .dd-menu a:hover{background:var(--panel);color:var(--text);}
   .dd-menu a.active{color:var(--text);font-weight:600;background:rgba(227,6,19,0.06);}
   .topnav a.active{color:var(--text);font-weight:600;border-color:var(--accent);background:rgba(227,6,19,0.06);}
-  .wrap{max-width:1100px;width:100%;}
+  .wrap{max-width:1600px;width:97%;}
   h1{font-family:'Space Grotesk',sans-serif;font-size:20px;text-transform:uppercase;letter-spacing:.02em;border-bottom:2px solid var(--accent);padding-bottom:14px;}
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 8px;}
   input[type=text], select, input[type=number], input[type=date]{font-family:'Inter',sans-serif;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);outline:none;}
@@ -45,17 +45,18 @@
   th[data-sort]::after{content:'';display:inline-block;width:0;height:0;margin-left:4px;vertical-align:middle;border-left:4px solid transparent;border-right:4px solid transparent;}
   th.sorted-asc::after{border-bottom:5px solid var(--accent);}
   th.sorted-desc::after{border-top:5px solid var(--accent);}
-  td{padding:1px 6px;border-bottom:1px solid var(--line);vertical-align:middle;height:26px;overflow:hidden;}
+  td{padding:0 6px;border-bottom:1px solid var(--line);vertical-align:middle;height:22px;overflow:hidden;}
   td input, td select{width:100%;box-sizing:border-box;}
   /* Higher specificity than the top-level input[type=...] rule above, so row
      controls stay uniformly small (that rule was previously winning for
      type=text/number/date inputs due to its attribute-selector specificity,
      which is why Amount/ExDate/PayDate/Source looked bigger than the selects). */
   td input[type=text], td input[type=number], td input[type=date], td select{
-    font-size:12px;padding:3px 6px;height:24px;line-height:24px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);font-family:'Inter',sans-serif;
+    font-size:12px;padding:2px 6px;height:22px;line-height:18px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);font-family:'Inter',sans-serif;
   }
   td input.amt-input{text-align:right;}
   td input.src-input{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  td button.del-btn{width:100%;padding:2px 0;font-size:12px;line-height:16px;}
   .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;}
   .status.error{color:#C0293D;} .status.ok{color:#1F8A6E;}
   .settings{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;margin-bottom:16px;display:none;gap:8px;}
@@ -140,12 +141,12 @@
     <colgroup>
       <col style="width:auto">
       <col style="width:100px">
-      <col style="width:64px">
+      <col style="width:90px">
       <col style="width:128px">
       <col style="width:128px">
-      <col style="width:72px">
-      <col style="width:96px">
-      <col style="width:28px">
+      <col style="width:130px">
+      <col style="width:110px">
+      <col style="width:44px">
     </colgroup>
     <thead><tr>
       <th>Security</th>
@@ -303,7 +304,7 @@ function renderRow(row, idx) {
       <option value="Distribution" ${row.DistributionType==='Distribution'?'selected':''}>Distribution</option>
       <option value="Capital" ${row.DistributionType==='Capital'?'selected':''}>Capital</option>
     </select></td>
-    <td><button data-del="${idx}">✕</button></td>
+    <td><button class="del-btn" data-del="${idx}">✕</button></td>
   </tr>`;
 }
 function updateSelectionLinks(secId) {
