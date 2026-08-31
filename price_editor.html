@@ -24,14 +24,21 @@
   button:disabled, a.disabled{opacity:.4;cursor:not-allowed;pointer-events:none;}
   .count-line{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin:0 0 14px;}
   table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;}
-  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px;border-bottom:1px solid var(--line);background:var(--panel);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  th[data-sort]{cursor:pointer;user-select:none;}
-  th[data-sort]:hover{color:var(--text);}
-  th .arrow{color:var(--accent);margin-left:2px;}
-  td{padding:0 6px;border-bottom:1px solid var(--line);vertical-align:middle;line-height:1.05;}
-  td input, td select{width:100%;padding:2px 6px;font-size:13px;font-family:'IBM Plex Mono',monospace;line-height:1.3;}
-  td .price-input{text-align:right;font-variant-numeric:tabular-nums;-moz-appearance:textfield;}
-  td .price-input::-webkit-outer-spin-button, td .price-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+  th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);background:var(--panel);cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  th:hover{color:var(--text);}
+  th[data-sort]::after{content:'';display:inline-block;width:0;height:0;margin-left:4px;vertical-align:middle;border-left:4px solid transparent;border-right:4px solid transparent;}
+  th.sorted-asc::after{border-bottom:5px solid var(--accent);}
+  th.sorted-desc::after{border-top:5px solid var(--accent);}
+  td{padding:0 6px;border-bottom:1px solid var(--line);vertical-align:middle;height:22px;overflow:hidden;}
+  td input, td select{width:100%;box-sizing:border-box;}
+  /* Higher specificity than the top-level input[type=...] rule above, so row
+     controls stay uniformly small (matches distribution_editor.html). */
+  td input[type=text], td input[type=number], td input[type=date], td select{
+    font-size:12px;padding:2px 6px;height:22px;line-height:18px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);font-family:'Inter',sans-serif;
+  }
+  td input.amt-input{text-align:right;font-variant-numeric:tabular-nums;}
+  td input.src-input{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  td button.del-btn{width:100%;padding:2px 0;font-size:12px;line-height:16px;}
   tr.new-row td{background:rgba(227,6,19,0.04);}
   .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;}
   .status.error{color:#C0293D;} .status.ok{color:#1F8A6E;}
@@ -136,11 +143,11 @@
   <div class="table-wrap">
   <table>
     <colgroup>
-      <col style="width:210px">
-      <col style="width:120px">
+      <col style="width:auto">
+      <col style="width:110px">
       <col style="width:170px">
-      <col>
-      <col style="width:36px">
+      <col style="width:220px">
+      <col style="width:44px">
     </colgroup>
     <thead><tr id="headerRow">
       <th data-sort="SecurityName">Security</th>
@@ -292,7 +299,7 @@ async function applyDateFilter(){
     if (toIso) { sql += ' AND PriceDate <= ?'; params.push(toIso + ' 23:59:59'); }
     sql += ' ORDER BY PriceDate DESC';
     const priceRows = await tursoQuery(sql, params);
-    rows = priceRows.map(r => ({ ...r, PriceDate: toSwissDateTime(parseSwissDateTime(r.PriceDate)) || r.PriceDate, _dirty:false, _new:false }));
+    rows = priceRows.map(r => ({ ...r, PriceDate: toIsoDateTime(parseSwissDateTime(r.PriceDate)) || r.PriceDate, _dirty:false, _new:false }));
     loadMode = 'range';
   } catch (e) {
     document.getElementById('body').innerHTML = `<tr><td colspan="5">Error: ${e.message}</td></tr>`;
@@ -318,10 +325,10 @@ function fmtPriceInput(v) {
 function renderRow(row, idx) {
   return `<tr data-idx="${idx}" class="${row._new?'new-row':''}">
     <td><select data-field="SecurityID">${secOptions(row.SecurityID)}</select></td>
-    <td><input type="number" step="any" class="price-input" data-field="Price" value="${fmtPriceInput(row.Price)}"></td>
-    <td><input type="text" data-field="PriceDate" value="${row.PriceDate||''}" placeholder="dd.mm.yyyy hh:mm:ss"></td>
-    <td><input type="text" data-field="Source" value="${row.Source||''}"></td>
-    <td><button data-del="${idx}">✕</button></td>
+    <td><input type="text" inputmode="decimal" class="amt-input" data-field="Price" value="${fmtPriceInput(row.Price)}"></td>
+    <td><input type="text" data-field="PriceDate" value="${row.PriceDate||''}" placeholder="yyyy-mm-dd hh:mm:ss"></td>
+    <td><input type="text" class="src-input" data-field="Source" value="${row.Source||''}" title="${row.Source||''}"></td>
+    <td><button class="del-btn" data-del="${idx}">✕</button></td>
   </tr>`;
 }
 function updateSelectionLinks(secId) {
@@ -351,8 +358,8 @@ function compareRows(a, b, field) {
 }
 function updateSortIndicators() {
   document.querySelectorAll('#headerRow th[data-sort]').forEach(th => {
-    th.innerHTML = th.textContent.replace(/\s*[▲▼]$/, '');
-    if (th.dataset.sort === sortField) th.innerHTML += ` <span class="arrow">${sortDir === 'asc' ? '▲' : '▼'}</span>`;
+    th.classList.toggle('sorted-asc', th.dataset.sort === sortField && sortDir === 'asc');
+    th.classList.toggle('sorted-desc', th.dataset.sort === sortField && sortDir === 'desc');
   });
 }
 
@@ -391,7 +398,7 @@ function renderAll(filterSecId=currentSecId) {
   let rangeText = '';
   if (dates.length) {
     const minD = new Date(Math.min(...dates)), maxD = new Date(Math.max(...dates));
-    rangeText = ` · ${toSwissDate(minD)} – ${toSwissDate(maxD)}`;
+    rangeText = ` · ${toIsoDate(minD)} – ${toIsoDate(maxD)}`;
   }
   const loadedText = loadMode === 'range' ? `Geladen ${rows.length} (Zeitraum, kein Limit)` : `Geladen ${rows.length} (max ${PRICE_LOAD_LIMIT})`;
   document.getElementById('countLine').textContent = `${loadedText} · ${filtered.length} angezeigt${rangeText}`;
@@ -403,6 +410,11 @@ function renderAll(filterSecId=currentSecId) {
       const idx = Number(el.closest('tr').dataset.idx);
       rows[idx][el.dataset.field] = el.value;
       rows[idx]._dirty = true;
+      if (el.dataset.field === 'Price') {
+        el.value = fmtPriceInput(el.value);
+        rows[idx][el.dataset.field] = el.value;
+      }
+      if (el.dataset.field === 'Source') el.title = el.value;
     });
   });
   body.querySelectorAll('[data-del]').forEach(btn => {
@@ -441,7 +453,7 @@ async function selectSecurity(secId) {
       'SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices WHERE SecurityID=? ORDER BY PriceDate DESC LIMIT ?',
       [secId, PRICE_LOAD_LIMIT]
     );
-    rows = priceRows.map(r => ({ ...r, PriceDate: toSwissDateTime(parseSwissDateTime(r.PriceDate)) || r.PriceDate, _dirty:false, _new:false }));
+    rows = priceRows.map(r => ({ ...r, PriceDate: toIsoDateTime(parseSwissDateTime(r.PriceDate)) || r.PriceDate, _dirty:false, _new:false }));
   } catch (e) {
     document.getElementById('body').innerHTML = `<tr><td colspan="5">Error: ${e.message}</td></tr>`;
     return;
@@ -496,14 +508,14 @@ document.querySelectorAll('#headerRow th[data-sort]').forEach(th => {
 
 document.getElementById('addBtn').addEventListener('click', () => {
   if (!currentSecId) { setStatus('Bitte zuerst eine Security auswählen.', 'error'); return; }
-  rows.push({ id:null, SecurityID: currentSecId, Price:'', PriceDate: nowZurichString(), Source:'manual', _dirty:true, _new:true });
+  rows.push({ id:null, SecurityID: currentSecId, Price:'', PriceDate: toIsoDateTime(new Date()), Source:'manual', _dirty:true, _new:true });
   renderAll(currentSecId);
 });
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
   if (!tursoConfigured()) { setStatus('Bitte ⚙ Repo/Token setzen.', 'error'); document.getElementById('settingsPanel').classList.add('show'); return; }
   for (const r of rows) {
-    if (r.PriceDate && !parseSwissDateTime(r.PriceDate)) { setStatus(`Ungültiges PriceDate "${r.PriceDate}" für SecurityID ${r.SecurityID} - erwartet dd.mm.yyyy hh:mm:ss.`, 'error'); return; }
+    if (r.PriceDate && !parseSwissDateTime(r.PriceDate)) { setStatus(`Ungültiges PriceDate "${r.PriceDate}" für SecurityID ${r.SecurityID} - erwartet yyyy-mm-dd hh:mm:ss.`, 'error'); return; }
   }
   const stmts = []; const newRowIdxs = [];
   rows.forEach((r,i) => {
