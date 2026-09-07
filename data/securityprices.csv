@@ -1,43 +1,43 @@
 ﻿SecurityID,PriceDate,Price,Source
-10152,2026-09-07 22:46:01,258.51,Collector_Worker_YahooWeekday_1200-2259_UTC
-12007,2026-09-07 22:46:01,17298.34,Collector_Worker_YahooWeekday_1200-2259_UTC
+10152,2026-09-07 23:45:58,258.51,Collector_Worker_YahooWeekday_1200-2259_UTC
+12007,2026-09-07 23:45:58,17298.34,Collector_Worker_YahooWeekday_1200-2259_UTC
 12161,2026-08-31 00:00:00,500,manual
 21000,2026-09-06 00:00:00,48.5,Splint: valuation worker
-22000,2026-09-07 22:45:57,104.02,Collector_Worker_YahooDaily_0001-2359_UTC
+22000,2026-09-07 23:45:57,103.9,Collector_Worker_YahooDaily_0001-2359_UTC
 22213,2026-09-07 22:45:58,37417.39,Collector_Worker_YahooWeekday_0600-2000_UTC
-31007,2026-09-06 23:43:37,0.496,Collector_Worker_others_2143_UTC / SNB
-31008,2026-09-06 23:43:37,1659.95,Collector_Worker_others_2143_UTC / onvista
-31009,2026-09-06 23:43:37,1.57,Collector_Worker_others_2143_UTC / RB Winterthur
-31010,2026-09-06 23:43:37,1.78,Collector_Worker_others_2143_UTC / RB Winterthur
-31011,2026-09-06 23:43:37,2.1,Collector_Worker_others_2143_UTC / RB Winterthur
-31012,2026-09-06 23:43:37,2.5,Collector_Worker_others_2143_UTC / RB Winterthur
-31013,2026-09-07 22:46:01,12128.09,Collector_Worker_YahooWeekday_1200-2259_UTC
-31014,2026-09-07 22:46:01,4.784,Collector_Worker_YahooWeekday_1200-2259_UTC
-274207,2026-09-07 22:46:03,96.28,Collector_Worker_YahooWeekday_0300-2259_UTC
-274702,2026-09-07 22:46:03,4476.6,Collector_Worker_YahooWeekday_0300-2259_UTC
-274720,2026-09-07 22:46:03,66.748,Collector_Worker_YahooWeekday_0300-2259_UTC
-275000,2026-09-07 22:46:03,0.8095,Collector_Worker_YahooWeekday_0300-2259_UTC
-275001,2026-09-07 22:46:03,1.0961,Collector_Worker_YahooWeekday_0300-2259_UTC
-275018,2026-09-07 22:46:03,0.0052,Collector_Worker_YahooWeekday_0300-2259_UTC
-281383,2026-09-06 23:43:37,657,Collector_Worker_others_2143_UTC / Raiffeisen Börse
-891800,2026-09-07 22:46:03,1756.85,Collector_Worker_YahooWeekday_0300-2259_UTC
-897789,2026-09-07 22:46:03,0.9409,Collector_Worker_YahooWeekday_0300-2259_UTC
-908440,2026-09-07 22:46:01,319.97,Collector_Worker_YahooWeekday_1200-2259_UTC
-951692,2026-09-07 22:46:01,499.7,Collector_Worker_YahooWeekday_1200-2259_UTC
-994529,2026-09-07 22:46:01,230.36,Collector_Worker_YahooWeekday_1200-2259_UTC
+31007,2026-09-07 23:43:57,0.488,Collector_Worker_others_2143_UTC / SNB
+31008,2026-09-07 23:43:57,1660.01,Collector_Worker_others_2143_UTC / onvista
+31009,2026-09-07 23:43:57,1.58,Collector_Worker_others_2143_UTC / RB Winterthur
+31010,2026-09-07 23:43:57,1.78,Collector_Worker_others_2143_UTC / RB Winterthur
+31011,2026-09-07 23:43:57,2.1,Collector_Worker_others_2143_UTC / RB Winterthur
+31012,2026-09-07 23:43:57,2.5,Collector_Worker_others_2143_UTC / RB Winterthur
+31013,2026-09-07 23:45:58,12128.09,Collector_Worker_YahooWeekday_1200-2259_UTC
+31014,2026-09-07 23:45:58,4.784,Collector_Worker_YahooWeekday_1200-2259_UTC
+274207,2026-09-07 23:46:00,96.28,Collector_Worker_YahooWeekday_0300-2259_UTC
+274702,2026-09-07 23:46:00,4476.6,Collector_Worker_YahooWeekday_0300-2259_UTC
+274720,2026-09-07 23:46:00,66.748,Collector_Worker_YahooWeekday_0300-2259_UTC
+275000,2026-09-07 23:46:00,0.8092,Collector_Worker_YahooWeekday_0300-2259_UTC
+275001,2026-09-07 23:46:00,1.0958,Collector_Worker_YahooWeekday_0300-2259_UTC
+275018,2026-09-07 23:46:00,0.0052,Collector_Worker_YahooWeekday_0300-2259_UTC
+281383,2026-09-07 23:43:57,652,Collector_Worker_others_2143_UTC / Raiffeisen Börse
+891800,2026-09-07 23:46:00,1756.85,Collector_Worker_YahooWeekday_0300-2259_UTC
+897789,2026-09-07 23:46:00,0.9406,Collector_Worker_YahooWeekday_0300-2259_UTC
+908440,2026-09-07 23:45:58,319.97,Collector_Worker_YahooWeekday_1200-2259_UTC
+951692,2026-09-07 23:45:58,499.7,Collector_Worker_YahooWeekday_1200-2259_UTC
+994529,2026-09-07 23:45:58,230.36,Collector_Worker_YahooWeekday_1200-2259_UTC
 998089,2026-09-07 22:45:58,14279.38,Collector_Worker_YahooWeekday_0600-2000_UTC
-998356,2026-09-07 22:46:01,26506.99,Collector_Worker_YahooWeekday_1200-2259_UTC
-998434,2026-09-06 23:35:37,7718.6,Collector_Worker_YahooWeekday_2135_UTC
+998356,2026-09-07 23:45:58,26506.99,Collector_Worker_YahooWeekday_1200-2259_UTC
+998434,2026-09-07 23:35:57,7718.6,Collector_Worker_YahooWeekday_2135_UTC
 998750,2026-09-07 22:45:58,20066.71,Collector_Worker_YahooWeekday_0600-2000_UTC
 1384101,2026-09-07 22:45:58,560.6,Collector_Worker_YahooWeekday_0600-2000_UTC
-1485278,2026-09-06 23:35:37,938.4,Collector_Worker_YahooWeekday_2135_UTC
-1600534,2026-09-07 22:46:01,8856.31,Collector_Worker_YahooWeekday_1200-2259_UTC
+1485278,2026-09-07 23:35:57,932.8,Collector_Worker_YahooWeekday_2135_UTC
+1600534,2026-09-07 23:45:58,8856.31,Collector_Worker_YahooWeekday_1200-2259_UTC
 2460882,2026-09-07 22:45:58,666,Collector_Worker_YahooWeekday_0600-2000_UTC
 3025290,2026-09-07 22:45:58,4523.31,Collector_Worker_YahooWeekday_0600-2000_UTC
 3246398,2026-09-07 22:45:58,40.385,Collector_Worker_YahooWeekday_0600-2000_UTC
 3886335,2026-09-07 22:45:58,78.76,Collector_Worker_YahooWeekday_0600-2000_UTC
 4549696,2026-09-07 22:45:58,114.32,Collector_Worker_YahooWeekday_0600-2000_UTC
-4778469,2026-09-07 22:46:03,4995,Collector_Worker_YahooWeekday_0300-2259_UTC
+4778469,2026-09-07 23:46:00,4995,Collector_Worker_YahooWeekday_0300-2259_UTC
 10192176,2026-09-07 22:45:58,373.35,Collector_Worker_YahooWeekday_0600-2000_UTC
 10602719,2026-09-07 22:45:58,141,Collector_Worker_YahooWeekday_0600-2000_UTC
 10608419,2026-09-07 22:45:58,85.18,Collector_Worker_YahooWeekday_0600-2000_UTC
@@ -48,22 +48,22 @@
 11195919,2026-09-07 22:45:58,96.7,Collector_Worker_YahooWeekday_0600-2000_UTC
 14969376,2026-09-07 22:45:58,31.035,Collector_Worker_YahooWeekday_0600-2000_UTC
 18575508,2026-09-07 22:45:58,146.095,Collector_Worker_YahooWeekday_0600-2000_UTC
-18789194,2026-09-07 22:45:57,79163.77,Collector_Worker_YahooDaily_0001-2359_UTC
+18789194,2026-09-07 23:45:57,79175.07,Collector_Worker_YahooDaily_0001-2359_UTC
 21048333,2026-09-07 22:45:58,185.4,Collector_Worker_YahooWeekday_0600-2000_UTC
-21413071,2026-09-07 22:46:01,27.14,Collector_Worker_YahooWeekday_1200-2259_UTC
+21413071,2026-09-07 23:45:58,27.14,Collector_Worker_YahooWeekday_1200-2259_UTC
 21644750,2026-09-07 22:45:58,18.73,Collector_Worker_YahooWeekday_0600-2000_UTC
 23793563,2026-09-07 22:45:58,191.66,Collector_Worker_YahooWeekday_0600-2000_UTC
 24209517,2026-09-07 22:45:58,56.3,Collector_Worker_YahooWeekday_0600-2000_UTC
 24476758,2026-09-07 22:45:58,44.36,Collector_Worker_YahooWeekday_0600-2000_UTC
 24514626,2026-09-07 22:45:58,121.39,Collector_Worker_YahooWeekday_0600-2000_UTC
 26729122,2026-09-07 22:45:58,40.98,Collector_Worker_YahooWeekday_0600-2000_UTC
-29798540,2026-09-07 22:46:01,335.31,Collector_Worker_YahooWeekday_1200-2259_UTC
-40149561,2026-09-07 22:45:57,2490.07,Collector_Worker_YahooDaily_0001-2359_UTC
+29798540,2026-09-07 23:45:58,335.31,Collector_Worker_YahooWeekday_1200-2259_UTC
+40149561,2026-09-07 23:45:57,2492.95,Collector_Worker_YahooDaily_0001-2359_UTC
 41125207,2026-09-07 22:45:58,70.15,Collector_Worker_YahooWeekday_0600-2000_UTC
 41879292,2026-09-07 22:45:58,193.35,Collector_Worker_YahooWeekday_0600-2000_UTC
 43249246,2026-09-07 22:45:58,56.96,Collector_Worker_YahooWeekday_0600-2000_UTC
 46664220,2026-09-07 22:45:58,212.4,Collector_Worker_YahooWeekday_0600-2000_UTC
-114426952,2026-09-06 23:43:37,137.54,Collector_Worker_others_2143_UTC / Raiffeisen Börse
-114426954,2026-09-06 23:43:37,139.48,Collector_Worker_others_2143_UTC / Raiffeisen Börse
+114426952,2026-09-07 23:43:57,137.42,Collector_Worker_others_2143_UTC / Raiffeisen Börse
+114426954,2026-09-07 23:43:57,139.35,Collector_Worker_others_2143_UTC / Raiffeisen Börse
 152860278,2026-09-07 22:45:58,384.91,Collector_Worker_YahooWeekday_0600-2000_UTC
-156888148,2026-09-07 22:46:01,147.95,Collector_Worker_YahooWeekday_1200-2259_UTC
+156888148,2026-09-07 23:45:58,147.95,Collector_Worker_YahooWeekday_1200-2259_UTC
