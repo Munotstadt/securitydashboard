@@ -340,14 +340,13 @@ async function renderComparison(){
     return;
   }
 
-  const placeholders = secIds.map(() => '?').join(',');
   const [mastersRaw, prices, distRows, dataRows] = await Promise.all([
-    dbQuery(`SELECT SecurityID, SecurityName, Currency FROM security_master WHERE SecurityID IN (${placeholders})`, secIds),
-    dbQuery(`SELECT SecurityID, Price, Price_date AS PriceDate FROM security_prices WHERE SecurityID IN (${placeholders})`, secIds),
-    dbQuery(`SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions WHERE SecurityID IN (${placeholders})`, secIds),
-    dbQuery(`SELECT sd.SecurityID, sd.DataType, sd.FieldNameID, sd.FieldValue, sd.NumericValue, sd.AsOfDate, sp.ParameterName
+    dbQueryIn(ph => `SELECT SecurityID, SecurityName, Currency FROM security_master WHERE SecurityID IN (${ph})`, secIds),
+    dbQueryIn(ph => `SELECT SecurityID, Price, Price_date AS PriceDate FROM security_prices WHERE SecurityID IN (${ph})`, secIds),
+    dbQueryIn(ph => `SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions WHERE SecurityID IN (${ph})`, secIds),
+    dbQueryIn(ph => `SELECT sd.SecurityID, sd.DataType, sd.FieldNameID, sd.FieldValue, sd.NumericValue, sd.AsOfDate, sp.ParameterName
                 FROM security_data sd LEFT JOIN security_parameter sp ON sp.ParameterID = sd.FieldNameID
-                WHERE sd.SecurityID IN (${placeholders}) AND (sd.DataType = 'SectorWeight' OR sd.FieldNameID IN (${TER_PARAM_ID},${TRXCRY_PARAM_ID},${SPREAD_PARAM_ID}))`, secIds),
+                WHERE sd.SecurityID IN (${ph}) AND (sd.DataType = 'SectorWeight' OR sd.FieldNameID IN (${TER_PARAM_ID},${TRXCRY_PARAM_ID},${SPREAD_PARAM_ID}))`, secIds),
   ]);
 
   // Preserve the order securities were added to the group.

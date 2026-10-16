@@ -710,10 +710,9 @@ async function loadTieredPriceHistory(secId){
   }
   const idList = [...new Set([parsed[0].id, ...monthEndIdByKey.values(), ...dailyIds])]; // parsed[0].id = true inception point, exact
   priceHistoryTiered = true;
-  const placeholders = idList.map(() => '?').join(',');
-  return dbQuery(
-    `SELECT id, SecurityID, Price, Price_date AS PriceDate, source AS Source FROM security_prices WHERE SecurityID = ? AND id IN (${placeholders})`,
-    [secId, ...idList], 600000
+  return dbQueryIn(
+    ph => `SELECT id, SecurityID, Price, Price_date AS PriceDate, source AS Source FROM security_prices WHERE SecurityID = ? AND id IN (${ph})`,
+    idList, [secId], 600000
   );
 }
 

@@ -444,12 +444,12 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     if (!r._dirty) return;
     const isoDate = toIsoDateTime(parseSwissDateTime(r.PriceDate));
     if (r._new) {
-      stmts.push({ sql:`INSERT INTO security_prices (SecurityID, Price, PriceDate, Source, created_at) VALUES (?,?,?,?,?)`,
-        args:[r.SecurityID, r.Price||null, isoDate, r.Source, nowZurichString()] });
+      stmts.push({ sql:`INSERT INTO security_prices (SecurityID, Price, Price_adjusted, Price_date, source) VALUES (?,?,?,?,?)`,
+        args:[r.SecurityID, r.Price||null, r.Price||null, isoDate, r.Source] });
       newRowIdxs.push(i);
     } else {
-      stmts.push({ sql:`UPDATE security_prices SET SecurityID=?, Price=?, PriceDate=?, Source=? WHERE id=?`,
-        args:[r.SecurityID, r.Price||null, isoDate, r.Source, r.id] });
+      stmts.push({ sql:`UPDATE security_prices SET SecurityID=?, Price=?, Price_adjusted=?, Price_date=?, source=?, modified_at=datetime('now') WHERE id=?`,
+        args:[r.SecurityID, r.Price||null, r.Price||null, isoDate, r.Source, r.id] });
     }
   });
   for (const id of deleteQueue) stmts.push({ sql:`DELETE FROM security_prices WHERE id=?`, args:[id] });

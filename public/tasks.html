@@ -795,10 +795,9 @@ document.getElementById('qualityCheckBtn').addEventListener('click', async () =>
     let tightenedCount = 0;
     const urgentDue = (() => { const d = new Date(today + 'T00:00:00'); d.setDate(d.getDate() + 10); return d.toISOString().slice(0,10); })();
     if(activeSecurities.length){
-      const placeholders = activeSecurities.map(() => '?').join(',');
-      const distRows = await dbQuery(
-        `SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions WHERE SecurityID IN (${placeholders})`,
-        activeSecurities.map(s => s.SecurityID), 0
+      const distRows = await dbQueryIn(
+        ph => `SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions WHERE SecurityID IN (${ph})`,
+        activeSecurities.map(s => s.SecurityID)
       );
       const distBySec = new Map();
       for(const d of distRows){

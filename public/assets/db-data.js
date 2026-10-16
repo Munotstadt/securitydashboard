@@ -176,6 +176,25 @@ async function dbQuery(sql, args = [], ttlMs = 0) {
   const [result] = await dbBatch([{ sql, args }]);
   return result ? result.rows : [];
 }
+// D1 allows at most 100 bound parameters per statement. For "... IN (?,?,...)" lists
+// of unknown length: buildSql(placeholders) is called once per chunk of ids and all
+// chunks are sent in ONE round trip; the rows are concatenated.
+//   headArgs: parameters that come BEFORE the id list in the SQL (e.g. SecurityID = ?).
+async function dbQueryIn(buildSql, ids, headArgs = [], ttlMs = 0, size = 80) {
+  const list = [...ids];
+  if (!list.length) return [];
+  const key = ttlMs > 0 ? dbCacheKey(buildSql('?') + '#in', [headArgs, list]) : null;
+  if (key) { const c = dbCacheGet(key, ttlMs); if (c) return c; }
+  const stmts = [];
+  for (let i = 0; i < list.length; i += size) {
+    const chunk = list.slice(i, i + size);
+    stmts.push({ sql: buildSql(chunk.map(() => '?').join(',')), args: [...headArgs, ...chunk] });
+  }
+  const res = await dbBatch(stmts);
+  const rows = res.flatMap(r => r.rows);
+  if (key) dbCacheSet(key, rows);
+  return rows;
+}
 async function dbRun(sql, args = []) {
   const [result] = await dbBatch([{ sql, args }]);
   return result || { rows: [], affected: 0, lastInsertRowid: null };

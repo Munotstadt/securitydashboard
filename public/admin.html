@@ -418,9 +418,8 @@ let lastPriceCache = new Map(); // SecurityID -> { price:number, date:string(Swi
 async function ensureLastPrices(secIds) {
   const missing = secIds.filter(id => !lastPriceCache.has(id));
   if (!missing.length) return;
-  const placeholders = missing.map(() => '?').join(',');
-  const rows = await dbQuery(
-    `SELECT SecurityID, Price, Price_date AS PriceDate FROM security_prices WHERE SecurityID IN (${placeholders})`,
+  const rows = await dbQueryIn(
+    ph => `SELECT SecurityID, Price, Price_date AS PriceDate FROM security_prices WHERE SecurityID IN (${ph})`,
     missing
   );
   missing.forEach(id => lastPriceCache.set(id, null));
@@ -657,8 +656,8 @@ async function batchInChunks(stmts, chunkSize = 300){
 async function importPrices(parsed){
   const valid = parsed.filter(p => !p.errors.length && !(p.magnitudeWarning && !p.magnitudeResolved));
   const stmts = valid.map(p => ({
-    sql: 'INSERT INTO security_prices (SecurityID, Price, PriceDate, Source, created_at) VALUES (?,?,?,?,?)',
-    args: [p.secId, p.price, p.priceDateIso, p.source, nowZurichString()],
+    sql: 'INSERT INTO security_prices (SecurityID, Price, Price_adjusted, Price_date, source) VALUES (?,?,?,?,?)',
+    args: [p.secId, p.price, p.price, p.priceDateIso, p.source],
   }));
   await batchInChunks(stmts);
   load();
@@ -895,9 +894,8 @@ let ubsPriceKeyCache = new Map(); // SecurityID -> Set("YYYY-MM-DD|price")
 async function ensureUbsPriceKeys(secIds){
   const missing = secIds.filter(id => !ubsPriceKeyCache.has(id));
   if (!missing.length) return;
-  const placeholders = missing.map(() => '?').join(',');
-  const existing = await dbQuery(
-    `SELECT SecurityID, Price, Price_date AS PriceDate FROM security_prices WHERE SecurityID IN (${placeholders})`,
+  const existing = await dbQueryIn(
+    ph => `SELECT SecurityID, Price, Price_date AS PriceDate FROM security_prices WHERE SecurityID IN (${ph})`,
     missing
   );
   missing.forEach(id => ubsPriceKeyCache.set(id, new Set()));
@@ -1102,8 +1100,8 @@ async function importUbsQuotes(parsed){
   const valid = parsed.filter(p => !p.errors.length && p.secId && p.priceDateIso && p.price !== null && !p.duplicate && !p.conflict && !(p.magnitudeWarning && !p.magnitudeResolved));
   const now = nowZurichString();
   const priceStmts = valid.map(p => ({
-    sql: 'INSERT INTO security_prices (SecurityID, Price, PriceDate, Source, created_at) VALUES (?,?,?,?,?)',
-    args: [p.secId, p.price, p.priceDateIso, UBS_SOURCE, now],
+    sql: 'INSERT INTO security_prices (SecurityID, Price, Price_adjusted, Price_date, source) VALUES (?,?,?,?,?)',
+    args: [p.secId, p.price, p.price, p.priceDateIso, UBS_SOURCE],
   }));
 
   // Learn/refresh the Name -> SecurityID matching for every row matched this

@@ -13,6 +13,8 @@
 // wrangler.jsonc vars: ACCESS_TEAM_DOMAIN, ACCESS_AUD. Without them the API
 // fails closed (503).
 
+import { handleMigrate } from './migrate.js'; // TEMPORARY - remove after the Turso -> D1 migration
+
 const MAX_STATEMENTS = 200;
 const MAX_SQL_LENGTH = 20000;
 const ALLOWED_SQL = /^\s*(select|insert|update|delete|replace|with)\b/i;
@@ -34,6 +36,9 @@ export default {
       }
       if (url.pathname === '/api/securityprices.csv' && request.method === 'GET') {
         return await handleValuationCsv(env);
+      }
+      if (url.pathname.startsWith('/api/admin/migrate/')) {
+        return await handleMigrate(request, env, url); // TEMPORARY
       }
       return json({ error: 'not found' }, 404);
     } catch (err) {
