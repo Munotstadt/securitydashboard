@@ -277,14 +277,6 @@
     <select id="securitySwitcher"></select>
   </div>
 
-  <div class="settings" id="settingsPanel">
-    <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
-      <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="https://…turso.io"></div>
-      <div><label>Auth Token</label><input type="password" id="cfgToken" name="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…"></div>
-      <div style="align-self:end;"><button id="cfgSave" type="submit">Apply</button></div>
-    </form>
-  </div>
-
   <div class="detail-header">
     <h2 id="detailName">Loading…</h2>
     <div class="badges-row">
@@ -612,101 +604,11 @@
       <button type="button" class="toggle-btn" id="improvementSaveBtn">💡 Save</button>
     </div>
     <div class="footer-row">
-      <button class="toggle-btn" id="settingsBtn">⚙ Repo/Token</button>
     </div>
   </div>
 </div>
 
-<script src="assets/turso-data.js"></script>
-<script>
-// Safety net: define the shared schema-guard helpers locally if the loaded
-// assets/turso-data.js doesn't have them yet (e.g. stale cached copy). Avoids
-// a hard "X is not defined" crash; the real versions in turso-data.js take
-// over automatically once that file is up to date (session-cached there).
-if (typeof ensureSecurityMasterSchema === 'undefined') {
-  window.ensureSecurityMasterSchema = async function(){
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateLaunch TEXT'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateTerminated TEXT'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN Status INTEGER'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN Comments TEXT'); } catch(e) {}
-  };
-}
-if (typeof ensureSecurityTasksSchema === 'undefined') {
-  window.ensureSecurityTasksSchema = async function(){
-    try {
-      await tursoRun(`CREATE TABLE IF NOT EXISTS security_tasks (
-        TaskID INTEGER PRIMARY KEY AUTOINCREMENT,
-        TaskName TEXT NOT NULL,
-        TaskDescription TEXT,
-        SecurityID INTEGER,
-        DateDue TEXT,
-        Recurring TEXT,
-        Completed INTEGER DEFAULT 0,
-        CompletedAt TEXT,
-        created_at TEXT
-      )`);
-    } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN Priority TEXT'); } catch(e) {}
-    try {
-      await tursoRun(`CREATE TABLE IF NOT EXISTS security_task_completions (
-        CompletionID INTEGER PRIMARY KEY AUTOINCREMENT,
-        TaskID INTEGER,
-        TaskName TEXT,
-        SecurityID INTEGER,
-        DateDue TEXT,
-        CompletedAt TEXT
-      )`);
-    } catch(e) {}
-  };
-}
-if (typeof ensureSecurityDataSchema === 'undefined') {
-  window.ensureSecurityDataSchema = async function(){
-    try { await tursoRun('ALTER TABLE security_data ADD COLUMN Source TEXT'); } catch(e) {}
-  };
-}
-if (typeof ensureAssetComparisonSchema === 'undefined') {
-  window.ensureAssetComparisonSchema = async function(){
-    try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_group (
-      GroupID INTEGER PRIMARY KEY AUTOINCREMENT,
-      GroupName TEXT NOT NULL,
-      created_at TEXT
-    )`); } catch(e) {}
-    try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_member (
-      GroupID INTEGER NOT NULL,
-      SecurityID INTEGER NOT NULL,
-      created_at TEXT,
-      PRIMARY KEY (GroupID, SecurityID)
-    )`); } catch(e) {}
-  };
-}
-if (typeof ensureSecurityCurrenciesSchema === 'undefined') {
-  window.ensureSecurityCurrenciesSchema = async function(){
-    try {
-      await tursoRun(`CREATE TABLE IF NOT EXISTS security_currencies (
-        SecurityID INTEGER PRIMARY KEY,
-        Cry TEXT,
-        ConversionFactor REAL DEFAULT 1,
-        Comments TEXT,
-        created_at TEXT,
-        FOREIGN KEY (SecurityID) REFERENCES security_master(SecurityID)
-      )`);
-    } catch(e) {}
-  };
-}
-if (typeof tursoCurrencyOptions === 'undefined') {
-  window.tursoCurrencyOptions = async function(){
-    try {
-      await ensureSecurityCurrenciesSchema();
-      const rows = await tursoQuery("SELECT DISTINCT Cry FROM security_currencies WHERE Cry IS NOT NULL AND Cry <> '' ORDER BY Cry ASC", [], 3600000);
-      const list = rows.map(r => r.Cry).filter(Boolean);
-      return list.length ? list : ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD'];
-    } catch(e) {
-      return ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD'];
-    }
-  };
-}
-</script>
+<script src="assets/db-data.js"></script>
 <script>
 function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); return d; }
 // Shared status classification for a security_master row - same logic used
@@ -763,7 +665,7 @@ let priceHistoryTiered = false; // true when the loaded history uses the daily/m
 // Why not a plain "WHERE PriceDate >= ?" cutoff: security_prices.PriceDate is
 // NOT stored in one consistent format - price_editor.html writes Swiss
 // "dd.mm.yyyy hh:mm:ss" for manual entries, while admin.html's CSV/UBS import
-// writes ISO "yyyy-mm-dd" (see toIsoDate() in turso-data.js). A SQL string
+// writes ISO "yyyy-mm-dd" (see toIsoDate() in db-data.js). A SQL string
 // comparison across that mix sorts wrong (e.g. "05.03.2020" > "2024-01-01"
 // lexically). So date filtering happens here in JS, using the same
 // parseSwissDateTime() the rest of the app already trusts - SQL is only ever
@@ -788,14 +690,14 @@ let priceHistoryTiered = false; // true when the loaded history uses the daily/m
 const PRICE_TIER_SMALL_HISTORY_THRESHOLD = 1500;
 const PRICE_TIER_DAILY_YEARS = 5;
 async function loadTieredPriceHistory(secId){
-  const idx = await tursoQuery('SELECT id, PriceDate FROM security_prices WHERE SecurityID = ?', [secId], 600000);
+  const idx = await dbQuery('SELECT id, Price_date AS PriceDate FROM security_prices WHERE SecurityID = ?', [secId], 600000);
   if(!idx.length) { priceHistoryTiered = false; return []; }
   const parsed = idx.map(r => ({ id: r.id, dt: parseSwissDateTime(r.PriceDate) })).filter(r => r.dt).sort((a,b) => a.dt-b.dt);
   if(!parsed.length) { priceHistoryTiered = false; return []; }
 
   if(parsed.length <= PRICE_TIER_SMALL_HISTORY_THRESHOLD){
     priceHistoryTiered = false;
-    return tursoQuery('SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices WHERE SecurityID = ?', [secId], 600000);
+    return dbQuery('SELECT id, SecurityID, Price, Price_date AS PriceDate, source AS Source FROM security_prices WHERE SecurityID = ?', [secId], 600000);
   }
 
   const dailyCutoff = daysAgo(new Date(), Math.round(PRICE_TIER_DAILY_YEARS*365.25) + 30); // small buffer past 5y
@@ -809,8 +711,8 @@ async function loadTieredPriceHistory(secId){
   const idList = [...new Set([parsed[0].id, ...monthEndIdByKey.values(), ...dailyIds])]; // parsed[0].id = true inception point, exact
   priceHistoryTiered = true;
   const placeholders = idList.map(() => '?').join(',');
-  return tursoQuery(
-    `SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices WHERE SecurityID = ? AND id IN (${placeholders})`,
+  return dbQuery(
+    `SELECT id, SecurityID, Price, Price_date AS PriceDate, source AS Source FROM security_prices WHERE SecurityID = ? AND id IN (${placeholders})`,
     [secId, ...idList], 600000
   );
 }
@@ -1186,7 +1088,7 @@ function renderRange52w(highRow, lowRow, last, decimals, factor = 1){
     </div>`;
 }
 
-let CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD']; // fallback until tursoCurrencyOptions() resolves in load()
+let CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD']; // fallback until dbCurrencyOptions() resolves in load()
 function optionList(opts, current, allowBlank){
   let html = allowBlank ? `<option value="" ${!current?'selected':''}>—</option>` : '';
   html += opts.map(o => `<option value="${o.ParameterID}" ${String(current)===String(o.ParameterID)?'selected':''}>${o.ParameterName}</option>`).join('');
@@ -1291,8 +1193,8 @@ async function loadSecurity(secId){
   // other two since it resolves to its own query/queries independently.
   const [prices, dists, txns] = await Promise.all([
     loadTieredPriceHistory(secId),
-    tursoQuery('SELECT id, SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source FROM security_distributions WHERE SecurityID = ?', [secId], 300000),
-    tursoQuery(`SELECT t.DateTrx, t.Quantity, t.AmtCHF, t.AmtLC, t.Source, ta.ParameterName AS TrxArtName
+    dbQuery('SELECT id, SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source FROM security_distributions WHERE SecurityID = ?', [secId], 300000),
+    dbQuery(`SELECT t.DateTrx, t.Quantity, t.AmtCHF, t.AmtLC, t.Source, ta.ParameterName AS TrxArtName
                 FROM security_transactions t LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt
                 WHERE t.SecurityID = ?`, [secId], 300000),
   ]);
@@ -1468,7 +1370,7 @@ async function loadSecurity(secId){
     .filter(x => x.ccy && neededCcys.has(x.ccy[1].toUpperCase()));
   if (fxMatches.length) {
     const placeholders = fxMatches.map(() => '?').join(',');
-    const fxPricesAll = await tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices WHERE SecurityID IN (${placeholders})`, fxMatches.map(x => x.id), 600000);
+    const fxPricesAll = await dbQuery(`SELECT SecurityID, Price, Price_date AS PriceDate FROM security_prices WHERE SecurityID IN (${placeholders})`, fxMatches.map(x => x.id), 600000);
     const fxPricesBySecId = new Map();
     for (const p of fxPricesAll) { if (!fxPricesBySecId.has(p.SecurityID)) fxPricesBySecId.set(p.SecurityID, []); fxPricesBySecId.get(p.SecurityID).push(p); }
     for (const x of fxMatches) fxCloses[x.ccy[1].toUpperCase()] = dailyCloses(fxPricesBySecId.get(x.id) || []);
@@ -1604,8 +1506,8 @@ document.getElementById('masterSave').addEventListener('click', async () => {
   const comments = document.getElementById('mfComments').value || null;
   try{
     setQuickStatus('masterStatus','Speichere…','');
-    await ensureSecurityMasterSchema();
-    await tursoRun('UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, DashboardGrouping=?, Instrument=?, PortfolioGrouping=?, DateLaunch=?, DateTerminated=?, Status=?, Comments=? WHERE SecurityID=?',
+    
+    await dbRun('UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, DashboardGrouping=?, Instrument=?, PortfolioGrouping=?, DateLaunch=?, DateTerminated=?, Status=?, Comments=? WHERE SecurityID=?',
       [name, currency, ticker, isin, valor, collector, grouping, instrument, portfolioGrouping, dateLaunch, dateTerminated, status, comments, curSecId]);
     setQuickStatus('masterStatus','Gespeichert ✓','ok');
     await load();
@@ -1613,27 +1515,22 @@ document.getElementById('masterSave').addEventListener('click', async () => {
 });
 
 async function load(){
-  if (!tursoConfigured()) {
-    document.getElementById('detailName').textContent = 'Bitte ⚙ Repo/Token setzen.';
-    document.getElementById('settingsPanel').classList.add('show');
-    return;
-  }
   try {
-    await ensureSecurityMasterSchema();
+    
     const [master, collectors, groupings, instruments, portfolioGroupings, statuses, currencyOpts] = await Promise.all([
-      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.Ticker, sm.ID_ISIN, sm.ID_Valor, sm.Collector, sm.DashboardGrouping, sm.Instrument, sm.PortfolioGrouping,
+      dbQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.Ticker, sm.ID_ISIN, sm.ID_Valor, sm.Collector, sm.DashboardGrouping, sm.Instrument, sm.PortfolioGrouping,
                          sm.DateLaunch, sm.DateTerminated, sm.Status, sm.Comments,
                          gp.ParameterName AS GroupName, sp.ParameterName AS StatusName
                   FROM security_master sm
                   LEFT JOIN security_parameter gp ON gp.ParameterID = sm.DashboardGrouping
                   LEFT JOIN security_parameter sp ON sp.ParameterID = sm.Status
                   ORDER BY sm.SecurityName COLLATE NOCASE ASC`, [], 3600000),
-      tursoParameterOptions('security_master','Collector'),
-      tursoParameterOptions('security_master','DashboardGrouping'),
-      tursoParameterOptions('security_master','Instrument'),
-      tursoParameterOptions('security_master','PortfolioGrouping'),
-      tursoParameterOptions('security_master','Status'),
-      tursoCurrencyOptions(),
+      dbParameterOptions('security_master','Collector'),
+      dbParameterOptions('security_master','DashboardGrouping'),
+      dbParameterOptions('security_master','Instrument'),
+      dbParameterOptions('security_master','PortfolioGrouping'),
+      dbParameterOptions('security_master','Status'),
+      dbCurrencyOptions(),
     ]);
     masterAll = master;
     collectorOpts = [...collectors].sort((a,b) => a.ParameterName.localeCompare(b.ParameterName));
@@ -1700,7 +1597,7 @@ async function loadInstrumentSpecificData(master, last, decimals, high52wRow, lo
 
   let data;
   try {
-    data = await tursoQuery(
+    data = await dbQuery(
       `SELECT sd.rowid AS RowId, sd.DataType, sd.FieldName, sd.NumericValue, sd.FieldValue, sd.Unit, sd.AsOfDate, sd.Source, sp.ParameterName
        FROM security_data sd
        LEFT JOIN security_parameter sp ON sp.ParameterID = sd.FieldNameID
@@ -1923,7 +1820,7 @@ async function loadFundamentalsChangeLog(secId){
   wrap.innerHTML = '<div class="empty">Loading…</div>';
   try {
     try {
-      await tursoRun(`CREATE TABLE IF NOT EXISTS security_data_log (
+      await dbRun(`CREATE TABLE IF NOT EXISTS security_data_log (
         LogID INTEGER PRIMARY KEY AUTOINCREMENT,
         SecurityID INTEGER,
         DataType TEXT,
@@ -1934,7 +1831,7 @@ async function loadFundamentalsChangeLog(secId){
         ChangedAt TEXT
       )`);
     } catch(e) { /* table likely already exists */ }
-    const rows = await tursoQuery(
+    const rows = await dbQuery(
       `SELECT DataType, FieldName, Action, OldValue, NewValue, ChangedAt FROM security_data_log WHERE SecurityID = ? ORDER BY ChangedAt DESC, LogID DESC LIMIT 50`,
       [secId], 0
     );
@@ -2257,7 +2154,7 @@ function securityTaskTypeName(id){
 }
 
 async function populateSecurityTaskTypeSelect(selectId){
-  securityTaskTypeOpts = await tursoParameterOptions('security_tasks', 'TaskType', 0);
+  securityTaskTypeOpts = await dbParameterOptions('security_tasks', 'TaskType', 0);
   const sel = document.getElementById('stfTaskType');
   sel.innerHTML = `<option value="">— (kein Typ) —</option>`
     + securityTaskTypeOpts.map(o => `<option value="${o.ParameterID}">${o.ParameterName}</option>`).join('')
@@ -2273,11 +2170,11 @@ async function resolveSecurityTaskTypeId(){
   if(sel === '__custom__'){
     const name = document.getElementById('stfCustomTaskType').value.trim();
     if(!name) return null;
-    const result = await tursoRun(
+    const result = await dbRun(
       `INSERT INTO security_parameter (ParaTable, ParaField, ParameterName) VALUES ('security_tasks','TaskType',?)`,
       [name]
     );
-    tursoClearCache();
+    dbClearCache();
     return result && result.lastInsertRowid ? result.lastInsertRowid : null;
   }
   return sel || null;
@@ -2407,12 +2304,12 @@ function renderSecurityTasksList(){
 }
 
 async function loadSecurityTasks(secId){
-  await ensureSecurityTasksSchema();
-  securityTasksAll = await tursoQuery(
+  
+  securityTasksAll = await dbQuery(
     'SELECT TaskID, TaskName, TaskDescription, SecurityID, DateDue, Recurring, Completed, CompletedAt, TaskTypeID, Priority FROM security_tasks WHERE SecurityID = ?',
     [secId], 0
   );
-  securityTaskTypeOpts = await tursoParameterOptions('security_tasks', 'TaskType', 0);
+  securityTaskTypeOpts = await dbParameterOptions('security_tasks', 'TaskType', 0);
   renderSecurityTasksList();
 }
 
@@ -2423,8 +2320,8 @@ document.getElementById('securityTasksWrap').addEventListener('click', async (e)
   if(delA){
     e.preventDefault();
     if(!confirm('Diesen Task löschen?')) return;
-    await tursoRun('DELETE FROM security_tasks WHERE TaskID = ?', [delA.dataset.deleteSecTaskid]);
-    tursoClearCache();
+    await dbRun('DELETE FROM security_tasks WHERE TaskID = ?', [delA.dataset.deleteSecTaskid]);
+    dbClearCache();
     await loadSecurityTasks(curSecId);
   }
 });
@@ -2437,7 +2334,7 @@ document.getElementById('securityTasksWrap').addEventListener('change', async (e
   const nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
   try {
     if(!task.Completed){
-      await tursoRun(
+      await dbRun(
         'INSERT INTO security_task_completions (TaskID, TaskName, SecurityID, DateDue, CompletedAt) VALUES (?,?,?,?,?)',
         [task.TaskID, task.TaskName, task.SecurityID, task.DateDue, nowIso]
       );
@@ -2445,14 +2342,14 @@ document.getElementById('securityTasksWrap').addEventListener('change', async (e
       if(next){
         // Recurring (or Security Quality Check) task: roll the due date
         // forward instead of leaving it marked permanently done.
-        await tursoRun('UPDATE security_tasks SET DateDue = ?, Completed = 0, CompletedAt = ? WHERE TaskID = ?', [next, nowIso, taskId]);
+        await dbRun('UPDATE security_tasks SET DateDue = ?, Completed = 0, CompletedAt = ? WHERE TaskID = ?', [next, nowIso, taskId]);
       } else {
-        await tursoRun('UPDATE security_tasks SET Completed = 1, CompletedAt = ? WHERE TaskID = ?', [nowIso, taskId]);
+        await dbRun('UPDATE security_tasks SET Completed = 1, CompletedAt = ? WHERE TaskID = ?', [nowIso, taskId]);
       }
     } else {
-      await tursoRun('UPDATE security_tasks SET Completed = 0, CompletedAt = NULL WHERE TaskID = ?', [taskId]);
+      await dbRun('UPDATE security_tasks SET Completed = 0, CompletedAt = NULL WHERE TaskID = ?', [taskId]);
     }
-    tursoClearCache();
+    dbClearCache();
     await loadSecurityTasks(curSecId);
   } catch(e) { alert('Fehler: ' + e.message); }
 });
@@ -2470,19 +2367,19 @@ document.getElementById('stfSave').addEventListener('click', async () => {
   try {
     const taskTypeId = await resolveSecurityTaskTypeId();
     if(editingSecurityTaskId){
-      await tursoRun(
+      await dbRun(
         `UPDATE security_tasks SET TaskName=?, TaskDescription=?, DateDue=?, Recurring=?, TaskTypeID=?, Priority=? WHERE TaskID=?`,
         [name, description, dateDue, recurring, taskTypeId, priority, editingSecurityTaskId]
       );
       msg.textContent = 'Aktualisiert.'; msg.className = 'quick-status ok';
     } else {
-      await tursoRun(
+      await dbRun(
         `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Priority, Completed, created_at) VALUES (?,?,?,?,?,?,?,0,?)`,
         [name, description, curSecId, dateDue, recurring, taskTypeId, priority, (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString()]
       );
       msg.textContent = 'Gespeichert.'; msg.className = 'quick-status ok';
     }
-    tursoClearCache();
+    dbClearCache();
     document.getElementById('securityTaskForm').classList.remove('show');
     resetSecurityTaskForm();
     await loadSecurityTasks(curSecId);
@@ -2501,16 +2398,6 @@ document.getElementById('statusBadge').addEventListener('keydown', (e) => {
   if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); document.getElementById('statusBadge').click(); }
 });
 
-document.getElementById('settingsBtn').addEventListener('click', () => {
-  document.getElementById('cfgUrl').value = TURSO.url;
-  document.getElementById('cfgToken').value = TURSO.token;
-  document.getElementById('settingsPanel').classList.toggle('show');
-});
-document.getElementById('cfgSave').addEventListener('click', () => {
-  tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
-  document.getElementById('settingsPanel').classList.remove('show');
-  load();
-});
 
 // ============ Subnav tabs (Price / Returns / Dividenden / Risk / Fundamentals / Asset Allocation / Tasks / Masterdata) ============
 function activateTab(tabName){
@@ -2536,18 +2423,17 @@ load();
     var input = document.getElementById('improvementInput');
     var text = input.value.trim();
     if(!text){ return; }
-    if(!tursoConfigured()){ alert('Bitte zuerst ⚙ Repo/Token setzen.'); return; }
     var original = btn.textContent;
     btn.disabled = true; btn.textContent = 'Speichere…';
     try {
-      await ensureSecurityTasksSchema();
+      
       var pageName = (location.pathname.split('/').pop() || 'index.html');
       var todayDate = (typeof nowZurichIsoDateString === 'function') ? new Date(nowZurichIsoDateString()+'T00:00:00')
         : (typeof zurichParts === 'function' ? (function(){ var p = zurichParts(new Date()); return new Date(p.year+'-'+p.month+'-'+p.day+'T00:00:00'); })() : new Date());
       var due = new Date(todayDate); due.setDate(due.getDate()+10);
       var dueIso = due.toISOString().slice(0,10);
       var nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
-      await tursoRun(
+      await dbRun(
         `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
         ['Improvement ' + pageName, text, null, dueIso, 'n/a', 140, nowIso]
       );

@@ -1,48 +1,26 @@
-// ============ Turso Config (Database URL + Auth Token, localStorage) ============
-const TURSO_CFG_KEY = 'SECURITYDASHBOARD_TURSO_CFG';
-let TURSO = { url: '', token: '' };
+// ============ D1 access via the same-origin Worker API (POST /api/db) ============
+// The page and the API live on the same hostname (security.munot.app), behind
+// Cloudflare Access. No tokens or URLs are configured in the browser any more.
+// Statements run server-side against the D1 database "securities" in one
+// batch (= one transaction). Only SELECT/INSERT/UPDATE/DELETE are accepted;
+// schema changes go through migrations/*.sql.
 
-function tursoLoadConfig() {
-  try {
-    const raw = localStorage.getItem(TURSO_CFG_KEY);
-    if (raw) TURSO = JSON.parse(raw);
-  } catch (e) {}
-}
-function tursoSaveConfig(cfg) {
-  TURSO = { url: (cfg.url || '').replace(/\/+$/, ''), token: cfg.token || '' };
-  localStorage.setItem(TURSO_CFG_KEY, JSON.stringify(TURSO));
-}
-function tursoConfigured() { return !!(TURSO.url && TURSO.token); }
-tursoLoadConfig();
-
-// ============ Value (de)serialization for the Turso /v2/pipeline HTTP API ============
-function toTursoArg(v) {
-  if (v === null || v === undefined || v === '') return { type: 'null' };
-  if (typeof v === 'number') {
-    return Number.isInteger(v) ? { type: 'integer', value: String(v) } : { type: 'float', value: v };
-  }
-  if (typeof v === 'boolean') return { type: 'integer', value: v ? '1' : '0' };
-  // Values pulled from <select>/<input> elements are always strings (e.g.
-  // SecurityID "20"). Bound parameters have no inherent type affinity, so
-  // don't rely on the server applying column-affinity coercion for
-  // comparisons — coerce numeric-looking strings ourselves.
-  if (typeof v === 'string' && /^-?\d+$/.test(v)) return { type: 'integer', value: v };
-  if (typeof v === 'string' && /^-?\d+\.\d+$/.test(v)) return { type: 'float', value: parseFloat(v) };
-  return { type: 'text', value: String(v) };
-}
-function fromTursoCell(cell) {
-  if (!cell || cell.type === 'null') return null;
-  if (cell.type === 'integer') return parseInt(cell.value, 10);
-  if (cell.type === 'float') return parseFloat(cell.value);
-  return cell.value;
+// Numeric-looking strings (e.g. SecurityID "20" from a <select>) are sent as
+// numbers so comparisons against INTEGER columns behave the same everywhere.
+function toDbArg(v) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'boolean') return v ? 1 : 0;
+  if (typeof v === 'string' && /^-?\d+$/.test(v) && Math.abs(Number(v)) <= Number.MAX_SAFE_INTEGER) return parseInt(v, 10);
+  if (typeof v === 'string' && /^-?\d+\.\d+$/.test(v)) return parseFloat(v);
+  return v;
 }
 
 // ============ Session cache (sessionStorage) for read-heavy queries ============
-// Opt-in per call via tursoQuery(sql, args, ttlMs). Any non-SELECT statement in
+// Opt-in per call via dbQuery(sql, args, ttlMs). Any non-SELECT statement in
 // a batch clears the entire cache, so edits never risk serving stale data.
-const TURSO_CACHE_PREFIX = 'SECURITYDASHBOARD_TURSO_CACHE_';
-function tursoCacheKey(sql, args) { return TURSO_CACHE_PREFIX + JSON.stringify({ sql, args }); }
-function tursoCacheGet(key, ttlMs) {
+const DB_CACHE_PREFIX = 'SECURITYDASHBOARD_DB_CACHE_';
+function dbCacheKey(sql, args) { return DB_CACHE_PREFIX + JSON.stringify({ sql, args }); }
+function dbCacheGet(key, ttlMs) {
   try {
     const raw = sessionStorage.getItem(key);
     if (!raw) return null;
@@ -51,142 +29,31 @@ function tursoCacheGet(key, ttlMs) {
     return rows;
   } catch (e) { return null; }
 }
-function tursoCacheSet(key, rows) {
+function dbCacheSet(key, rows) {
   try { sessionStorage.setItem(key, JSON.stringify({ ts: Date.now(), rows })); } catch (e) {}
 }
-function tursoClearCache() {
+function dbClearCache() {
   try {
     const keys = [];
-    for (let i = 0; i < sessionStorage.length; i++) { const k = sessionStorage.key(i); if (k && k.startsWith(TURSO_CACHE_PREFIX)) keys.push(k); }
+    for (let i = 0; i < sessionStorage.length; i++) { const k = sessionStorage.key(i); if (k && k.startsWith(DB_CACHE_PREFIX)) keys.push(k); }
     keys.forEach(k => sessionStorage.removeItem(k));
   } catch (e) {}
 }
-function tursoCacheCount() {
+function dbCacheCount() {
   try {
     let n = 0;
-    for (let i = 0; i < sessionStorage.length; i++) { const k = sessionStorage.key(i); if (k && k.startsWith(TURSO_CACHE_PREFIX)) n++; }
+    for (let i = 0; i < sessionStorage.length; i++) { const k = sessionStorage.key(i); if (k && k.startsWith(DB_CACHE_PREFIX)) n++; }
     return n;
   } catch (e) { return 0; }
-}
-
-// ============ One-time schema guards (sessionStorage-persisted) ============
-// Several pages defensively run "ALTER TABLE ... ADD COLUMN" / "CREATE TABLE
-// IF NOT EXISTS" on load, in case a newer feature's column/table doesn't
-// exist yet. These are writes, and every write clears the whole query cache
-// (see tursoBatch above) - so without a guard, running them on EVERY page
-// load was silently defeating the 1h/5min caches used elsewhere (master
-// data, parameter dropdowns, etc. were being re-fetched from Turso on every
-// single navigation). These guards make each schema-check run at most once
-// per browser tab session; a hard refresh re-checks once, which is enough
-// since schema doesn't change during normal use.
-const TURSO_SCHEMA_GUARD_PREFIX = 'SECURITYDASHBOARD_SCHEMA_OK_';
-function schemaAlreadyEnsured(key){
-  try { return sessionStorage.getItem(TURSO_SCHEMA_GUARD_PREFIX + key) === '1'; } catch(e) { return false; }
-}
-function markSchemaEnsured(key){
-  try { sessionStorage.setItem(TURSO_SCHEMA_GUARD_PREFIX + key, '1'); } catch(e) {}
-}
-
-async function ensureSecurityMasterSchema(){
-  if (schemaAlreadyEnsured('security_master')) return;
-  try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateLaunch TEXT'); } catch(e) {}
-  try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateTerminated TEXT'); } catch(e) {}
-  try { await tursoRun('ALTER TABLE security_master ADD COLUMN Status INTEGER'); } catch(e) {}
-  try { await tursoRun('ALTER TABLE security_master ADD COLUMN Comments TEXT'); } catch(e) {}
-  markSchemaEnsured('security_master');
-}
-
-async function ensureSecurityTasksSchema(){
-  if (schemaAlreadyEnsured('security_tasks')) return;
-  try {
-    await tursoRun(`CREATE TABLE IF NOT EXISTS security_tasks (
-      TaskID INTEGER PRIMARY KEY AUTOINCREMENT,
-      TaskName TEXT NOT NULL,
-      TaskDescription TEXT,
-      SecurityID INTEGER,
-      DateDue TEXT,
-      Recurring TEXT,
-      Completed INTEGER DEFAULT 0,
-      CompletedAt TEXT,
-      created_at TEXT
-    )`);
-  } catch(e) {}
-  try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
-  try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN Priority TEXT'); } catch(e) {}
-  try {
-    await tursoRun(`CREATE TABLE IF NOT EXISTS security_task_completions (
-      CompletionID INTEGER PRIMARY KEY AUTOINCREMENT,
-      TaskID INTEGER,
-      TaskName TEXT,
-      SecurityID INTEGER,
-      DateDue TEXT,
-      CompletedAt TEXT
-    )`);
-  } catch(e) {}
-  markSchemaEnsured('security_tasks');
-}
-
-async function ensureSecurityDataSchema(){
-  if (schemaAlreadyEnsured('security_data')) return;
-  try { await tursoRun('ALTER TABLE security_data ADD COLUMN Source TEXT'); } catch(e) {}
-  markSchemaEnsured('security_data');
-}
-
-async function ensureAssetComparisonSchema(){
-  if (schemaAlreadyEnsured('asset_comparison')) return;
-  try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_group (
-    GroupID INTEGER PRIMARY KEY AUTOINCREMENT,
-    GroupName TEXT NOT NULL,
-    created_at TEXT
-  )`); } catch(e) {}
-  try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_member (
-    GroupID INTEGER NOT NULL,
-    SecurityID INTEGER NOT NULL,
-    created_at TEXT,
-    PRIMARY KEY (GroupID, SecurityID)
-  )`); } catch(e) {}
-  markSchemaEnsured('asset_comparison');
-}
-
-// A small currency reference/lookup list (one row PER CURRENCY, not per
-// security - ~10-20 rows total). SecurityID is a real FOREIGN KEY into
-// security_master(SecurityID): every currency row is pinned to the actual
-// "Currency"-instrument security that represents it in the master data
-// (e.g. CHF -> SecurityID 100003), never an arbitrary/auto-generated id.
-// ConversionFactor lets a currency that's conventionally quoted "per 100
-// units" (see Currency magnitude check.md) be flagged, e.g.
-// JPY/KRW/IDR/HUF/VND/ISK/CLP -> 100.
-// Controls the Currency <select> lists app-wide (security.html, master_editor.html,
-// distribution_editor.html) instead of a hardcoded option list.
-//
-// NOTE: this only creates the table. Seeding rows requires looking up each
-// currency's real SecurityID in security_master first (done once, by hand/
-// via a reviewed script) - it is deliberately NOT auto-backfilled on page
-// load, since inserting a wrong/guessed SecurityID into a FK column in the
-// live DB is exactly the kind of thing that shouldn't happen silently.
-async function ensureSecurityCurrenciesSchema(){
-  if (schemaAlreadyEnsured('security_currencies')) return;
-  try {
-    await tursoRun(`CREATE TABLE IF NOT EXISTS security_currencies (
-      SecurityID INTEGER PRIMARY KEY,
-      Cry TEXT,
-      ConversionFactor REAL DEFAULT 1,
-      Comments TEXT,
-      created_at TEXT,
-      FOREIGN KEY (SecurityID) REFERENCES security_master(SecurityID)
-    )`);
-  } catch(e) {}
-  markSchemaEnsured('security_currencies');
 }
 
 // Distinct currency codes for Currency <select> dropdowns, sourced from
 // security_currencies. Falls back to a small default list if the table is
 // empty/unreachable (e.g. before the schema/backfill has run once).
 const CURRENCY_OPTS_FALLBACK = ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD'];
-async function tursoCurrencyOptions(){
+async function dbCurrencyOptions(){
   try {
-    await ensureSecurityCurrenciesSchema();
-    const rows = await tursoQuery(
+    const rows = await dbQuery(
       "SELECT DISTINCT Cry FROM security_currencies WHERE Cry IS NOT NULL AND Cry <> '' ORDER BY Cry ASC",
       [], 3600000
     );
@@ -212,8 +79,7 @@ async function currencyFactors(){
   if (currencyFactorCache) return currencyFactorCache;
   currencyFactorCache = new Map();
   try {
-    await ensureSecurityCurrenciesSchema();
-    const rows = await tursoQuery(
+    const rows = await dbQuery(
       "SELECT Cry, ConversionFactor FROM security_currencies WHERE Cry IS NOT NULL AND Cry <> ''",
       [], 3600000
     );
@@ -254,67 +120,72 @@ function fxDisplayPrice(rawPrice, securityName, factorMap, decimals = 4){
 }
 
 // ============ Core exec — pass several {sql, args} statements, executed in one round trip ============
-async function tursoBatch(statements) {
-  if (!tursoConfigured()) throw new Error('Turso Datenbank-URL/Token nicht konfiguriert (⚙ Repo/Token).');
-  const hasWrite = statements.some(s => !/^\s*select/i.test(s.sql));
-  if (hasWrite) tursoClearCache();
-  const requests = statements.map(s => ({
-    type: 'execute',
-    stmt: { sql: s.sql, args: (s.args || []).map(toTursoArg) }
-  }));
-  requests.push({ type: 'close' });
-
-  const res = await fetch(`${TURSO.url}/v2/pipeline`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${TURSO.token}` },
-    body: JSON.stringify({ requests })
-  });
+// If the Cloudflare Access session has expired the edge answers with a redirect
+// to the login page. That is detected here and handled with ONE automatic page
+// reload (top-level navigation -> Google login -> back to this page), instead of
+// a cryptic network error.
+const DB_RELOAD_KEY = 'SECURITYDASHBOARD_DB_RELOAD_AT';
+function dbSessionExpired() {
+  try {
+    const last = Number(sessionStorage.getItem(DB_RELOAD_KEY) || 0);
+    if (Date.now() - last > 60000) {
+      sessionStorage.setItem(DB_RELOAD_KEY, String(Date.now()));
+      location.reload();
+    }
+  } catch (e) {}
+  return new Error('Sitzung abgelaufen – bitte Seite neu laden (Google-Login).');
+}
+async function dbBatch(statements) {
+  const hasWrite = statements.some(s => !/^\s*(select|with)\b/i.test(s.sql));
+  if (hasWrite) dbClearCache();
+  let res;
+  try {
+    res = await fetch('/api/db', {
+      method: 'POST',
+      credentials: 'same-origin',
+      redirect: 'manual',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ statements: statements.map(s => ({ sql: s.sql, args: (s.args || []).map(toDbArg) })) })
+    });
+  } catch (e) {
+    throw dbSessionExpired();
+  }
+  if (res.type === 'opaqueredirect' || res.status === 401 || res.status === 403) throw dbSessionExpired();
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
-    throw new Error(`Turso HTTP ${res.status}: ${txt.slice(0, 200)}`);
+    let msg = txt.slice(0, 300);
+    try { msg = JSON.parse(txt).error || msg; } catch (e) {}
+    throw new Error(`DB HTTP ${res.status}: ${msg}`);
   }
   const data = await res.json();
-  const out = [];
-  for (const r of data.results || []) {
-    if (r.type === 'error') throw new Error(r.error?.message || 'Turso Fehler');
-    if (r.response?.type !== 'execute') continue;
-    const result = r.response.result;
-    const cols = (result.cols || []).map(c => c.name);
-    const rows = (result.rows || []).map(row => {
-      const obj = {};
-      cols.forEach((name, i) => { obj[name] = fromTursoCell(row[i]); });
-      return obj;
-    });
-    out.push({ rows, cols, affected: result.affected_row_count, lastInsertRowid: result.last_insert_rowid });
-  }
-  return out;
+  return (data.results || []).map(r => ({ rows: r.rows || [], affected: r.affected, lastInsertRowid: r.lastInsertRowid }));
 }
 // ttlMs > 0: cache SELECT results in sessionStorage for that many ms (per exact sql+args).
 // Cache is auto-cleared on any write anywhere in the app, so this never serves stale data after an edit.
-async function tursoQuery(sql, args = [], ttlMs = 0) {
-  const isSelect = /^\s*select/i.test(sql);
+async function dbQuery(sql, args = [], ttlMs = 0) {
+  const isSelect = /^\s*(select|with)\b/i.test(sql);
   if (isSelect && ttlMs > 0) {
-    const key = tursoCacheKey(sql, args);
-    const cached = tursoCacheGet(key, ttlMs);
+    const key = dbCacheKey(sql, args);
+    const cached = dbCacheGet(key, ttlMs);
     if (cached) return cached;
-    const [result] = await tursoBatch([{ sql, args }]);
+    const [result] = await dbBatch([{ sql, args }]);
     const rows = result ? result.rows : [];
-    tursoCacheSet(key, rows);
+    dbCacheSet(key, rows);
     return rows;
   }
-  const [result] = await tursoBatch([{ sql, args }]);
+  const [result] = await dbBatch([{ sql, args }]);
   return result ? result.rows : [];
 }
-async function tursoRun(sql, args = []) {
-  const [result] = await tursoBatch([{ sql, args }]);
+async function dbRun(sql, args = []) {
+  const [result] = await dbBatch([{ sql, args }]);
   return result || { rows: [], affected: 0, lastInsertRowid: null };
 }
 
 // ============ security_parameter lookups (generic FK-lookup pattern) ============
 // Cached for 5 min by default — dropdown option lists (Collector, DashboardGrouping,
 // Instrument, PortfolioGrouping, TrxArt) change rarely.
-async function tursoParameterOptions(paraTable, paraField, ttlMs = 3600000) {
-  return tursoQuery(
+async function dbParameterOptions(paraTable, paraField, ttlMs = 3600000) {
+  return dbQuery(
     'SELECT ParameterID, ParameterName FROM security_parameter WHERE ParaTable = ? AND ParaField = ? ORDER BY ParameterName COLLATE NOCASE ASC',
     [paraTable, paraField], ttlMs
   );

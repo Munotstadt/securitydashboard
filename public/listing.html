@@ -144,14 +144,6 @@
   </label>
   <div class="count-line" id="listingCountLine"></div>
 
-  <div class="settings" id="settingsPanel">
-    <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
-      <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="https://munotstadtsecuritydb-munotstadt.turso.io"></div>
-      <div><label>Auth Token</label><input type="password" id="cfgToken" name="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…"></div>
-      <div style="align-self:end;"><button id="cfgSave" type="submit">Apply</button></div>
-    </form>
-  </div>
-
   <div class="table-scroll">
   <table id="boardTable">
     <thead><tr>
@@ -171,7 +163,6 @@
     <span>
       <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
       <button type="button" id="improvementSaveBtn">💡 Save</button>
-      <button id="settingsBtn">⚙ Repo/Token</button>
       <button id="refreshBtn">Refresh</button>
     </span>
   </div>
@@ -186,40 +177,7 @@
   </details>
 </div>
 
-<script src="assets/turso-data.js"></script>
-<script>
-// Safety net: define the shared schema-guard helpers locally if the loaded
-// assets/turso-data.js doesn't have them yet (e.g. stale cached copy).
-if (typeof ensureSecurityTasksSchema === 'undefined') {
-  window.ensureSecurityTasksSchema = async function(){
-    try {
-      await tursoRun(`CREATE TABLE IF NOT EXISTS security_tasks (
-        TaskID INTEGER PRIMARY KEY AUTOINCREMENT,
-        TaskName TEXT NOT NULL,
-        TaskDescription TEXT,
-        SecurityID INTEGER,
-        DateDue TEXT,
-        Recurring TEXT,
-        Completed INTEGER DEFAULT 0,
-        CompletedAt TEXT,
-        created_at TEXT
-      )`);
-    } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN Priority TEXT'); } catch(e) {}
-    try {
-      await tursoRun(`CREATE TABLE IF NOT EXISTS security_task_completions (
-        CompletionID INTEGER PRIMARY KEY AUTOINCREMENT,
-        TaskID INTEGER,
-        TaskName TEXT,
-        SecurityID INTEGER,
-        DateDue TEXT,
-        CompletedAt TEXT
-      )`);
-    } catch(e) {}
-  };
-}
-</script>
+<script src="assets/db-data.js"></script>
 <script>
 const REFRESH_MS = 5 * 60 * 1000;
 
@@ -240,26 +198,20 @@ let allRows = [];
 let sortKey = 'name';
 let sortDir = 'asc';
 let showInactiveTerminated = false;
-let factorMap = new Map(); // Cry -> ConversionFactor, see assets/turso-data.js currencyFactors()
+let factorMap = new Map(); // Cry -> ConversionFactor, see assets/db-data.js currencyFactors()
 
 async function load(){
-  if (!tursoConfigured()) {
-    document.getElementById('boardBody').innerHTML = `<tr><td colspan="7" class="error">Bitte zuerst ⚙ Repo/Token setzen.</td></tr>`;
-    document.getElementById('settingsPanel').classList.add('show');
-    document.getElementById('statusText').textContent = 'nicht konfiguriert';
-    return;
-  }
   try{
-    await ensureSecurityTasksSchema();
+    
     const [masterRows, priceRows, openTasks, factors] = await Promise.all([
-      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.DateTerminated, sm.Status,
+      dbQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.DateTerminated, sm.Status,
                          ip.ParameterName AS InstrumentName, sp.ParameterName AS StatusName
               FROM security_master sm
               LEFT JOIN security_parameter ip ON ip.ParameterID = sm.Instrument
               LEFT JOIN security_parameter sp ON sp.ParameterID = sm.Status
               ORDER BY sm.SecurityName COLLATE NOCASE ASC`, [], 3600000),
-      tursoQuery(`SELECT SecurityID, Price, PriceDate, Source FROM security_prices`, [], 3600000),
-      tursoQuery(`SELECT SecurityID, DateDue FROM security_tasks WHERE Completed = 0 AND SecurityID IS NOT NULL`, [], 0),
+      dbQuery(`SELECT SecurityID, Price, Price_date AS PriceDate, source AS Source FROM security_prices`, [], 3600000),
+      dbQuery(`SELECT SecurityID, DateDue FROM security_tasks WHERE Completed = 0 AND SecurityID IS NOT NULL`, [], 0),
       currencyFactors(),
     ]);
     factorMap = factors;
@@ -425,17 +377,7 @@ document.getElementById('searchClear').addEventListener('click', () => {
   input.focus();
   renderBoard();
 });
-document.getElementById('refreshBtn').addEventListener('click', () => { tursoClearCache(); load(); });
-document.getElementById('settingsBtn').addEventListener('click', () => {
-  document.getElementById('cfgUrl').value = TURSO.url;
-  document.getElementById('cfgToken').value = TURSO.token;
-  document.getElementById('settingsPanel').classList.toggle('show');
-});
-document.getElementById('cfgSave').addEventListener('click', () => {
-  tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
-  document.getElementById('settingsPanel').classList.remove('show');
-  load();
-});
+document.getElementById('refreshBtn').addEventListener('click', () => { dbClearCache(); load(); });
 
 load();
 setInterval(load, REFRESH_MS);
@@ -448,18 +390,17 @@ setInterval(load, REFRESH_MS);
     var input = document.getElementById('improvementInput');
     var text = input.value.trim();
     if(!text){ return; }
-    if(!tursoConfigured()){ alert('Bitte zuerst ⚙ Repo/Token setzen.'); return; }
     var original = btn.textContent;
     btn.disabled = true; btn.textContent = 'Speichere…';
     try {
-      await ensureSecurityTasksSchema();
+      
       var pageName = (location.pathname.split('/').pop() || 'index.html');
       var todayDate = (typeof nowZurichIsoDateString === 'function') ? new Date(nowZurichIsoDateString()+'T00:00:00')
         : (typeof zurichParts === 'function' ? (function(){ var p = zurichParts(new Date()); return new Date(p.year+'-'+p.month+'-'+p.day+'T00:00:00'); })() : new Date());
       var due = new Date(todayDate); due.setDate(due.getDate()+10);
       var dueIso = due.toISOString().slice(0,10);
       var nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
-      await tursoRun(
+      await dbRun(
         `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
         ['Improvement ' + pageName, text, null, dueIso, 'n/a', 140, nowIso]
       );

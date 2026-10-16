@@ -136,14 +136,6 @@
     <div class="status" id="statusText">loading…</div>
   </div>
 
-  <div class="settings" id="settingsPanel">
-    <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
-      <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="https://…turso.io"></div>
-      <div><label>Auth Token</label><input type="password" id="cfgToken" name="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…"></div>
-      <div style="align-self:end;"><button id="cfgSave" type="submit">Apply</button></div>
-    </form>
-  </div>
-
   <div class="section-title">FX</div>
   <div class="table-wrap">
   <table id="fxTable">
@@ -174,75 +166,11 @@
   <div class="footer">
     <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
     <button type="button" id="improvementSaveBtn">💡 Save</button>
-    <button id="settingsBtn">⚙ Repo/Token</button>
     <button id="refreshBtn">Refresh</button>
   </div>
 </div>
 
-<script src="assets/turso-data.js"></script>
-<script>
-// Safety net: define the shared schema-guard helpers locally if the loaded
-// assets/turso-data.js doesn't have them yet (e.g. stale cached copy). Avoids
-// a hard "X is not defined" crash; the real versions in turso-data.js take
-// over automatically once that file is up to date (session-cached there).
-if (typeof ensureSecurityMasterSchema === 'undefined') {
-  window.ensureSecurityMasterSchema = async function(){
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateLaunch TEXT'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateTerminated TEXT'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN Status INTEGER'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN Comments TEXT'); } catch(e) {}
-  };
-}
-if (typeof ensureSecurityTasksSchema === 'undefined') {
-  window.ensureSecurityTasksSchema = async function(){
-    try {
-      await tursoRun(`CREATE TABLE IF NOT EXISTS security_tasks (
-        TaskID INTEGER PRIMARY KEY AUTOINCREMENT,
-        TaskName TEXT NOT NULL,
-        TaskDescription TEXT,
-        SecurityID INTEGER,
-        DateDue TEXT,
-        Recurring TEXT,
-        Completed INTEGER DEFAULT 0,
-        CompletedAt TEXT,
-        created_at TEXT
-      )`);
-    } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN Priority TEXT'); } catch(e) {}
-    try {
-      await tursoRun(`CREATE TABLE IF NOT EXISTS security_task_completions (
-        CompletionID INTEGER PRIMARY KEY AUTOINCREMENT,
-        TaskID INTEGER,
-        TaskName TEXT,
-        SecurityID INTEGER,
-        DateDue TEXT,
-        CompletedAt TEXT
-      )`);
-    } catch(e) {}
-  };
-}
-if (typeof ensureSecurityDataSchema === 'undefined') {
-  window.ensureSecurityDataSchema = async function(){
-    try { await tursoRun('ALTER TABLE security_data ADD COLUMN Source TEXT'); } catch(e) {}
-  };
-}
-if (typeof ensureAssetComparisonSchema === 'undefined') {
-  window.ensureAssetComparisonSchema = async function(){
-    try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_group (
-      GroupID INTEGER PRIMARY KEY AUTOINCREMENT,
-      GroupName TEXT NOT NULL,
-      created_at TEXT
-    )`); } catch(e) {}
-    try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_member (
-      GroupID INTEGER NOT NULL,
-      SecurityID INTEGER NOT NULL,
-      created_at TEXT,
-      PRIMARY KEY (GroupID, SecurityID)
-    )`); } catch(e) {}
-  };
-}
-</script>
+<script src="assets/db-data.js"></script>
 <script>
 function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); return d; }
 function fmtChf(v){ return v===null||v===undefined||isNaN(v) ? '—' : v.toLocaleString('de-CH',{maximumFractionDigits:0}); }
@@ -278,20 +206,15 @@ function netQuantity(secId, txnRows){
 }
 
 async function load(){
-  if (!tursoConfigured()) {
-    document.getElementById('fxBody').innerHTML = `<tr><td colspan="8" class="error">Please set Repo/Token first.</td></tr>`;
-    document.getElementById('settingsPanel').classList.add('show');
-    return;
-  }
   try{
     const [master, txns, prices, distRows] = await Promise.all([
-      tursoQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.PortfolioGrouping, pg.ParameterName AS PortfolioGroupingName
+      dbQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.PortfolioGrouping, pg.ParameterName AS PortfolioGroupingName
                   FROM security_master sm
                   LEFT JOIN security_parameter pg ON pg.ParameterID = sm.PortfolioGrouping`, [], 3600000),
-      tursoQuery(`SELECT t.SecurityID, t.Quantity, ta.ParameterName AS TrxArtName
+      dbQuery(`SELECT t.SecurityID, t.Quantity, ta.ParameterName AS TrxArtName
                   FROM security_transactions t LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt`),
-      tursoQuery(`SELECT SecurityID, Price, PriceDate FROM security_prices`, [], 3600000),
-      tursoQuery(`SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions`, [], 3600000),
+      dbQuery(`SELECT SecurityID, Price, Price_date AS PriceDate FROM security_prices`, [], 3600000),
+      dbQuery(`SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions`, [], 3600000),
     ]);
 
     const pricesBySecId = new Map();
@@ -628,17 +551,7 @@ function renderMarketGroupsFor(containerId, candidates, distBySecId, fxByCurrenc
   document.getElementById(containerId).innerHTML = html || '<div class="empty">No securities with a PortfolioGrouping under this region.</div>';
 }
 
-document.getElementById('refreshBtn').addEventListener('click', () => { tursoClearCache(); load(); });
-document.getElementById('settingsBtn').addEventListener('click', () => {
-  document.getElementById('cfgUrl').value = TURSO.url;
-  document.getElementById('cfgToken').value = TURSO.token;
-  document.getElementById('settingsPanel').classList.toggle('show');
-});
-document.getElementById('cfgSave').addEventListener('click', () => {
-  tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
-  document.getElementById('settingsPanel').classList.remove('show');
-  load();
-});
+document.getElementById('refreshBtn').addEventListener('click', () => { dbClearCache(); load(); });
 
 load();
 
@@ -650,18 +563,17 @@ load();
     var input = document.getElementById('improvementInput');
     var text = input.value.trim();
     if(!text){ return; }
-    if(!tursoConfigured()){ alert('Bitte zuerst ⚙ Repo/Token setzen.'); return; }
     var original = btn.textContent;
     btn.disabled = true; btn.textContent = 'Speichere…';
     try {
-      await ensureSecurityTasksSchema();
+      
       var pageName = (location.pathname.split('/').pop() || 'index.html');
       var todayDate = (typeof nowZurichIsoDateString === 'function') ? new Date(nowZurichIsoDateString()+'T00:00:00')
         : (typeof zurichParts === 'function' ? (function(){ var p = zurichParts(new Date()); return new Date(p.year+'-'+p.month+'-'+p.day+'T00:00:00'); })() : new Date());
       var due = new Date(todayDate); due.setDate(due.getDate()+10);
       var dueIso = due.toISOString().slice(0,10);
       var nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
-      await tursoRun(
+      await dbRun(
         `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
         ['Improvement ' + pageName, text, null, dueIso, 'n/a', 140, nowIso]
       );
