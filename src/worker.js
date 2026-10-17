@@ -26,6 +26,13 @@ export default {
       const identity = await verifyAccess(request, env);
       if (identity instanceof Response) return identity;
 
+      // Service tokens (Access JWT without an e-mail, e.g. the local MS-Access import) may only
+      // read the valuation CSV - never /api/db (writes) or /api/improvements.
+      const isService = !identity.email;
+      if (isService && !(url.pathname === '/api/securityprices.csv' && request.method === 'GET')) {
+        return json({ error: 'forbidden for service tokens' }, 403);
+      }
+
       if (url.pathname === '/api/me' && request.method === 'GET') {
         return json({ email: identity.email || null, service: identity.common_name || null });
       }
@@ -36,7 +43,7 @@ export default {
         return await handleImprovement(request, env);
       }
       if (url.pathname === '/api/securityprices.csv' && request.method === 'GET') {
-        return await handleValuationCsv(env);
+        return await handleValuationCsv(env, url);
       }
       return json({ error: 'not found' }, 404);
     } catch (err) {
@@ -103,16 +110,37 @@ async function handleImprovement(request, env) {
 }
 
 // ------------------------------------------------ /api/securityprices.csv
-// Latest price per in-scope security, for the local MS-Access import.
-// In scope: net Quantity (Buy/Sell) != 0  OR  security_master.DashboardGrouping set.
-// Same logic as portfolio.html's "Valuation CSV" button - keep both in sync.
-async function handleValuationCsv(env) {
+// Prices for the local MS-Access import.
+//   ?mode=latest            (default) most recent price per security
+//   ?mode=close&asof=DATE   closing price as of DATE: last price on or before the end of that day
+//                           (DATE = YYYY-MM-DD or DD.MM.YYYY). If a security has no price on that
+//                           day, its previous price is used - the PriceDate column shows the real date.
+// In scope: net Quantity (Buy/Sell) != 0 (as of DATE in close mode) OR security_master.DashboardGrouping set.
+// Same scope logic as portfolio.html's "Valuation CSV" button - keep both in sync.
+// security_transactions.DateTrx is TEXT in the form DD.MM.YYYY (ISO also tolerated).
+async function handleValuationCsv(env, url) {
+  const mode = (url.searchParams.get('mode') || 'latest').toLowerCase();
+  if (mode !== 'latest' && mode !== 'close') return json({ error: "mode must be 'latest' or 'close'" }, 400);
+
+  let priceLimit = null;   // exclusive upper bound for Price_date (ISO text compare)
+  let trxLimit = null;     // inclusive upper bound for DateTrx (ISO yyyy-mm-dd)
+  if (mode === 'close') {
+    const iso = parseAsOf(url.searchParams.get('asof'));
+    if (!iso) return json({ error: 'asof required for mode=close (YYYY-MM-DD or DD.MM.YYYY)' }, 400);
+    const next = new Date(iso + 'T00:00:00Z');
+    next.setUTCDate(next.getUTCDate() + 1);
+    priceLimit = next.toISOString().slice(0, 10);   // Price_date < next day 00:00
+    trxLimit = iso;
+  }
+
+  const trxIso = `CASE WHEN t.DateTrx LIKE '__.__.____' THEN substr(t.DateTrx,7,4)||'-'||substr(t.DateTrx,4,2)||'-'||substr(t.DateTrx,1,2) ELSE t.DateTrx END`;
   const { results } = await env.DB.prepare(`
     WITH net AS (
       SELECT t.SecurityID AS SecurityID, SUM(t.Quantity) AS Qty
         FROM security_transactions t
         JOIN security_parameter ta ON ta.ParameterID = t.TrxArt
        WHERE ta.ParameterName IN ('Buy', 'Sell')
+         AND (?1 IS NULL OR substr(${trxIso}, 1, 10) <= ?1)
        GROUP BY t.SecurityID
     ),
     scope AS (
@@ -126,9 +154,10 @@ async function handleValuationCsv(env) {
              ROW_NUMBER() OVER (PARTITION BY p.SecurityID ORDER BY p.Price_date DESC, p.id DESC) AS rn
         FROM security_prices p
         JOIN scope s ON s.SecurityID = p.SecurityID
+       WHERE (?2 IS NULL OR p.Price_date < ?2)
     )
     SELECT SecurityID, Price_date, Price, source FROM latest WHERE rn = 1 ORDER BY SecurityID
-  `).all();
+  `).bind(trxLimit, priceLimit).all();
 
   const lines = ['SecurityID,PriceDate,Price,Source'];
   for (const r of results || []) {
@@ -137,6 +166,17 @@ async function handleValuationCsv(env) {
   return new Response(lines.join('\n') + '\n', {
     headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store' },
   });
+}
+
+function parseAsOf(v) {
+  if (!v) return null;
+  let y, m, d, x;
+  if ((x = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v))) { y = +x[1]; m = +x[2]; d = +x[3]; }
+  else if ((x = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(v))) { d = +x[1]; m = +x[2]; y = +x[3]; }
+  else return null;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+  return dt.toISOString().slice(0, 10);
 }
 
 function csvField(v) {

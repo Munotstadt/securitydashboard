@@ -1,0 +1,142 @@
+' =====================================================================================
+' Formular-Code (Access): Button "SecurityPricesImportButton"
+' Einfuegen im VBA-Editor (Alt+F11) im Code-Modul des Formulars, das den Button enthaelt.
+' Dokumentation: README.md (Abschnitt "VBA-Code im Detail")
+'
+' Ablauf:
+'   1. Pfade pruefen (node.exe, Skript)
+'   2. Frage: aktuellste Kurse ODER Schlusskurse per Stichtag (Datum TT.MM.JJJJ)
+'   3. Node-Skript im Ordner C:\MunotstadtTools\AccessERP ausfuehren und warten
+'   4. Bei Fehler: letzte Zeile aus download.log anzeigen, Import NICHT ausfuehren
+'   5. Import-Abfrage FIGIT_SecurityPrices_import_aqry ausfuehren
+' =====================================================================================
+Private Sub SecurityPricesImportButton_Click()
+    Const NODE_PATH As String = "C:\Program Files\nodejs\node.exe"
+    Const TOOL_DIR As String = "C:\MunotstadtTools\AccessERP\"
+    Const SCRIPT_NAME As String = "download-securityprices-csv.js"
+    Const LOG_NAME As String = "download.log"
+    Const IMPORT_QUERY As String = "FIGIT_SecurityPrices_import_aqry"
+
+    Dim wsh As Object
+    Dim scriptPath As String
+    Dim command As String
+    Dim exitCode As Long
+    Dim answer As VbMsgBoxResult
+    Dim modeArg As String       ' "--mode=latest" oder "--mode=close --asof=TT.MM.JJJJ"
+    Dim modeLabel As String     ' Text fuer die Erfolgsmeldung
+    Dim asOf As Date
+    Dim txt As String
+
+    scriptPath = TOOL_DIR & SCRIPT_NAME
+
+    ' --- 1. Pfade pruefen ---------------------------------------------------
+    If Dir(NODE_PATH) = "" Then
+        MsgBox "node.exe wurde nicht gefunden unter: " & NODE_PATH, vbCritical
+        Exit Sub
+    End If
+    If Dir(scriptPath) = "" Then
+        MsgBox "Skript wurde nicht gefunden unter: " & scriptPath, vbCritical
+        Exit Sub
+    End If
+
+    ' --- 2. Frage: aktuellste Kurse oder Schlusskurse per Stichtag -----------
+    answer = MsgBox("Welche Kurse sollen importiert werden?" & vbCrLf & vbCrLf & _
+                    "Ja       = Aktuellste Kurse" & vbCrLf & _
+                    "Nein    = Schlusskurse per Stichtag (z.B. " & Format(Date, "dd.mm.yyyy") & ")" & vbCrLf & _
+                    "Abbrechen = nichts tun", _
+                    vbYesNoCancel + vbQuestion, "Kurse importieren")
+    Select Case answer
+        Case vbCancel
+            Exit Sub
+        Case vbYes
+            modeArg = "--mode=latest"
+            modeLabel = "aktuellste Kurse"
+        Case vbNo
+            ' Stichtag abfragen, bis ein gueltiges Datum eingegeben wird (leer = Abbruch)
+            txt = Format(Date, "dd.mm.yyyy")
+            Do
+                txt = InputBox("Stichtag fuer die Schlusskurse (TT.MM.JJJJ):", "Stichtag", txt)
+                If Trim(txt) = "" Then Exit Sub
+                If Not ParseSwissDate(txt, asOf) Then
+                    MsgBox "Ungueltiges Datum. Bitte im Format TT.MM.JJJJ eingeben, z.B. 15.10.2026.", vbExclamation
+                ElseIf asOf > Date Then
+                    MsgBox "Der Stichtag darf nicht in der Zukunft liegen.", vbExclamation
+                Else
+                    Exit Do
+                End If
+            Loop
+            modeArg = "--mode=close --asof=" & Format(asOf, "dd.mm.yyyy")
+            modeLabel = "Schlusskurse per " & Format(asOf, "dd.mm.yyyy")
+    End Select
+
+    Screen.MousePointer = 11 ' Sanduhr
+
+    ' --- 3. Node-Skript ausfuehren und WARTEN --------------------------------
+    Set wsh = CreateObject("WScript.Shell")
+    wsh.CurrentDirectory = TOOL_DIR
+    command = """" & NODE_PATH & """ """ & scriptPath & """ " & modeArg
+    ' 0    = Konsolenfenster verstecken
+    ' True = VBA wartet, bis der Prozess beendet ist
+    exitCode = wsh.Run(command, 0, True)
+    Set wsh = Nothing
+
+    ' --- 4. Fehlerbehandlung: Exit-Code 0 = OK, 1 = Fehler, 2 = Eingabe/Abbruch --
+    If exitCode <> 0 Then
+        Screen.MousePointer = 0
+        MsgBox "Der CSV-Download ist fehlgeschlagen (Code " & exitCode & ")." & vbCrLf & vbCrLf & _
+               LastLogLine(TOOL_DIR & LOG_NAME) & vbCrLf & vbCrLf & _
+               "Die Import-Abfrage wird NICHT ausgefuehrt." & vbCrLf & _
+               "Details: " & TOOL_DIR & LOG_NAME, vbExclamation
+        Exit Sub
+    End If
+
+    ' --- 5. Import-Abfrage ausfuehren ---------------------------------------
+    On Error GoTo ImportError
+    DoCmd.SetWarnings False   ' unterdrueckt die "X Zeilen werden angehaengt"-Meldung
+    DoCmd.OpenQuery IMPORT_QUERY
+    DoCmd.SetWarnings True
+
+    Screen.MousePointer = 0
+    MsgBox "CSV geladen (" & modeLabel & ") und Import-Abfrage erfolgreich ausgefuehrt.", vbInformation
+    Me.Requery
+    Exit Sub
+
+ImportError:
+    DoCmd.SetWarnings True
+    Screen.MousePointer = 0
+    MsgBox "Fehler beim Ausfuehren der Abfrage '" & IMPORT_QUERY & "':" & vbCrLf & Err.Description, vbCritical
+End Sub
+
+' Wandelt "TT.MM.JJJJ" in ein Datum um (unabhaengig von den Windows-Regionseinstellungen).
+Private Function ParseSwissDate(ByVal txt As String, ByRef result As Date) As Boolean
+    Dim p() As String
+    Dim d As Long, m As Long, y As Long
+    ParseSwissDate = False
+    p = Split(Trim(txt), ".")
+    If UBound(p) <> 2 Then Exit Function
+    If Not (IsNumeric(p(0)) And IsNumeric(p(1)) And IsNumeric(p(2))) Then Exit Function
+    d = CLng(p(0)): m = CLng(p(1)): y = CLng(p(2))
+    If y < 1990 Or y > 2100 Or m < 1 Or m > 12 Or d < 1 Or d > 31 Then Exit Function
+    result = DateSerial(y, m, d)
+    ' DateSerial rollt ungueltige Tage weiter (31.02. -> 03.03.): zurueckpruefen
+    If Day(result) <> d Or Month(result) <> m Or Year(result) <> y Then Exit Function
+    ParseSwissDate = True
+End Function
+
+' Liefert die letzte nicht-leere Zeile der Logdatei (fuer die Fehlermeldung).
+Private Function LastLogLine(ByVal logPath As String) As String
+    Dim f As Integer, ln As String, last As String
+    On Error GoTo Fail
+    If Dir(logPath) = "" Then LastLogLine = "(keine Logdatei vorhanden)": Exit Function
+    f = FreeFile
+    Open logPath For Input As #f
+    Do While Not EOF(f)
+        Line Input #f, ln
+        If Trim(ln) <> "" Then last = ln
+    Loop
+    Close #f
+    LastLogLine = last
+    Exit Function
+Fail:
+    LastLogLine = "(Logdatei nicht lesbar)"
+End Function

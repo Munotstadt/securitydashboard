@@ -51,6 +51,6 @@ CREATE TABLE security_master (SecurityID integer PRIMARY KEY, SecurityName text 
 CREATE TABLE security_prices (id INTEGER PRIMARY KEY AUTOINCREMENT, SecurityID INTEGER NOT NULL REFERENCES security_master(SecurityID), Price REAL NOT NULL, Price_adjusted REAL NOT NULL, Price_date text NOT NULL, source text, created_at text NOT NULL DEFAULT (datetime('now')), modified_at text NOT NULL DEFAULT (datetime('now')));
 CREATE UNIQUE INDEX idx_security_prices_unique ON security_prices (SecurityID, Price_date, source);
 CREATE TABLE security_collector_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, collectortype text);
-CREATE TABLE security_transactions (TransactionID INTEGER PRIMARY KEY AUTOINCREMENT, SecurityID INTEGER NOT NULL REFERENCES security_master(SecurityID), TrxArt INTEGER REFERENCES security_parameter(ParameterID), Quantity REAL, TrxDate TEXT);
+CREATE TABLE security_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, SecurityID INTEGER NOT NULL REFERENCES security_master(SecurityID), TrxArt INTEGER REFERENCES security_parameter(ParameterID), Quantity REAL, DateTrx TEXT);
 `;
 export { DatabaseSync };

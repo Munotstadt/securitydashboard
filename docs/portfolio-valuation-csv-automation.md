@@ -92,10 +92,14 @@ Splitting into separate saved queries, each simple, worked:
 
 ---
 
-## Update 2026-10-16 – Cloudflare statt GitHub Actions
+## Update 2026-10-17 – Cloudflare statt GitHub Actions, mit Stichtag-Abfrage
 
-Die Schritte 1 (GitHub Actions + `data/securityprices.csv`) entfallen. Die CSV wird bei jedem Abruf live aus D1
-erzeugt: `GET https://security.munot.app/api/securityprices.csv` (gleiche Scope-Logik wie zuvor, Spalten
-`SecurityID,PriceDate,Price,Source`). Das lokale Skript liegt jetzt in `tools/access-import/` und meldet sich mit einem
-Cloudflare-Access-Service-Token an (`access-token.json` neben dem Skript, nicht einchecken). Ausgabepfad, Access-Linked-Table,
-Abfragen und VBA-Button bleiben unverändert.
+Schritt 1 (GitHub Actions + `data/securityprices.csv`) entfällt. Die CSV wird bei jedem Abruf live aus D1 erzeugt:
+`GET https://security.munot.app/api/securityprices.csv?mode=latest` (aktuellste Kurse) bzw.
+`?mode=close&asof=2026-10-15` (Schlusskurse per Stichtag; Bestände ebenfalls per Stichtag). Spalten unverändert:
+`SecurityID,PriceDate,Price,Source`.
+
+Das lokale Skript und der Access-Button fragen jetzt vor dem Download „aktuellste Kurse oder Schlusskurse per Stichtag".
+Skript, Zugangsdaten und Log liegen in `C:\MunotstadtTools\AccessERP\` (Zugangsdaten getrennt in `secrets.json`).
+Vollständige Dokumentation des Ablaufs und des VBA-Codes: `tools/access-import/README.md`.
+Ausgabepfad, Access-Linked-Table, Abfragen und Import-Abfrage bleiben unverändert.

@@ -21,10 +21,10 @@ INSERT INTO security_master (SecurityID, SecurityName, Collector, Ticker, Curren
  (11,'Pinned FX',4,'USDCHF=X','CHF',3,'2026-08-30 00:00:00'),
  (12,'Sold Out',4,'OLD','CHF',NULL,'2026-08-30 00:00:00'),
  (13,'Unused',4,'UNU','CHF',NULL,'2026-08-30 00:00:00');
-INSERT INTO security_transactions (SecurityID, TrxArt, Quantity, TrxDate) VALUES (10,1,100,'2026-01-01'),(12,1,50,'2026-01-01'),(12,2,-50,'2026-02-01');
+INSERT INTO security_transactions (SecurityID, TrxArt, Quantity, DateTrx) VALUES (10,1,100,'01.01.2026'),(12,1,50,'01.01.2026'),(12,2,-50,'01.02.2026');
 INSERT INTO security_prices (SecurityID, Price, Price_adjusted, Price_date, source) VALUES
  (10,100,100,'2026-10-15 12:00:00','C'),(10,101,101,'2026-10-16 12:00:00','C'),(10,102,102,'2026-10-16 18:00:00','C'),
- (11,0.9,0.9,'2026-10-16 18:00:00','C'),(12,5,5,'2026-10-16 18:00:00','C'),(13,1,1,'2026-10-16 18:00:00','C');
+ (12,4,4,'2026-01-15','C'),(11,0.9,0.9,'2026-10-16 18:00:00','C'),(12,5,5,'2026-10-16 18:00:00','C'),(13,1,1,'2026-10-16 18:00:00','C');
 `);
 const adminDb = new DatabaseSync(':memory:');
 adminDb.exec("CREATE TABLE improvement_tasks (TaskID INTEGER PRIMARY KEY AUTOINCREMENT, SourceApp TEXT NOT NULL, SourceUrl TEXT, Title TEXT NOT NULL, Note TEXT, Status TEXT NOT NULL DEFAULT 'open', Priority TEXT DEFAULT 'normal', CreatedAt TEXT NOT NULL DEFAULT (datetime('now')), UpdatedAt TEXT, CompletedAt TEXT)");
@@ -118,6 +118,32 @@ test('/api/securityprices.csv: holdings + pinned securities only, latest price, 
     '11,2026-10-16 18:00:00,0.9,C',   // DashboardGrouping set, no position
     '',
   ].join('\n'));                       // 12 (net 0) and 13 (unused) are out of scope
+});
+
+test('service tokens (no e-mail) may only read the valuation CSV', async () => {
+  const svc = await access.token({ email: undefined, common_name: 'abc.access' });
+  assert.equal((await call('/api/securityprices.csv?mode=latest', { jwt: svc })).status, 200);
+  assert.equal((await call('/api/me', { jwt: svc })).status, 403);
+  assert.equal((await db([{ sql: 'SELECT 1' }], { jwt: svc })).status, 403);
+  assert.equal((await call('/api/improvements', { method: 'POST', jwt: svc, body: { sourceApp: 'x', title: 'y' } })).status, 403);
+  assert.equal((await db([{ sql: 'SELECT 1' }])).status, 200); // normal user unaffected
+});
+
+test('/api/securityprices.csv?mode=close: closing price as of a date, holdings as of that date', async () => {
+  const csv = async (q) => { const r = await call('/api/securityprices.csv' + q); return [r.status, await r.text()]; };
+  const H = 'SecurityID,PriceDate,Price,Source\n';
+  // 15.10.2026: only security 10 has a price up to that day; 11 has none yet
+  assert.deepEqual(await csv('?mode=close&asof=15.10.2026'), [200, H + '10,2026-10-15 12:00:00,100,C\n']);
+  // 16.10.2026 (ISO input): last price of that day
+  assert.deepEqual(await csv('?mode=close&asof=2026-10-16'), [200, H + '10,2026-10-16 18:00:00,102,C\n11,2026-10-16 18:00:00,0.9,C\n']);
+  // 20.01.2026: security 12 was still held (sold 01.02.2026) -> in scope with its price of 15.01.2026; 10 has no price yet
+  assert.deepEqual(await csv('?mode=close&asof=20.01.2026'), [200, H + '12,2026-01-15,4,C\n']);
+  // default mode = latest
+  assert.equal((await csv('?mode=latest'))[1], (await csv(''))[1]);
+  // invalid input
+  assert.equal((await csv('?mode=close'))[0], 400);
+  assert.equal((await csv('?mode=close&asof=31.02.2026'))[0], 400);
+  assert.equal((await csv('?mode=bogus'))[0], 400);
 });
 
 // ---- client library (public/assets/db-data.js) against the real Worker --------------------------
