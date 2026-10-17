@@ -30,8 +30,8 @@
   //   ACCESS_AUD         = "Application Audience (AUD) Tag" of the Access app
   // Not secrets, so they may live here. Until both are set, /api/* answers 503 (fail closed).
   "vars": {
-    "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": ""
+    "ACCESS_TEAM_DOMAIN": "team8155.cloudflareaccess.com",
+    "ACCESS_AUD": "a1b34efd135ac032cfcc1dbbc8668a7e25db29218451fe31c4135e5fe495c14f"
   },
 
   "observability": { "enabled": true }
