@@ -79,59 +79,10 @@
   .upload-actions button:disabled{opacity:.4;cursor:not-allowed;}
   tr.total-row td{font-weight:600;background:var(--panel);}
 </style>
+<link rel="stylesheet" href="assets/layout.css">
 </head>
 <body>
-<nav class="topnav">
-  <a href="index.html">🏠 Home</a>
-  <a href="dashboard.html">📊 Dashboard</a>
-  <a href="listing.html">📃 Listing</a>
-  <a href="portfolio.html">💼 Portfolio</a>
-  <a href="analyser.html">🔬 Analyser</a>
-  <a href="asset_comparison.html">🆚 Comparison</a>
-  <a href="tasks.html">✅ Tasks</a>
-  <div class="nav-dropdown active-group" id="editorsDropdown">
-    <button type="button" class="dd-toggle" id="editorsToggle">🗂 Editors ▾</button>
-    <div class="dd-menu" id="editorsMenu">
-      <a href="master_editor.html">🗂 Master Data</a>
-      <a href="price_editor.html">✏️ Prices</a>
-      <a href="transactions_editor.html">📋 Transactions</a>
-      <a href="distribution_editor.html">💰 Distributions</a>
-      <a href="parameters_editor.html">⚙️ Parameters</a>
-      <a href="security_data.html">🔎 Security Data</a>
-      <a href="admin.html" class="active">⚙️ Admin</a>
-    </div>
-  </div>
-</nav>
-<script>
-(function(){
-  var dd = document.getElementById('editorsDropdown');
-  if(!dd) return;
-  var toggle = document.getElementById('editorsToggle');
-  var menu = document.getElementById('editorsMenu');
-  // Move the menu to <body> so it can never be trapped inside an ancestor's
-  // stacking/clipping context (e.g. the horizontally-scrolling topnav).
-  document.body.appendChild(menu);
-  function positionMenu(){
-    var r = toggle.getBoundingClientRect();
-    menu.style.top = (r.bottom + 4) + 'px';
-    menu.style.left = r.left + 'px';
-  }
-  function closeMenu(){ dd.classList.remove('open'); menu.classList.remove('show'); }
-  function openMenu(){ positionMenu(); dd.classList.add('open'); menu.classList.add('show'); }
-  toggle.addEventListener('click', function(e){
-    e.stopPropagation();
-    if(menu.classList.contains('show')) closeMenu(); else openMenu();
-  });
-  document.addEventListener('click', function(e){
-    if(!dd.contains(e.target) && !menu.contains(e.target)) closeMenu();
-  });
-  document.addEventListener('keydown', function(e){
-    if(e.key === 'Escape') closeMenu();
-  });
-  window.addEventListener('resize', function(){ if(menu.classList.contains('show')) positionMenu(); });
-  window.addEventListener('scroll', function(){ if(menu.classList.contains('show')) positionMenu(); }, true);
-})();
-</script>
+<script src="assets/layout.js"></script>
 <div class="wrap">
   <div class="eyebrow"><h1 style="border:none;padding:0;margin:0;">Admin</h1><span class="status" id="statusText">loading…</span></div>
 

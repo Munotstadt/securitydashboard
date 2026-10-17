@@ -79,59 +79,12 @@
   .dd-menu a:hover{background:var(--panel);color:var(--text);}
   .dd-menu a.active{color:var(--text);font-weight:600;background:rgba(227,6,19,0.06);}
 </style>
+<link rel="stylesheet" href="assets/layout.css">
 </head>
 <body>
 <!-- Note: this page is intentionally not yet linked from the topnav on other
      pages (still being reviewed) - navigate here directly via listing.html. -->
-<nav class="topnav">
-  <a href="index.html">🏠 Home</a>
-  <a href="dashboard.html">📊 Dashboard</a>
-  <a href="listing.html" class="active">📃 Listing</a>
-  <a href="portfolio.html">💼 Portfolio</a>
-  <a href="analyser.html">🔬 Analyser</a>
-  <a href="asset_comparison.html">🆚 Comparison</a>
-  <a href="tasks.html">✅ Tasks</a>
-  <div class="nav-dropdown" id="editorsDropdown">
-    <button type="button" class="dd-toggle" id="editorsToggle">🗂 Editors ▾</button>
-    <div class="dd-menu" id="editorsMenu">
-      <a href="master_editor.html">🗂 Master Data</a>
-      <a href="price_editor.html">✏️ Prices</a>
-      <a href="transactions_editor.html">📋 Transactions</a>
-      <a href="distribution_editor.html">💰 Distributions</a>
-      <a href="parameters_editor.html">⚙️ Parameters</a>
-      <a href="security_data.html">🔎 Security Data</a>
-      <a href="admin.html">⚙️ Admin</a>
-    </div>
-  </div>
-</nav>
-<script>
-(function(){
-  var dd = document.getElementById('editorsDropdown');
-  if(!dd) return;
-  var toggle = document.getElementById('editorsToggle');
-  var menu = document.getElementById('editorsMenu');
-  document.body.appendChild(menu);
-  function positionMenu(){
-    var r = toggle.getBoundingClientRect();
-    menu.style.top = (r.bottom + 4) + 'px';
-    menu.style.left = r.left + 'px';
-  }
-  function closeMenu(){ dd.classList.remove('open'); menu.classList.remove('show'); }
-  function openMenu(){ positionMenu(); dd.classList.add('open'); menu.classList.add('show'); }
-  toggle.addEventListener('click', function(e){
-    e.stopPropagation();
-    if(menu.classList.contains('show')) closeMenu(); else openMenu();
-  });
-  document.addEventListener('click', function(e){
-    if(!dd.contains(e.target) && !menu.contains(e.target)) closeMenu();
-  });
-  document.addEventListener('keydown', function(e){
-    if(e.key === 'Escape') closeMenu();
-  });
-  window.addEventListener('resize', function(){ if(menu.classList.contains('show')) positionMenu(); });
-  window.addEventListener('scroll', function(){ if(menu.classList.contains('show')) positionMenu(); }, true);
-})();
-</script>
+<script src="assets/layout.js"></script>
 <div class="board">
   <div class="eyebrow">
     <div class="brand"><h1>Listing</h1><span>Alle Wertschriften nach Instrument</span></div>

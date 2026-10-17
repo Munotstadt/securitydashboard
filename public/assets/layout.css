@@ -1,0 +1,45 @@
+/* Shared layout (analog energy.munot.app): full-width top bar with brand + navigation,
+   content using the whole page width. Loaded AFTER each page's inline <style>. */
+:root{ --sd-ink:#1a1a1a; --sd-grey-100:#f4f4f4; --sd-grey-300:#d8d8d8; --sd-grey-600:#666; }
+
+body{ padding:0 0 60px !important; display:block !important; }
+
+/* ---- top bar ---- */
+.sd-topbar{ display:flex; align-items:center; justify-content:space-between; gap:16px; width:100%;
+  padding:12px 20px; border-bottom:2px solid var(--sd-ink); background:#fff; box-sizing:border-box; }
+.sd-brand{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:18px; color:var(--sd-ink);
+  text-decoration:none; white-space:nowrap; flex:none; }
+.sd-brand span{ color:var(--accent,#E30613); }
+.sd-right{ display:flex; align-items:center; gap:6px; min-width:0; }
+.sd-nav{ display:flex; align-items:center; gap:2px; min-width:0; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+.sd-nav::-webkit-scrollbar{ display:none; }
+.sd-nav a, .sd-toggle, .sd-logout{ font-family:'Inter',system-ui,sans-serif; font-size:13px; font-weight:500; color:var(--sd-ink);
+  text-decoration:none; padding:7px 12px; border-radius:6px; border:0; background:none; cursor:pointer; white-space:nowrap; }
+.sd-nav a:hover, .sd-toggle:hover, .sd-dd.open > .sd-toggle, .sd-logout:hover{ background:var(--sd-grey-100); }
+.sd-nav a.active, .sd-dd.active-group > .sd-toggle{ background:var(--sd-ink); color:#fff; }
+.sd-logout{ color:var(--sd-grey-600); flex:none; }
+.sd-menu{ position:fixed; display:none; flex-direction:column; min-width:190px; padding:4px; background:#fff;
+  border:1px solid var(--sd-grey-300); border-radius:6px; box-shadow:0 6px 16px rgba(0,0,0,.12); z-index:1000; }
+.sd-menu.show{ display:flex; }
+.sd-menu a{ font-family:'Inter',system-ui,sans-serif; font-size:13px; font-weight:500; color:var(--sd-ink); text-decoration:none;
+  padding:8px 12px; border-radius:6px; white-space:nowrap; }
+.sd-menu a:hover{ background:var(--sd-grey-100); }
+.sd-menu a.active{ background:var(--sd-ink); color:#fff; }
+
+/* ---- content uses the full page width ---- */
+.board, .wrap{ width:100% !important; max-width:none !important; margin:0 !important; padding:24px 20px 0 !important; box-sizing:border-box; }
+
+/* ---- page title row ("eyebrow"): title + status line instead of the red rule ---- */
+body .eyebrow{ border-bottom:0; padding-bottom:0; margin-bottom:14px; align-items:baseline; }
+body .eyebrow .brand h1, body .eyebrow > h1{ font-family:'Space Grotesk',sans-serif; font-weight:600; font-size:1.4rem; text-transform:none; letter-spacing:0; margin:0 0 2px; }
+body .eyebrow .brand span{ display:block; font-family:'Inter',system-ui,sans-serif; font-size:.85rem; color:var(--muted,#767E8A); }
+body .eyebrow .status{ font-size:.8rem; }
+
+@media (max-width:980px){
+  .sd-topbar{ flex-wrap:wrap; padding:10px 12px; row-gap:6px; }
+  .sd-right{ display:contents; }
+  .sd-nav{ order:3; width:100%; }
+}
+@media (max-width:760px){
+  .board, .wrap{ padding:16px 12px 0 !important; }
+}
