@@ -161,6 +161,7 @@ CREATE TABLE security_transactions (TransactionID INTEGER PRIMARY KEY AUTOINCREM
 CREATE TABLE security_tasks (TaskID INTEGER PRIMARY KEY AUTOINCREMENT, TaskName TEXT NOT NULL, DateDue TEXT, Completed INTEGER DEFAULT 0);
 CREATE INDEX idx_tasks_due ON security_tasks(DateDue);
 CREATE TABLE security_collector_runs (id INTEGER PRIMARY KEY, collectortype text);
+CREATE TABLE collector_runs (id INTEGER PRIMARY KEY, x text);
 INSERT INTO security_parameter VALUES (1,'Buy','security_transactions','TrxArt',NULL,'2026-08-28 00:00:00'),(2,'Sell','security_transactions','TrxArt',NULL,'2026-08-28 00:00:00'),(3,'Dashboard','security_master','DashboardGrouping',NULL,'2026-08-28 00:00:00'),(4,'Collector A','security_master','Collector',NULL,'2026-08-28 00:00:00'),(5,'NewParam','security_master','Status',NULL,'2026-09-20 00:00:00');
 INSERT INTO security_master (SecurityID, SecurityName, Collector, Ticker, Currency, DashboardGrouping, modified_at, TursoOnlyCol) VALUES
  (10,'Held Stock RENAMED',4,'HLD','USD',NULL,'2026-09-25 00:00:00','a'),
@@ -184,6 +185,7 @@ INSERT INTO security_prices (SecurityID, Price, PriceDate, Source) VALUES
   assert.equal(by.security_tasks.in_d1, false);
   assert.match(by.security_tasks.plan, /copy/);
   assert.match(by.security_collector_runs.plan, /NOT touched/);
+  assert.match(by.collector_runs.plan, /skipped/);
   assert.deepEqual(by.security_master.only_in_turso_columns, ['TursoOnlyCol']);
 
   d1db.exec('UPDATE security_master SET Comments = NULL WHERE SecurityID = 13'); // undo the client test's write
@@ -247,6 +249,8 @@ INSERT INTO security_prices (SecurityID, Price, PriceDate, Source) VALUES
   assert.equal(v.all_ok, true);
   assert.ok(!v.tables.some((t) => t.table === 'security_collector_runs'));
   assert.match((await (await call('/api/admin/migrate/copy?table=security_collector_runs&offset=0&reset=1', { method: 'POST' })).json()).error, /owned by D1/);
+  assert.match((await (await call('/api/admin/migrate/copy?table=collector_runs&offset=0', { method: 'POST' })).json()).error, /legacy/);
+  assert.ok(!d1db.prepare("SELECT 1 FROM sqlite_master WHERE name='collector_runs'").get());
   assert.ok(v.tables.find((t) => t.table === 'security_tasks').ok);
 
   // migration endpoints need the secrets

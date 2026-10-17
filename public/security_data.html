@@ -410,18 +410,6 @@ let editingRowId = null;
 
 async function ensureLogTable(){
   if(logTableEnsured) return;
-  try {
-    await dbRun(`CREATE TABLE IF NOT EXISTS security_data_log (
-      LogID INTEGER PRIMARY KEY AUTOINCREMENT,
-      SecurityID INTEGER,
-      DataType TEXT,
-      FieldName TEXT,
-      Action TEXT,
-      OldValue TEXT,
-      NewValue TEXT,
-      ChangedAt TEXT
-    )`);
-  } catch(e) { /* table likely already exists */ }
   logTableEnsured = true;
 }
 

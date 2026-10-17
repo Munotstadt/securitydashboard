@@ -19,6 +19,8 @@
 const SPECIAL = new Set(['security_master', 'security_parameter', 'security_prices']);
 // Tables D1 already owns (written by the Cloudflare collectors / notes app): never copied, not part of verify.
 const D1_OWNED = new Set(['security_collector_runs', 'notes_log', 'notes_jpgs']);
+// Legacy tables that nothing reads any more: not copied (they stay in the Turso dump that gets archived).
+const LEGACY = new Set(['collector_runs']);
 const MAX_PARAMS = 95; // D1 allows 100 bound parameters per statement
 const BATCH_STATEMENTS = 50;
 
@@ -108,7 +110,8 @@ async function report(env) {
     }
     row.plan = SPECIAL.has(t.name)
       ? (t.name === 'security_prices' ? 'prices: add missing (day+source) rows' : 'sync: add missing, update where Turso is newer')
-      : (D1_OWNED.has(t.name) || exists ? 'exists in D1 -> NOT touched (check manually)' : 'copy (schema + rows)');
+      : (LEGACY.has(t.name) ? 'skipped (legacy, not read by any page; stays in the Turso dump)'
+        : D1_OWNED.has(t.name) || exists ? 'exists in D1 -> NOT touched (check manually)' : 'copy (schema + rows)');
     out.push(row);
   }
   const odd = await env.DB.prepare(`SELECT COUNT(*) AS n, MIN(Price_date) AS min_date FROM security_prices WHERE Price_date < '1990'`).first();
@@ -171,6 +174,7 @@ async function copyTable(env, table, offset, rows, reset) {
   if (!t) return { error: 'table not found in Turso' };
   if (SPECIAL.has(table)) return { error: 'use sync/prices for ' + table };
   if (D1_OWNED.has(table)) return { error: table + ' is owned by D1 and must not be copied' };
+  if (LEGACY.has(table)) return { error: table + ' is a legacy table and is intentionally not copied' };
 
   if (!(await d1Exists(env, table))) {
     await env.DB.prepare(t.sql).run(); // identical DDL as in Turso (same SQLite dialect)
@@ -221,6 +225,7 @@ async function syncPrices(env, after, limit, dry) {
 
   let added = 0, checked = 0;
   const perSecurity = [];
+  const bySource = {};
   for (const id of ids) {
     const t = (await turso(env, `SELECT PriceDate, Price, Source FROM security_prices WHERE SecurityID = ?`, [id])).rows;
     const { results } = await env.DB.prepare(`SELECT substr(Price_date,1,10) AS d, COALESCE(source,'') AS s FROM security_prices WHERE SecurityID = ?1 GROUP BY 1, 2`).bind(id).all();
@@ -234,6 +239,7 @@ async function syncPrices(env, after, limit, dry) {
     }
     if (missingRows.length) {
       perSecurity.push({ SecurityID: id, rows: missingRows.length });
+      for (const r of missingRows) bySource[r.Source ?? '(NULL)'] = (bySource[r.Source ?? '(NULL)'] || 0) + 1;
       added += missingRows.length;
       if (!dry) {
         const stmts = missingRows.map((r) => env.DB.prepare(`INSERT OR IGNORE INTO security_prices (SecurityID, Price, Price_adjusted, Price_date, source) VALUES (?1, ?2, ?2, ?3, ?4)`)
@@ -242,7 +248,7 @@ async function syncPrices(env, after, limit, dry) {
       }
     }
   }
-  return { done: false, dry, next_after: ids[ids.length - 1], securities: ids.length, turso_rows_checked: checked, would_insert_or_inserted: added, detail: perSecurity };
+  return { done: false, dry, next_after: ids[ids.length - 1], securities: ids.length, turso_rows_checked: checked, would_insert_or_inserted: added, by_source: bySource, detail: perSecurity };
 }
 
 // ------------------------------------------------------------------ verify
@@ -250,7 +256,7 @@ async function verify(env) {
   const tables = await tursoTables(env);
   const out = [];
   for (const t of tables) {
-    if (t.name === 'security_prices' || D1_OWNED.has(t.name)) continue; // not 1:1 by design (see syncPrices / D1-owned)
+    if (t.name === 'security_prices' || D1_OWNED.has(t.name) || LEGACY.has(t.name)) continue; // not 1:1 by design (see syncPrices / D1-owned)
     const tc = (await turso(env, `SELECT COUNT(*) AS n FROM ${q(t.name)}`)).rows[0].n;
     const exists = await d1Exists(env, t.name);
     const dc = exists ? await count(env, t.name) : null;

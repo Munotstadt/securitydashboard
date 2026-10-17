@@ -1818,18 +1818,6 @@ async function loadFundamentalsChangeLog(secId){
   const wrap = document.getElementById('fundamentalsChangeLogWrap');
   wrap.innerHTML = '<div class="empty">Loading…</div>';
   try {
-    try {
-      await dbRun(`CREATE TABLE IF NOT EXISTS security_data_log (
-        LogID INTEGER PRIMARY KEY AUTOINCREMENT,
-        SecurityID INTEGER,
-        DataType TEXT,
-        FieldName TEXT,
-        Action TEXT,
-        OldValue TEXT,
-        NewValue TEXT,
-        ChangedAt TEXT
-      )`);
-    } catch(e) { /* table likely already exists */ }
     const rows = await dbQuery(
       `SELECT DataType, FieldName, Action, OldValue, NewValue, ChangedAt FROM security_data_log WHERE SecurityID = ? ORDER BY ChangedAt DESC, LogID DESC LIMIT 50`,
       [secId], 0
