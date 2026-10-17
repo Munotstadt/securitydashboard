@@ -13,6 +13,7 @@ pre{background:#111;color:#ddd;padding:10px;border-radius:6px;overflow:auto;max-
   <button id="b1">1 Prüfen (Report)</button>
   <button id="b2">2a Parameter: Trockenlauf</button><button id="b3">2b Parameter: anwenden</button>
   <button id="b4">3a Master: Trockenlauf</button><button id="b5">3b Master: anwenden</button>
+  <div><input id="force" placeholder="IDs, kommagetrennt" style="font:inherit;padding:6px"> <button id="b11">Turso-Werte für diese IDs übernehmen: Parameter</button><button id="b12">… Master</button></div>
   <button id="b6">4 Fehlende Tabellen kopieren</button>
   <button id="b7">5 Indizes</button>
   <button id="b8">6a Kurse: Trockenlauf</button><button id="b9">6b Kurse: ergänzen</button>
@@ -37,6 +38,9 @@ btn('b2', async () => log(await call('sync?table=security_parameter&dry=1', 'POS
 btn('b3', async () => { if (confirm('Parameter in D1 schreiben?')) log(await call('sync?table=security_parameter', 'POST')); });
 btn('b4', async () => log(await call('sync?table=security_master&dry=1', 'POST')));
 btn('b5', async () => { if (confirm('Master in D1 schreiben?')) log(await call('sync?table=security_master', 'POST')); });
+const forceIds = () => document.getElementById('force').value.replace(/[^0-9,]/g, '');
+btn('b11', async () => { const ids = forceIds(); if (ids && confirm('Turso-Werte für Parameter ' + ids + ' übernehmen?')) log(await call('sync?table=security_parameter&force=' + ids, 'POST')); });
+btn('b12', async () => { const ids = forceIds(); if (ids && confirm('Turso-Werte für Master ' + ids + ' übernehmen?')) log(await call('sync?table=security_master&force=' + ids, 'POST')); });
 btn('b6', async () => {
   const rep = await call('report');
   const todo = rep.tables.filter(t => !t.in_d1 && t.plan.startsWith('copy'));

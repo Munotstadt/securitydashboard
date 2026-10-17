@@ -32,7 +32,7 @@ export async function handleMigrate(request, env, url) {
   const q = url.searchParams;
   switch (action) {
     case 'report': return json(await report(env));
-    case 'sync': return json(await syncTable(env, q.get('table'), q.get('dry') === '1'));
+    case 'sync': return json(await syncTable(env, q.get('table'), q.get('dry') === '1', (q.get('force') || '').split(',').map((x) => x.trim()).filter(Boolean).map(Number)));
     case 'copy': return json(await copyTable(env, q.get('table'), Number(q.get('offset') || 0), Number(q.get('rows') || 100), q.get('reset') === '1'));
     case 'prices': return json(await syncPrices(env, Number(q.get('after') || 0), Number(q.get('limit') || 12), q.get('dry') === '1'));
     case 'indexes': return json(await createIndexes(env));
@@ -119,7 +119,9 @@ async function report(env) {
 }
 
 // --------------------------------------------------- master / parameter sync
-async function syncTable(env, table, dry) {
+// force: IDs for which Turso wins even without a newer modified_at (Turso has no modified_at column, so
+// differing rows are otherwise left untouched, i.e. D1 wins). Use after looking at the dry-run values.
+async function syncTable(env, table, dry, force = []) {
   if (table !== 'security_master' && table !== 'security_parameter') return { error: 'table must be security_master or security_parameter' };
   const pk = table === 'security_master' ? 'SecurityID' : 'ParameterID';
   const dcols = await d1Columns(env, table);
@@ -131,21 +133,23 @@ async function syncTable(env, table, dry) {
 
   const toInsert = [], toUpdate = [], same = [];
   const tursoOlder = [];
+  const forced = new Set(force);
+  const vals = (r, cur, diff) => ({ turso: Object.fromEntries(diff.map((c) => [c, r[c]])), d1: Object.fromEntries(diff.map((c) => [c, cur[c]])) });
   for (const r of tRows) {
     const cur = d1.get(r[pk]);
     if (!cur) { toInsert.push(r); continue; }
     const diff = cols.filter((c) => c !== pk && c !== 'created_at' && c !== 'modified_at' && String(r[c] ?? '') !== String(cur[c] ?? ''));
     if (!diff.length) { same.push(r[pk]); continue; }
     const tm = String(r.modified_at ?? ''), dm = String(cur.modified_at ?? '');
-    if (tm > dm) toUpdate.push({ row: r, diff }); else tursoOlder.push({ id: r[pk], columns: diff });
+    if (forced.has(r[pk]) || tm > dm) toUpdate.push({ row: r, diff, ...vals(r, cur, diff) }); else tursoOlder.push({ id: r[pk], columns: diff, ...vals(r, cur, diff) });
   }
   const summary = {
     table, dry,
     turso_rows: tRows.length, d1_rows: results.length,
     identical: same.length,
     to_insert: toInsert.map((r) => r[pk]),
-    to_update: toUpdate.map((u) => ({ id: u.row[pk], columns: u.diff })),
-    differs_but_d1_newer_or_equal: tursoOlder, // left untouched: D1 row is newer (or same age)
+    to_update: toUpdate.map((u) => ({ id: u.row[pk], columns: u.diff, turso: u.turso, d1: u.d1 })),
+    differs_left_untouched_d1_wins: tursoOlder, // shown with both values; take Turso's via force=<ids>
     only_in_d1: results.filter((r) => !tRows.some((t) => t[pk] === r[pk])).length,
     ignored_turso_columns: tcols.filter((c) => !dcols.includes(c)),
   };

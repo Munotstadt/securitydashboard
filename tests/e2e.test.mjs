@@ -195,7 +195,7 @@ INSERT INTO security_prices (SecurityID, Price, PriceDate, Source) VALUES
   s = await (await call('/api/admin/migrate/sync?table=security_master&dry=1', { method: 'POST' })).json();
   assert.deepEqual(s.to_insert, [14]);
   assert.deepEqual(s.to_update.map((u) => u.id), [10]);       // Turso newer -> update
-  assert.equal(s.differs_but_d1_newer_or_equal.length, 0);
+  assert.equal(s.differs_left_untouched_d1_wins.length, 0);
   assert.equal(d1db.prepare('SELECT COUNT(*) n FROM security_master').get().n, 4);
 
   // real run: parameters first (FK), then master
@@ -204,6 +204,12 @@ INSERT INTO security_prices (SecurityID, Price, PriceDate, Source) VALUES
   assert.deepEqual(s.applied, { inserted: 1, updated: 1 }, JSON.stringify(s).slice(0, 400));
   assert.equal(d1db.prepare('SELECT SecurityName FROM security_master WHERE SecurityID=10').get().SecurityName, 'Held Stock RENAMED');
   assert.equal(d1db.prepare('SELECT COUNT(*) n FROM security_master').get().n, 5);
+  // force: Turso wins for a chosen id although it has no newer modified_at
+  tdb.exec("UPDATE security_master SET Currency='GBP' WHERE SecurityID=11");
+  s = await (await call('/api/admin/migrate/sync?table=security_master&dry=1', { method: 'POST' })).json();
+  assert.deepEqual(s.differs_left_untouched_d1_wins.map((x) => [x.id, x.d1.Currency, x.turso.Currency]), [[11, 'CHF', 'GBP']]);
+  s = await (await call('/api/admin/migrate/sync?table=security_master&force=11', { method: 'POST' })).json();
+  assert.equal(d1db.prepare('SELECT Currency FROM security_master WHERE SecurityID=11').get().Currency, 'GBP');
   // idempotent
   s = await (await call('/api/admin/migrate/sync?table=security_master&dry=1', { method: 'POST' })).json();
   assert.equal(s.to_insert.length + s.to_update.length, 0);
