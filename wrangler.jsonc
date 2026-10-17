@@ -1,0 +1,44 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "securitydashboard",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-01",
+
+  // Only reachable via the custom domain (behind Cloudflare Access).
+  // workers.dev / preview URLs would bypass Access, so they stay off.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "security.munot.app", "custom_domain": true }],
+
+  // Static frontend. The Worker only runs for /api/*; everything else is served directly.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "securities",
+      "database_id": "07edce2c-f7e2-48a5-a219-e48005579333"
+    },
+    {
+      // Shared improvement_tasks table (also read by admin.munot.app). Only used by /api/improvements.
+      "binding": "ADMIN_DB",
+      "database_name": "db_admin",
+      "database_id": "78377bf1-f491-4879-bab0-d47a08605f77"
+    }
+  ],
+
+  // Set both after creating the Access application (Zero Trust -> Access -> Applications):
+  //   ACCESS_TEAM_DOMAIN = "<your-team>.cloudflareaccess.com"
+  //   ACCESS_AUD         = "Application Audience (AUD) Tag" of the Access app
+  // Not secrets, so they may live here. Until both are set, /api/* answers 503 (fail closed).
+  "vars": {
+    "ACCESS_TEAM_DOMAIN": "team8155.cloudflareaccess.com",
+    "ACCESS_AUD": "a1b34efd135ac032cfcc1dbbc8668a7e25db29218451fe31c4135e5fe495c14f"
+  },
+
+  "observability": { "enabled": true }
+}

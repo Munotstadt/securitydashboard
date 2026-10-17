@@ -168,82 +168,11 @@
       <button type="button" id="improvementSaveBtn">💡 Save</button>
     </div>
     <div class="footer-row">
-      <button id="settingsBtn">⚙ Repo/Token</button>
     </div>
-  </div>
-  <div class="settings" id="settingsPanel">
-    <form id="tursoCredForm" autocomplete="on" onsubmit="return false;" style="display:contents;">
-      <div><label>Turso Database URL</label><input type="text" id="cfgUrl" name="username" autocomplete="username" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="https://…turso.io"></div>
-      <div><label>Auth Token</label><input type="password" id="cfgToken" name="password" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="eyJ…"></div>
-      <div style="align-self:end;"><button id="cfgSave" type="submit" class="primary">Apply</button></div>
-    </form>
   </div>
 </div>
 
-<script src="assets/turso-data.js"></script>
-<script>
-// Safety net: define the shared schema-guard helpers locally if the loaded
-// assets/turso-data.js doesn't have them yet (e.g. stale cached copy). Avoids
-// a hard "X is not defined" crash; the real versions in turso-data.js take
-// over automatically once that file is up to date (session-cached there).
-if (typeof ensureSecurityMasterSchema === 'undefined') {
-  window.ensureSecurityMasterSchema = async function(){
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateLaunch TEXT'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN DateTerminated TEXT'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN Status INTEGER'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_master ADD COLUMN Comments TEXT'); } catch(e) {}
-  };
-}
-if (typeof ensureSecurityTasksSchema === 'undefined') {
-  window.ensureSecurityTasksSchema = async function(){
-    try {
-      await tursoRun(`CREATE TABLE IF NOT EXISTS security_tasks (
-        TaskID INTEGER PRIMARY KEY AUTOINCREMENT,
-        TaskName TEXT NOT NULL,
-        TaskDescription TEXT,
-        SecurityID INTEGER,
-        DateDue TEXT,
-        Recurring TEXT,
-        Completed INTEGER DEFAULT 0,
-        CompletedAt TEXT,
-        created_at TEXT
-      )`);
-    } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN TaskTypeID INTEGER'); } catch(e) {}
-    try { await tursoRun('ALTER TABLE security_tasks ADD COLUMN Priority TEXT'); } catch(e) {}
-    try {
-      await tursoRun(`CREATE TABLE IF NOT EXISTS security_task_completions (
-        CompletionID INTEGER PRIMARY KEY AUTOINCREMENT,
-        TaskID INTEGER,
-        TaskName TEXT,
-        SecurityID INTEGER,
-        DateDue TEXT,
-        CompletedAt TEXT
-      )`);
-    } catch(e) {}
-  };
-}
-if (typeof ensureSecurityDataSchema === 'undefined') {
-  window.ensureSecurityDataSchema = async function(){
-    try { await tursoRun('ALTER TABLE security_data ADD COLUMN Source TEXT'); } catch(e) {}
-  };
-}
-if (typeof ensureAssetComparisonSchema === 'undefined') {
-  window.ensureAssetComparisonSchema = async function(){
-    try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_group (
-      GroupID INTEGER PRIMARY KEY AUTOINCREMENT,
-      GroupName TEXT NOT NULL,
-      created_at TEXT
-    )`); } catch(e) {}
-    try { await tursoRun(`CREATE TABLE IF NOT EXISTS asset_comparison_member (
-      GroupID INTEGER NOT NULL,
-      SecurityID INTEGER NOT NULL,
-      created_at TEXT,
-      PRIMARY KEY (GroupID, SecurityID)
-    )`); } catch(e) {}
-  };
-}
-</script>
+<script src="assets/db-data.js"></script>
 <script>
 let rows = [];
 let masterRows = [];
@@ -293,12 +222,12 @@ async function applyDateFilter(){
     await ensurePriceIndex();
     const fromIso = activeDateFrom ? toIsoDate(activeDateFrom) : null;
     const toIso = activeDateTo ? toIsoDate(activeDateTo) : null;
-    let sql = 'SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices WHERE SecurityID=?';
+    let sql = 'SELECT id, SecurityID, Price, Price_date AS PriceDate, source AS Source FROM security_prices WHERE SecurityID=?';
     const params = [secId];
     if (fromIso) { sql += ' AND PriceDate >= ?'; params.push(fromIso); }
     if (toIso) { sql += ' AND PriceDate <= ?'; params.push(toIso + ' 23:59:59'); }
     sql += ' ORDER BY PriceDate DESC';
-    const priceRows = await tursoQuery(sql, params);
+    const priceRows = await dbQuery(sql, params);
     rows = priceRows.map(r => ({ ...r, PriceDate: toIsoDateTime(parseSwissDateTime(r.PriceDate)) || r.PriceDate, _dirty:false, _new:false }));
     loadMode = 'range';
   } catch (e) {
@@ -433,7 +362,6 @@ function renderAll(filterSecId=currentSecId) {
 let priceIndexReady = false;
 async function ensurePriceIndex() {
   if (priceIndexReady) return;
-  try { await tursoRun('CREATE INDEX IF NOT EXISTS idx_security_prices_secid_date ON security_prices(SecurityID, PriceDate)'); } catch (e) {}
   priceIndexReady = true;
 }
 
@@ -449,8 +377,8 @@ async function selectSecurity(secId) {
   document.getElementById('body').innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
   try {
     await ensurePriceIndex();
-    const priceRows = await tursoQuery(
-      'SELECT id, SecurityID, Price, PriceDate, Source FROM security_prices WHERE SecurityID=? ORDER BY PriceDate DESC LIMIT ?',
+    const priceRows = await dbQuery(
+      'SELECT id, SecurityID, Price, Price_date AS PriceDate, source AS Source FROM security_prices WHERE SecurityID=? ORDER BY PriceDate DESC LIMIT ?',
       [secId, PRICE_LOAD_LIMIT]
     );
     rows = priceRows.map(r => ({ ...r, PriceDate: toIsoDateTime(parseSwissDateTime(r.PriceDate)) || r.PriceDate, _dirty:false, _new:false }));
@@ -462,13 +390,8 @@ async function selectSecurity(secId) {
 }
 
 async function load() {
-  if (!tursoConfigured()) {
-    document.getElementById('body').innerHTML = `<tr><td colspan="5">Bitte ⚙ Repo/Token setzen.</td></tr>`;
-    document.getElementById('settingsPanel').classList.add('show');
-    return;
-  }
   try {
-    const master = await tursoQuery('SELECT SecurityID, SecurityName FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC', [], 3600000);
+    const master = await dbQuery('SELECT SecurityID, SecurityName FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC', [], 3600000);
     masterRows = master;
     rows = [];
     deleteQueue = [];
@@ -513,7 +436,6 @@ document.getElementById('addBtn').addEventListener('click', () => {
 });
 
 document.getElementById('saveBtn').addEventListener('click', async () => {
-  if (!tursoConfigured()) { setStatus('Bitte ⚙ Repo/Token setzen.', 'error'); document.getElementById('settingsPanel').classList.add('show'); return; }
   for (const r of rows) {
     if (r.PriceDate && !parseSwissDateTime(r.PriceDate)) { setStatus(`Ungültiges PriceDate "${r.PriceDate}" für SecurityID ${r.SecurityID} - erwartet yyyy-mm-dd hh:mm:ss.`, 'error'); return; }
   }
@@ -522,12 +444,12 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     if (!r._dirty) return;
     const isoDate = toIsoDateTime(parseSwissDateTime(r.PriceDate));
     if (r._new) {
-      stmts.push({ sql:`INSERT INTO security_prices (SecurityID, Price, PriceDate, Source, created_at) VALUES (?,?,?,?,?)`,
-        args:[r.SecurityID, r.Price||null, isoDate, r.Source, nowZurichString()] });
+      stmts.push({ sql:`INSERT INTO security_prices (SecurityID, Price, Price_adjusted, Price_date, source) VALUES (?,?,?,?,?)`,
+        args:[r.SecurityID, r.Price||null, r.Price||null, isoDate, r.Source] });
       newRowIdxs.push(i);
     } else {
-      stmts.push({ sql:`UPDATE security_prices SET SecurityID=?, Price=?, PriceDate=?, Source=? WHERE id=?`,
-        args:[r.SecurityID, r.Price||null, isoDate, r.Source, r.id] });
+      stmts.push({ sql:`UPDATE security_prices SET SecurityID=?, Price=?, Price_adjusted=?, Price_date=?, source=?, modified_at=datetime('now') WHERE id=?`,
+        args:[r.SecurityID, r.Price||null, r.Price||null, isoDate, r.Source, r.id] });
     }
   });
   for (const id of deleteQueue) stmts.push({ sql:`DELETE FROM security_prices WHERE id=?`, args:[id] });
@@ -535,7 +457,7 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   if (!stmts.length) { setStatus('Keine Änderungen.', 'ok'); return; }
   try {
     setStatus('Speichere…');
-    const results = await tursoBatch(stmts);
+    const results = await dbBatch(stmts);
     let seen = 0;
     for (let ri=0; ri<stmts.length; ri++) {
       if (stmts[ri].sql.startsWith('INSERT')) { rows[newRowIdxs[seen++]].id = results[ri].lastInsertRowid; rows[newRowIdxs[seen-1]]._new = false; }
@@ -547,16 +469,6 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
   } catch (e) { setStatus('Fehler beim Speichern: ' + e.message, 'error'); }
 });
 
-document.getElementById('settingsBtn').addEventListener('click', () => {
-  document.getElementById('cfgUrl').value = TURSO.url;
-  document.getElementById('cfgToken').value = TURSO.token;
-  document.getElementById('settingsPanel').classList.toggle('show');
-});
-document.getElementById('cfgSave').addEventListener('click', () => {
-  tursoSaveConfig({ url: document.getElementById('cfgUrl').value.trim(), token: document.getElementById('cfgToken').value.trim() });
-  document.getElementById('settingsPanel').classList.remove('show');
-  load();
-});
 
 load();
 
@@ -568,18 +480,17 @@ load();
     var input = document.getElementById('improvementInput');
     var text = input.value.trim();
     if(!text){ return; }
-    if(!tursoConfigured()){ alert('Bitte zuerst ⚙ Repo/Token setzen.'); return; }
     var original = btn.textContent;
     btn.disabled = true; btn.textContent = 'Speichere…';
     try {
-      await ensureSecurityTasksSchema();
+      
       var pageName = (location.pathname.split('/').pop() || 'index.html');
       var todayDate = (typeof nowZurichIsoDateString === 'function') ? new Date(nowZurichIsoDateString()+'T00:00:00')
         : (typeof zurichParts === 'function' ? (function(){ var p = zurichParts(new Date()); return new Date(p.year+'-'+p.month+'-'+p.day+'T00:00:00'); })() : new Date());
       var due = new Date(todayDate); due.setDate(due.getDate()+10);
       var dueIso = due.toISOString().slice(0,10);
       var nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
-      await tursoRun(
+      await dbRun(
         `INSERT INTO security_tasks (TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID, Completed, created_at) VALUES (?,?,?,?,?,?,0,?)`,
         ['Improvement ' + pageName, text, null, dueIso, 'n/a', 140, nowIso]
       );
@@ -593,6 +504,6 @@ load();
   });
 })();
 </script>
-  <script src="https://munotstadt.github.io/db_admin/assets/improvements-button.js" data-app="securitydashboard"></script>
+  <script src="assets/improvements-button.js" data-app="securitydashboard"></script>
 </body>
 </html>

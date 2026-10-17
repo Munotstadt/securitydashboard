@@ -89,3 +89,13 @@ Splitting into separate saved queries, each simple, worked:
   reference is enabled.
 - End-to-end test: click the button (not just running the query manually) and confirm both the download
   and the import happen automatically in sequence.
+
+---
+
+## Update 2026-10-16 – Cloudflare statt GitHub Actions
+
+Die Schritte 1 (GitHub Actions + `data/securityprices.csv`) entfallen. Die CSV wird bei jedem Abruf live aus D1
+erzeugt: `GET https://security.munot.app/api/securityprices.csv` (gleiche Scope-Logik wie zuvor, Spalten
+`SecurityID,PriceDate,Price,Source`). Das lokale Skript liegt jetzt in `tools/access-import/` und meldet sich mit einem
+Cloudflare-Access-Service-Token an (`access-token.json` neben dem Skript, nicht einchecken). Ausgabepfad, Access-Linked-Table,
+Abfragen und VBA-Button bleiben unverändert.
