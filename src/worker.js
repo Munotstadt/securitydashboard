@@ -34,6 +34,9 @@ export default {
       if (url.pathname === '/api/db' && request.method === 'POST') {
         return await handleDb(request, env);
       }
+      if (url.pathname === '/api/improvements' && request.method === 'POST') {
+        return await handleImprovement(request, env);
+      }
       if (url.pathname === '/api/securityprices.csv' && request.method === 'GET') {
         return await handleValuationCsv(env);
       }
@@ -83,6 +86,25 @@ function normalizeArg(v) {
   if (v === undefined || v === '') return null;
   if (typeof v === 'boolean') return v ? 1 : 0;
   return v;
+}
+
+// ------------------------------------------------------ /api/improvements
+// Same-origin target of the floating "improvement" button. Writes into the shared
+// improvement_tasks table of the D1 database "db_admin" (the one admin.munot.app reads),
+// so entries show up there as before - without any cross-site call from the browser.
+async function handleImprovement(request, env) {
+  if (!env.ADMIN_DB) return json({ error: 'ADMIN_DB binding missing' }, 503);
+  let b;
+  try { b = await request.json(); } catch (e) { return json({ error: 'invalid JSON' }, 400); }
+  const clip = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
+  const title = clip(b.title, 200);
+  const sourceApp = clip(b.sourceApp, 100);
+  if (!title || !sourceApp) return json({ error: 'sourceApp und title sind Pflicht' }, 400);
+  const priority = ['low', 'normal', 'high'].includes(b.priority) ? b.priority : 'normal';
+  const r = await env.ADMIN_DB.prepare(
+    'INSERT INTO improvement_tasks (SourceApp, SourceUrl, Title, Note, Priority) VALUES (?, ?, ?, ?, ?)'
+  ).bind(sourceApp, clip(b.sourceUrl, 500) || null, title, clip(b.note, 4000) || null, priority).run();
+  return json({ ok: true, TaskID: r.meta.last_row_id }, 201);
 }
 
 // ------------------------------------------------ /api/securityprices.csv

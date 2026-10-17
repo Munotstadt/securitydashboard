@@ -22,6 +22,12 @@
       "binding": "DB",
       "database_name": "securities",
       "database_id": "07edce2c-f7e2-48a5-a219-e48005579333"
+    },
+    {
+      // Shared improvement_tasks table (also read by admin.munot.app). Only used by /api/improvements.
+      "binding": "ADMIN_DB",
+      "database_name": "db_admin",
+      "database_id": "78377bf1-f491-4879-bab0-d47a08605f77"
     }
   ],
 

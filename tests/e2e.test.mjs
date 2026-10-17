@@ -26,8 +26,10 @@ INSERT INTO security_prices (SecurityID, Price, Price_adjusted, Price_date, sour
  (10,100,100,'2026-10-15 12:00:00','C'),(10,101,101,'2026-10-16 12:00:00','C'),(10,102,102,'2026-10-16 18:00:00','C'),
  (11,0.9,0.9,'2026-10-16 18:00:00','C'),(12,5,5,'2026-10-16 18:00:00','C'),(13,1,1,'2026-10-16 18:00:00','C');
 `);
+const adminDb = new DatabaseSync(':memory:');
+adminDb.exec("CREATE TABLE improvement_tasks (TaskID INTEGER PRIMARY KEY AUTOINCREMENT, SourceApp TEXT NOT NULL, SourceUrl TEXT, Title TEXT NOT NULL, Note TEXT, Status TEXT NOT NULL DEFAULT 'open', Priority TEXT DEFAULT 'normal', CreatedAt TEXT NOT NULL DEFAULT (datetime('now')), UpdatedAt TEXT, CompletedAt TEXT)");
 const env = {
-  DB: makeD1(d1db), ASSETS: { fetch: async () => new Response('asset') },
+  DB: makeD1(d1db), ADMIN_DB: makeD1(adminDb), ASSETS: { fetch: async () => new Response('asset') },
   ACCESS_TEAM_DOMAIN: access.team, ACCESS_AUD: access.aud,
   TURSO_DATABASE_URL: 'libsql://turso.test', TURSO_AUTH_TOKEN: 'x',
 };
@@ -96,6 +98,19 @@ test('/api/db: select, params, write batch, rollback, guards', async () => {
   assert.equal((await db([])).status, 400);
   // a ';' inside a string literal is fine
   assert.equal((await db([{ sql: "SELECT 'a;b' AS x" }])).status, 200);
+});
+
+test('/api/improvements: writes into the shared improvement_tasks table, validates input', async () => {
+  let r = await call('/api/improvements', { method: 'POST', body: { sourceApp: 'securitydashboard', sourceUrl: 'https://security.munot.app/index.html', title: '  Test  ', note: 'n', priority: 'high' } });
+  assert.equal(r.status, 201);
+  const id = (await r.json()).TaskID;
+  assert.deepEqual({ ...adminDb.prepare('SELECT SourceApp, Title, Note, Priority, Status FROM improvement_tasks WHERE TaskID = ?').get(id) }, { SourceApp: 'securitydashboard', Title: 'Test', Note: 'n', Priority: 'high', Status: 'open' });
+  r = await call('/api/improvements', { method: 'POST', body: { sourceApp: 'x', title: 'y', priority: 'bogus' } });
+  assert.equal(adminDb.prepare('SELECT Priority FROM improvement_tasks WHERE TaskID = ?').get((await r.json()).TaskID).Priority, 'normal');
+  assert.equal((await call('/api/improvements', { method: 'POST', body: { sourceApp: 'x', title: '   ' } })).status, 400);
+  assert.equal((await call('/api/improvements', { method: 'POST', body: { title: 'no app' } })).status, 400);
+  assert.equal((await call('/api/improvements', { method: 'POST', jwt: null, body: { sourceApp: 'x', title: 'y' } })).status, 401);
+  assert.equal((await call('/api/improvements')).status, 404); // GET not offered
 });
 
 test('/api/securityprices.csv: holdings + pinned securities only, latest price, sorted', async () => {
