@@ -11,9 +11,8 @@ Browser ──► security.munot.app ──► Cloudflare Access (Google-Login)
 | Pfad | Inhalt |
 |---|---|
 | `public/` | Seiten + `assets/db-data.js` (DB-Zugriff über `POST /api/db`, Cache, Datums-/Währungshelfer) |
-| `src/worker.js` | API: `/api/db` (SELECT/INSERT/UPDATE/DELETE als Batch = Transaktion), `/api/securityprices.csv`, `/api/me`; prüft das Access-JWT |
+| `src/worker.js` | API: `/api/db` (SELECT/INSERT/UPDATE/DELETE als Batch = Transaktion), `/api/me`; prüft das Access-JWT |
 | `wrangler.jsonc` | Worker-Konfiguration (Assets, D1-Binding, Custom Domain, Access-Variablen) |
-| `tools/access-import/` | Lokales Download-Skript für den MS-Access-Import (Service Token) |
 | `migrations/` | D1-Schema-Dokumentation (Schemaänderungen nur hier, nicht aus dem Browser) |
 | `tests/` | `npm test`: Worker, Access-JWT, Client-Bibliothek, Migration (lokal, ohne Cloudflare) |
 | `docs/` | Runbook, CSV-Automation, Währungs-Magnitude-Check |

@@ -109,17 +109,6 @@ test('/api/improvements: writes into the shared improvement_tasks table, validat
   assert.equal((await call('/api/improvements')).status, 404); // GET not offered
 });
 
-test('/api/securityprices.csv: holdings + pinned securities only, latest price, sorted', async () => {
-  const r = await call('/api/securityprices.csv');
-  assert.equal(r.status, 200);
-  assert.equal(await r.text(), [
-    'SecurityID,PriceDate,Price,Source',
-    '10,2026-10-16 18:00:00,102,C',   // net qty 100, latest of 3 rows
-    '11,2026-10-16 18:00:00,0.9,C',   // DashboardGrouping set, no position
-    '',
-  ].join('\n'));                       // 12 (net 0) and 13 (unused) are out of scope
-});
-
 // ---- client library (public/assets/db-data.js) against the real Worker --------------------------
 test('client db-data.js: coercion, session-expiry handling, chunked IN queries (D1 100-param limit)', async () => {
   const store = new Map();
