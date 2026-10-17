@@ -147,5 +147,7 @@ async function main() {
 main().catch((e) => {
   const user = e instanceof UserError;
   log(`${user ? 'ABBRUCH' : 'FEHLER'}: ${e.message}`);
-  process.exit(user ? 2 : 1);
+  // process.exitCode statt process.exit(): sauberes Beenden, sonst bricht Node unter Windows nach der
+  // Konsolenabfrage mit "Assertion failed ... UV_HANDLE_CLOSING" ab.
+  process.exitCode = user ? 2 : 1;
 });
