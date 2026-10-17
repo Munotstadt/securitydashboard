@@ -12,7 +12,6 @@ Browser ──► security.munot.app ──► Cloudflare Access (Google-Login)
 |---|---|
 | `public/` | Seiten + `assets/db-data.js` (DB-Zugriff über `POST /api/db`, Cache, Datums-/Währungshelfer) |
 | `src/worker.js` | API: `/api/db` (SELECT/INSERT/UPDATE/DELETE als Batch = Transaktion), `/api/securityprices.csv`, `/api/me`; prüft das Access-JWT |
-| `src/migrate.js`, `public/migrate.html` | **Temporär**: Einmal-Migration Turso → D1 (danach löschen) |
 | `wrangler.jsonc` | Worker-Konfiguration (Assets, D1-Binding, Custom Domain, Access-Variablen) |
 | `tools/access-import/` | Lokales Download-Skript für den MS-Access-Import (Service Token) |
 | `migrations/` | D1-Schema-Dokumentation (Schemaänderungen nur hier, nicht aus dem Browser) |

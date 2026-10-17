@@ -1,5 +1,5 @@
 // Test helpers: a D1-compatible adapter on top of node:sqlite, a mock Cloudflare Access
-// (RSA keys + JWKS) and a mock Turso /v2/pipeline endpoint.
+// (RSA keys + JWKS).
 import { DatabaseSync } from 'node:sqlite';
 
 export function makeD1(db, { maxParams = 100 } = {}) {
@@ -43,31 +43,6 @@ export async function makeAccess(team = 'test.cloudflareaccess.com', aud = 'AUD1
     return `${h}.${p}.${sig}`;
   }
   return { team, aud, jwk, token, otherKey: (await crypto.subtle.generateKey({ name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify'])).privateKey };
-}
-
-// Minimal Turso /v2/pipeline emulation backed by a node:sqlite database.
-export function tursoHandler(db) {
-  return async (url, opts) => {
-    const body = JSON.parse(opts.body);
-    const results = [];
-    for (const r of body.requests) {
-      if (r.type === 'close') { results.push({ type: 'ok', response: { type: 'close' } }); continue; }
-      try {
-        const args = (r.stmt.args || []).map((a) => a.type === 'null' ? null : a.type === 'integer' ? Number(a.value) : a.value);
-        const st = db.prepare(r.stmt.sql);
-        const cols = st.columns().map((c) => ({ name: c.name }));
-        const rows = st.all(...args).map((row) => cols.map((c) => {
-          const v = row[c.name];
-          if (v === null || v === undefined) return { type: 'null' };
-          if (typeof v === 'number') return Number.isInteger(v) ? { type: 'integer', value: String(v) } : { type: 'float', value: v };
-          if (typeof v === 'bigint') return { type: 'integer', value: String(v) };
-          return { type: 'text', value: String(v) };
-        }));
-        results.push({ type: 'ok', response: { type: 'execute', result: { cols, rows, affected_row_count: 0, last_insert_rowid: null } } });
-      } catch (e) { results.push({ type: 'error', error: { message: e.message } }); }
-    }
-    return new Response(JSON.stringify({ results }), { status: 200, headers: { 'content-type': 'application/json' } });
-  };
 }
 
 export const D1_SCHEMA = `
