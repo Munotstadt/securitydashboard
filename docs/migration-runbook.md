@@ -11,7 +11,8 @@ Reihenfolge einhalten. Der Branch `cloudflare-migration` ersetzt `main` erst in 
 
 ## Phase 2 – Login (Zero Trust → Access → Applications)
 1. **Add application → Self-hosted**, Domain `security.munot.app`, Identity Provider **Google** (wie bei den anderen Seiten), Policy „Allow“ für deine E-Mail(s).
-2. (Entfallen: Service-Token für den CSV-Import wird nicht mehr benötigt.)
+2. Zweite Policy **Service Auth** nur für den Pfad `security.munot.app/api/securityprices.csv` (für das Access-Import-Skript),
+   dazu unter Access → Service Auth ein **Service Token** `securitydashboard-access-import` anlegen. Client-ID/Secret notieren.
 3. Auf der Application-Übersicht den **Application Audience (AUD) Tag** kopieren; Team-Domain = `<team>.cloudflareaccess.com` (Zero Trust → Settings → Custom Pages / Team name).
 4. In `wrangler.jsonc` unter `vars` eintragen und pushen: `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`. (Nicht im Dashboard setzen: `wrangler deploy` überschreibt Dashboard-Variablen.)
 5. Test: `https://security.munot.app/index.html` → Google-Login → Seite lädt Daten.
@@ -28,6 +29,7 @@ Reihenfolge einhalten. Der Branch `cloudflare-migration` ersetzt `main` erst in 
 ## Phase 4 – Abnahme
 - Pro Seite kurz prüfen: Index, Portfolio (Δ-Werte), Security-Detail (Kurshistorie, Verteilungen), Editoren (Speichern/Löschen), Tasks, Admin (Import mit >100 Securities), Asset-Comparison.
 - Auffälligkeit schon vorher in D1: Kurszeilen mit `Price_date` vor 1990 (Report zeigt die Anzahl) → prüfen/bereinigen.
+- Access-Import: `access-token.json` neben `tools/access-import/download-securityprices-csv.js` auf dem PC ablegen, Skript ausführen, dann den Access-Button testen.
 
 ## Phase 5 – Umschalten und aufräumen
 1. Pull Request `cloudflare-migration` → `main` mergen. Workers Builds auf Branch `main` umstellen. GitHub Pages abschalten (Repo → Settings → Pages → None); die alte Pages-Access-App entfernen.

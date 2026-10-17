@@ -92,10 +92,10 @@ Splitting into separate saved queries, each simple, worked:
 
 ---
 
-## Update 2026-10-17 – Automatischer Import eingestellt
+## Update 2026-10-16 – Cloudflare statt GitHub Actions
 
-Mit der Migration zu Cloudflare (security.munot.app, D1) wurde der automatische CSV-Import eingestellt: GitHub Action,
-`data/securityprices.csv`, der Endpunkt `/api/securityprices.csv` und das Download-Skript mit Service Token sind entfernt.
-Die Bewertungs-CSV kann weiterhin manuell über den Button „⬇ Valuation CSV“ in `portfolio.html` exportiert werden
-(gleiche Scope-Logik). Die Access-Seite (Linked Table, Abfragen, VBA) bleibt als Dokumentation bestehen, wird aber nicht
-mehr automatisch gespeist.
+Die Schritte 1 (GitHub Actions + `data/securityprices.csv`) entfallen. Die CSV wird bei jedem Abruf live aus D1
+erzeugt: `GET https://security.munot.app/api/securityprices.csv` (gleiche Scope-Logik wie zuvor, Spalten
+`SecurityID,PriceDate,Price,Source`). Das lokale Skript liegt jetzt in `tools/access-import/` und meldet sich mit einem
+Cloudflare-Access-Service-Token an (`access-token.json` neben dem Skript, nicht einchecken). Ausgabepfad, Access-Linked-Table,
+Abfragen und VBA-Button bleiben unverändert.

@@ -35,6 +35,9 @@ export default {
       if (url.pathname === '/api/improvements' && request.method === 'POST') {
         return await handleImprovement(request, env);
       }
+      if (url.pathname === '/api/securityprices.csv' && request.method === 'GET') {
+        return await handleValuationCsv(env);
+      }
       return json({ error: 'not found' }, 404);
     } catch (err) {
       return json({ error: String(err && err.message || err) }, 500);
@@ -97,6 +100,48 @@ async function handleImprovement(request, env) {
     'INSERT INTO improvement_tasks (SourceApp, SourceUrl, Title, Note, Priority) VALUES (?, ?, ?, ?, ?)'
   ).bind(sourceApp, clip(b.sourceUrl, 500) || null, title, clip(b.note, 4000) || null, priority).run();
   return json({ ok: true, TaskID: r.meta.last_row_id }, 201);
+}
+
+// ------------------------------------------------ /api/securityprices.csv
+// Latest price per in-scope security, for the local MS-Access import.
+// In scope: net Quantity (Buy/Sell) != 0  OR  security_master.DashboardGrouping set.
+// Same logic as portfolio.html's "Valuation CSV" button - keep both in sync.
+async function handleValuationCsv(env) {
+  const { results } = await env.DB.prepare(`
+    WITH net AS (
+      SELECT t.SecurityID AS SecurityID, SUM(t.Quantity) AS Qty
+        FROM security_transactions t
+        JOIN security_parameter ta ON ta.ParameterID = t.TrxArt
+       WHERE ta.ParameterName IN ('Buy', 'Sell')
+       GROUP BY t.SecurityID
+    ),
+    scope AS (
+      SELECT m.SecurityID
+        FROM security_master m
+        LEFT JOIN net n ON n.SecurityID = m.SecurityID
+       WHERE m.DashboardGrouping IS NOT NULL OR ABS(COALESCE(n.Qty, 0)) >= 1e-9
+    ),
+    latest AS (
+      SELECT p.SecurityID, p.Price_date, p.Price, p.source,
+             ROW_NUMBER() OVER (PARTITION BY p.SecurityID ORDER BY p.Price_date DESC, p.id DESC) AS rn
+        FROM security_prices p
+        JOIN scope s ON s.SecurityID = p.SecurityID
+    )
+    SELECT SecurityID, Price_date, Price, source FROM latest WHERE rn = 1 ORDER BY SecurityID
+  `).all();
+
+  const lines = ['SecurityID,PriceDate,Price,Source'];
+  for (const r of results || []) {
+    lines.push([csvField(r.SecurityID), csvField(r.Price_date), csvField(r.Price), csvField(r.source)].join(','));
+  }
+  return new Response(lines.join('\n') + '\n', {
+    headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
+function csvField(v) {
+  const s = v === null || v === undefined ? '' : String(v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
 // ------------------------------------------------------ Access JWT check
