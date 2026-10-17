@@ -200,6 +200,46 @@ async function dbRun(sql, args = []) {
   return result || { rows: [], affected: 0, lastInsertRowid: null };
 }
 
+// ============ Recent daily closes for ALL securities (shared by index/dashboard/listing/portfolio/analyser) ============
+// security_prices holds ~200k rows (many intraday). These pages only need one close per
+// security and day for the last `daysBack` days (period references up to 360D, YTD, 180D
+// volatility), so the reduction is done in SQL: last row per (SecurityID, day) inside the
+// window, plus per security the latest row BEFORE the window (so stale/terminated securities
+// and far-back references still resolve). Price_date is ISO in D1, so string comparison is safe.
+// Cached compactly (arrays instead of objects) so it fits sessionStorage and is shared across pages.
+async function dbRecentDailyPrices(daysBack = 420, ttlMs = 600000) {
+  const cutoffDate = new Date(); cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+  const cutoff = toIsoDate(cutoffDate);
+  const key = DB_CACHE_PREFIX + 'RECENT_DAILY_' + daysBack;
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (raw) {
+      const o = JSON.parse(raw);
+      if (o && o.cutoff === cutoff && Date.now() - o.ts <= ttlMs) {
+        return o.rows.map(a => ({ SecurityID: a[0], Price: a[1], PriceDate: a[2], Source: a[3] }));
+      }
+    }
+  } catch (e) {}
+  const rows = await dbQuery(
+    `WITH d AS (
+       SELECT SecurityID, Price, Price_date, source,
+              ROW_NUMBER() OVER (PARTITION BY SecurityID, substr(Price_date, 1, 10) ORDER BY Price_date DESC, id DESC) AS rn
+         FROM security_prices WHERE Price_date >= ?
+     )
+     SELECT SecurityID, Price, Price_date AS PriceDate, source AS Source FROM d WHERE rn = 1
+     UNION ALL
+     SELECT SecurityID, Price, Price_date AS PriceDate, source AS Source FROM (
+       SELECT SecurityID, Price, Price_date, source, MAX(Price_date) AS maxd
+         FROM security_prices WHERE Price_date < ? GROUP BY SecurityID
+     )`,
+    [cutoff, cutoff]
+  );
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ ts: Date.now(), cutoff, rows: rows.map(r => [r.SecurityID, r.Price, r.PriceDate, r.Source]) }));
+  } catch (e) {}
+  return rows;
+}
+
 // ============ security_parameter lookups (generic FK-lookup pattern) ============
 // Cached for 5 min by default — dropdown option lists (Collector, DashboardGrouping,
 // Instrument, PortfolioGrouping, TrxArt) change rarely.

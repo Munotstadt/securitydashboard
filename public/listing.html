@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Listing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613;--gain:#1F8A6E;--loss:#C0293D; }
@@ -210,7 +212,7 @@ async function load(){
               LEFT JOIN security_parameter ip ON ip.ParameterID = sm.Instrument
               LEFT JOIN security_parameter sp ON sp.ParameterID = sm.Status
               ORDER BY sm.SecurityName COLLATE NOCASE ASC`, [], 3600000),
-      dbQuery(`SELECT SecurityID, Price, Price_date AS PriceDate, source AS Source FROM security_prices`, [], 3600000),
+      dbRecentDailyPrices(420),
       dbQuery(`SELECT SecurityID, DateDue FROM security_tasks WHERE Completed = 0 AND SecurityID IS NOT NULL`, [], 0),
       currencyFactors(),
     ]);

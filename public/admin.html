@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613; }
@@ -230,7 +232,7 @@ async function load(){
       dbQuery('SELECT COUNT(*) AS n FROM security_prices'),
       dbQuery('SELECT COUNT(*) AS n FROM security_distributions'),
       dbQuery('SELECT COUNT(*) AS n FROM security_transactions'),
-      dbQuery('SELECT created_at, source AS Source FROM security_prices'),
+      dbQuery("SELECT substr(created_at,1,10) || ' 12:00:00' AS created_at, source AS Source, COUNT(*) AS n FROM security_prices WHERE created_at >= date('now','-32 days') GROUP BY substr(created_at,1,10), source"),
     ]);
 
     document.getElementById('summaryBoxes').innerHTML = `
@@ -252,12 +254,13 @@ async function load(){
       const dt = parseSwissDateTime(r.created_at);
       if(!dt) continue;
       const key = dayKey(dt);
-      if(dt >= chartCutoff) countsByDay.set(key, (countsByDay.get(key)||0)+1);
+      const cnt = Number(r.n)||1;
+      if(dt >= chartCutoff) countsByDay.set(key, (countsByDay.get(key)||0)+cnt);
       if(dt >= tableCutoff){
         const src = r.Source || '—';
         if(!countsBySourceDay.has(src)) countsBySourceDay.set(src, new Map());
         const bySrc = countsBySourceDay.get(src);
-        bySrc.set(key, (bySrc.get(key)||0)+1);
+        bySrc.set(key, (bySrc.get(key)||0)+cnt);
       }
     }
     const buckets = [];

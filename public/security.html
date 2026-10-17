@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Security Detail</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{ --bg:#fff;--panel:#F7F8FA;--line:#E3E6EA;--text:#1A1D22;--muted:#767E8A;--accent:#E30613;--gain:#1F8A6E;--loss:#C0293D; }
@@ -662,17 +664,10 @@ let priceHistoryTiered = false; // true when the loaded history uses the daily/m
 // Goal: avoid pulling the full daily price history for long-lived securities
 // on every load, without ever silently corrupting date-based logic.
 //
-// Why not a plain "WHERE PriceDate >= ?" cutoff: security_prices.PriceDate is
-// NOT stored in one consistent format - price_editor.html writes Swiss
-// "dd.mm.yyyy hh:mm:ss" for manual entries, while admin.html's CSV/UBS import
-// writes ISO "yyyy-mm-dd" (see toIsoDate() in db-data.js). A SQL string
-// comparison across that mix sorts wrong (e.g. "05.03.2020" > "2024-01-01"
-// lexically). So date filtering happens here in JS, using the same
-// parseSwissDateTime() the rest of the app already trusts - SQL is only ever
-// used for an exact `id IN (...)` match, which is format-agnostic and safe.
+// Date filtering happens in SQL: Price_date is stored as ISO text in D1 (verified: no other formats), so
+// string comparison sorts correctly.
 //
-// Approach: fetch id+PriceDate only (2 columns, cheap) for every row, parse
-// dates in JS, then fetch full rows for: (a) everything within the last ~5
+// Approach (single query): fetch full rows for: (a) everything within the last ~5
 // years [this is the longest window any calculation on this page needs -
 // Risk tab's 1/3/5Y volatility/drawdown columns, Price tab's period-return
 // columns - all daily-accurate], plus (b) one representative (last-of-month)
@@ -690,30 +685,24 @@ let priceHistoryTiered = false; // true when the loaded history uses the daily/m
 const PRICE_TIER_SMALL_HISTORY_THRESHOLD = 1500;
 const PRICE_TIER_DAILY_YEARS = 5;
 async function loadTieredPriceHistory(secId){
-  const idx = await dbQuery('SELECT id, Price_date AS PriceDate FROM security_prices WHERE SecurityID = ?', [secId], 600000);
-  if(!idx.length) { priceHistoryTiered = false; return []; }
-  const parsed = idx.map(r => ({ id: r.id, dt: parseSwissDateTime(r.PriceDate) })).filter(r => r.dt).sort((a,b) => a.dt-b.dt);
-  if(!parsed.length) { priceHistoryTiered = false; return []; }
-
-  if(parsed.length <= PRICE_TIER_SMALL_HISTORY_THRESHOLD){
-    priceHistoryTiered = false;
-    return dbQuery('SELECT id, SecurityID, Price, Price_date AS PriceDate, source AS Source FROM security_prices WHERE SecurityID = ?', [secId], 600000);
-  }
-
-  const dailyCutoff = daysAgo(new Date(), Math.round(PRICE_TIER_DAILY_YEARS*365.25) + 30); // small buffer past 5y
-  const dailyIds = [];
-  const monthEndIdByKey = new Map(); // "year-month" -> id of the last (date-ascending) row seen for that month
-  for(const p of parsed){
-    if(p.dt >= dailyCutoff){ dailyIds.push(p.id); continue; }
-    const mk = `${p.dt.getFullYear()}-${p.dt.getMonth()}`;
-    monthEndIdByKey.set(mk, p.id); // parsed is date-ascending, so the last write per key is that month's latest row
-  }
-  const idList = [...new Set([parsed[0].id, ...monthEndIdByKey.values(), ...dailyIds])]; // parsed[0].id = true inception point, exact
-  priceHistoryTiered = true;
-  return dbQueryIn(
-    ph => `SELECT id, SecurityID, Price, Price_date AS PriceDate, source AS Source FROM security_prices WHERE SecurityID = ? AND id IN (${ph})`,
-    idList, [secId], 600000
+  // One round trip, decided in SQL (Price_date is ISO in D1, so string comparison is safe):
+  // small histories -> all rows; otherwise daily rows for the last ~5y + last row of each older
+  // calendar month + the very first row. `total` carries the full row count so the caller flag
+  // (priceHistoryTiered) can still be derived without a second query.
+  const dailyCutoff = toIsoDate(daysAgo(new Date(), Math.round(PRICE_TIER_DAILY_YEARS*365.25) + 30));
+  const rows = await dbQuery(
+    `SELECT id, SecurityID, Price, PriceDate, Source, total FROM (
+       SELECT id, SecurityID, Price, Price_date AS PriceDate, source AS Source,
+              COUNT(*) OVER () AS total,
+              ROW_NUMBER() OVER (ORDER BY Price_date ASC, id ASC) AS rn_first,
+              ROW_NUMBER() OVER (PARTITION BY substr(Price_date, 1, 7) ORDER BY Price_date DESC, id DESC) AS rn_month
+         FROM security_prices WHERE SecurityID = ?
+     ) WHERE total <= ? OR PriceDate >= ? OR rn_month = 1 OR rn_first = 1`,
+    [secId, PRICE_TIER_SMALL_HISTORY_THRESHOLD, dailyCutoff], 600000
   );
+  if(!rows.length) { priceHistoryTiered = false; return []; }
+  priceHistoryTiered = Number(rows[0].total) > PRICE_TIER_SMALL_HISTORY_THRESHOLD;
+  return rows;
 }
 
 // ---- FX: rate at/before a cutoff date, with fallback to oldest available (marked approx) ----
