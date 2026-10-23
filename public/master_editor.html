@@ -72,7 +72,7 @@
 <div class="wrap">
   <h1>Security Master · Editor</h1>
   <div class="toolbar">
-    <input type="text" id="search" placeholder="Suche (Name, ISIN, Ticker)…">
+    <input type="text" id="search" placeholder="Suche (ID, Name, ISIN, Ticker, Instrument, Sector, Dashboard-/Portfolio-Grouping, Collector)…">
     <button id="addBtn">+ New Row</button>
     <button id="saveBtn" class="primary">Save</button>
   </div>
@@ -183,7 +183,13 @@ function renderAll(filter='') {
   let filtered = rows.map((r,i)=>({r,i})).filter(({r}) => !f ||
     (r.SecurityName||'').toLowerCase().includes(f) ||
     (r.ID_ISIN||'').toLowerCase().includes(f) ||
-    (r.Ticker||'').toLowerCase().includes(f));
+    (r.Ticker||'').toLowerCase().includes(f) ||
+    String(r.SecurityID ?? '').includes(f) ||
+    paramName(instrumentOpts, r.Instrument).toLowerCase().includes(f) ||
+    paramName(sectorOpts, r.Sector).toLowerCase().includes(f) ||
+    paramName(groupingOpts, r.DashboardGrouping).toLowerCase().includes(f) ||
+    paramName(portfolioGroupingOpts, r.PortfolioGrouping).toLowerCase().includes(f) ||
+    paramName(collectorOpts, r.Collector).toLowerCase().includes(f));
 
   if (sortField) {
     filtered = [...filtered].sort((a,b) => {
