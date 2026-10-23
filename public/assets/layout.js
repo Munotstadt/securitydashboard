@@ -8,7 +8,7 @@
   var EDITORS = [
     ['master_editor.html', 'Master Data'], ['price_editor.html', 'Prices'], ['transactions_editor.html', 'Transactions'],
     ['distribution_editor.html', 'Distributions'], ['parameters_editor.html', 'Parameters'], ['security_data.html', 'Security Data'],
-    ['admin.html', 'Admin']
+    ['aa.html', 'Asset Allocation'], ['admin.html', 'Admin']
   ];
   var cur = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
   if (cur === '') cur = 'index.html';
