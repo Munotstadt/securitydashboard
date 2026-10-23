@@ -149,6 +149,13 @@ function rowWeightValid(r){ return isFinite(r.Weight) && r.Weight > 0 && r.Weigh
 function sumCents(){ return rows.reduce((s, r) => s + (isFinite(r.Weight) ? Math.round(r.Weight * 100) : 0), 0); }
 function isComplete(){ return rows.length > 0 && rows.every(rowWeightValid) && sumCents() === 10000; }
 
+// Sector stored in security_master.Sector (if set and a real sector) - used to pre-fill rows.
+function masterSectorOf(secId){
+  const o = overview.find(x => Number(x.SecurityID) === Number(secId));
+  const n = o && o.MasterSector;
+  return (n && n !== '_not defined' && SECTORS.includes(n)) ? n : null;
+}
+
 // ---------- sub-security helpers ----------
 function subSecDisplay(v){
   if (v === null || v === undefined || v === '') return '';
@@ -168,10 +175,11 @@ function subSecParse(text){
 // ---------- load ----------
 async function loadOverview(){
   overview = (await dbQuery(`
-    SELECT m.SecurityID, m.SecurityName, m.Currency,
+    SELECT m.SecurityID, m.SecurityName, m.Currency, ps.ParameterName AS MasterSector,
            COALESCE(a.W, 0) AS W, COALESCE(a.N, 0) AS N,
            CASE WHEN m.DashboardGrouping IS NOT NULL OR ABS(COALESCE(q.Q, 0)) >= 1e-9 THEN 1 ELSE 0 END AS inScope
       FROM security_master m
+      LEFT JOIN security_parameter ps ON ps.ParameterID = m.Sector
       LEFT JOIN (SELECT SecurityID, SUM(Weight) AS W, COUNT(*) AS N FROM security_asset_allocation GROUP BY SecurityID) a ON a.SecurityID = m.SecurityID
       LEFT JOIN (SELECT t.SecurityID AS SecurityID, SUM(t.Quantity) AS Q
                    FROM security_transactions t JOIN security_parameter ta ON ta.ParameterID = t.TrxArt
@@ -255,7 +263,12 @@ function renderTable(){
 function onField(el){
   const r = rows[Number(el.closest('tr').dataset.idx)], f = el.dataset.f;
   if (f === 'Weight') { r._wText = el.value; r.Weight = parseW(el.value); el.classList.toggle('bad', !rowWeightValid(r)); }
-  else if (f === 'SubSecurity') { r.SubSecurity = subSecParse(el.value); el.value = subSecDisplay(r.SubSecurity); }
+  else if (f === 'SubSecurity') {
+    r.SubSecurity = subSecParse(el.value); el.value = subSecDisplay(r.SubSecurity);
+    // A selected security brings its master sector along (can still be overridden manually).
+    const sec = (r.SubSecurity && /^\d+$/.test(String(r.SubSecurity))) ? masterSectorOf(r.SubSecurity) : null;
+    if (sec) { r.Sector = sec; const sel = el.closest('tr').querySelector('[data-f="Sector"]'); if (sel) sel.value = sec; }
+  }
   else if (f === 'Country') { r.Country = el.value.trim() || null; }
   else { r[f] = el.value; }
   r._dirty = true;
@@ -343,7 +356,7 @@ $('addBtn').addEventListener('click', () => {
   const rest = (10000 - sumCents()) / 100;
   const w = rest > 0 ? rest : NaN;
   rows.push({ AllocationID: null, AssetClass: last ? last.AssetClass : 'Share', Region: last ? last.Region : 'World', Country: null, SubSecurity: null,
-    Sector: '_not defined', Weight: w, _wText: fmtW(w), _new: true, _dirty: true });
+    Sector: masterSectorOf(currentId) || '_not defined', Weight: w, _wText: fmtW(w), _new: true, _dirty: true });
   renderAll();
   const ins = $('body').querySelectorAll('tr.new-row');
   if (ins.length) { const el = ins[ins.length - 1].querySelector('[data-f="Country"]'); if (el) el.focus(); }
