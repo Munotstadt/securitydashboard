@@ -375,7 +375,7 @@
     <div class="pie-row" id="manualAllocPies"><div class="chart-empty">Loading…</div></div>
     <div class="table-wrap" id="manualAllocTableWrap" style="margin-top:14px;">
     <table id="manualAllocTable">
-      <thead><tr><th>Asset Class</th><th>Region</th><th>Country</th><th>Sub-Security</th><th>Sector</th><th class="num">Weight %</th></tr></thead>
+      <thead><tr><th>Asset Class</th><th>Region</th><th>Country</th><th>Sub-Security</th><th>Sector</th><th>Currency Risk</th><th class="num">Weight %</th></tr></thead>
       <tbody id="manualAllocBody"></tbody>
     </table>
     </div>
@@ -1689,7 +1689,7 @@ async function loadManualAllocation(secId){
   let rows;
   try {
     rows = await dbQuery(
-      'SELECT AssetClass, Region, Country, SubSecurity, Sector, Weight, modified_at_utc FROM security_asset_allocation WHERE SecurityID = ? ORDER BY AllocationID ASC',
+      'SELECT AssetClass, Region, Country, SubSecurity, Sector, CurrencyRisk, Weight, modified_at_utc FROM security_asset_allocation WHERE SecurityID = ? ORDER BY AllocationID ASC',
       [secId]);
   } catch(e) {
     wrap.classList.add('hidden');
@@ -1727,6 +1727,7 @@ async function loadManualAllocation(secId){
     pieBlock('Asset Class', agg(r => r.AssetClass)) +
     pieBlock('Sector', agg(r => r.Sector)) +
     pieBlock('Region', agg(r => r.Region)) +
+    pieBlock('Currency Risk', agg(r => r.CurrencyRisk || '(ohne Währung)')) +
     pieBlock('Country', agg(r => r.Country || '(ohne Land)'));
 
   const subName = v => {
@@ -1736,7 +1737,7 @@ async function loadManualAllocation(secId){
   };
   body.innerHTML = rows.map(r => `<tr>
     <td>${escA(r.AssetClass)}</td><td>${escA(r.Region)}</td><td>${escA(r.Country)}</td>
-    <td>${escA(subName(r.SubSecurity))}</td><td>${escA(r.Sector)}</td><td class="num">${Number(r.Weight).toFixed(2)}</td>
+    <td>${escA(subName(r.SubSecurity))}</td><td>${escA(r.Sector)}</td><td>${escA(r.CurrencyRisk)}</td><td class="num">${Number(r.Weight).toFixed(2)}</td>
   </tr>`).join('');
   const sum = rows.reduce((s,r) => s+Number(r.Weight||0), 0);
   const newest = rows.reduce((m,r) => (r.modified_at_utc > m ? r.modified_at_utc : m), '');
