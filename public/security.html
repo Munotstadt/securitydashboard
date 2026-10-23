@@ -621,6 +621,7 @@ let collectorOpts = [];
 let groupingOpts = [];
 let instrumentOpts = [];
 let portfolioGroupingOpts = [];
+let sectorOpts = [];
 let statusOpts = [];
 let currentPriceRange = '90D';
 let currentDistRange = '24M';
@@ -1062,7 +1063,8 @@ function renderMasterForm(master){
       <div class="field"><label>ISIN</label><input type="text" id="mfIsin" value="${master.ID_ISIN||''}"></div>
       <div class="field"><label>SecurityID</label><input type="text" value="${master.SecurityID||''}" disabled></div>
     </div>
-    <div class="mf-row cols-2">
+    <div class="mf-row cols-3">
+      <div class="field"><label>Sector</label><select id="mfSector">${optionList(sectorOpts, master.Sector, true)}</select></div>
       <div class="field"><label>DashboardGrouping</label><select id="mfGrouping">${optionList(groupingOpts, master.DashboardGrouping, true)}</select></div>
       <div class="field"><label>PortfolioGrouping</label><select id="mfPortfolioGrouping">${optionList(portfolioGroupingOpts, master.PortfolioGrouping, true)}</select></div>
     </div>
@@ -1455,6 +1457,7 @@ document.getElementById('masterSave').addEventListener('click', async () => {
   const collector = document.getElementById('mfCollector').value || null;
   const grouping = document.getElementById('mfGrouping').value || null;
   const instrument = document.getElementById('mfInstrument').value || null;
+  const sector = document.getElementById('mfSector').value || null;
   const portfolioGrouping = document.getElementById('mfPortfolioGrouping').value || null;
   const dateLaunch = document.getElementById('mfDateLaunch').value || null;
   const dateTerminated = document.getElementById('mfDateTerminated').value || null;
@@ -1463,8 +1466,8 @@ document.getElementById('masterSave').addEventListener('click', async () => {
   try{
     setQuickStatus('masterStatus','Speichere…','');
     
-    await dbRun('UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, DashboardGrouping=?, Instrument=?, PortfolioGrouping=?, DateLaunch=?, DateTerminated=?, Status=?, Comments=? WHERE SecurityID=?',
-      [name, currency, ticker, isin, valor, collector, grouping, instrument, portfolioGrouping, dateLaunch, dateTerminated, status, comments, curSecId]);
+    await dbRun('UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, DashboardGrouping=?, Instrument=?, Sector=?, PortfolioGrouping=?, DateLaunch=?, DateTerminated=?, Status=?, Comments=? WHERE SecurityID=?',
+      [name, currency, ticker, isin, valor, collector, grouping, instrument, sector, portfolioGrouping, dateLaunch, dateTerminated, status, comments, curSecId]);
     setQuickStatus('masterStatus','Gespeichert ✓','ok');
     await load();
   }catch(e){ setQuickStatus('masterStatus','Fehler: '+e.message,'err'); }
@@ -1473,8 +1476,8 @@ document.getElementById('masterSave').addEventListener('click', async () => {
 async function load(){
   try {
     
-    const [master, collectors, groupings, instruments, portfolioGroupings, statuses, currencyOpts] = await Promise.all([
-      dbQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.Ticker, sm.ID_ISIN, sm.ID_Valor, sm.Collector, sm.DashboardGrouping, sm.Instrument, sm.PortfolioGrouping,
+    const [master, collectors, groupings, instruments, portfolioGroupings, sectors, statuses, currencyOpts] = await Promise.all([
+      dbQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.Ticker, sm.ID_ISIN, sm.ID_Valor, sm.Collector, sm.DashboardGrouping, sm.Instrument, sm.Sector, sm.PortfolioGrouping,
                          sm.DateLaunch, sm.DateTerminated, sm.Status, sm.Comments,
                          gp.ParameterName AS GroupName, sp.ParameterName AS StatusName
                   FROM security_master sm
@@ -1485,6 +1488,7 @@ async function load(){
       dbParameterOptions('security_master','DashboardGrouping'),
       dbParameterOptions('security_master','Instrument'),
       dbParameterOptions('security_master','PortfolioGrouping'),
+      dbParameterOptions('security_master','Sector'),
       dbParameterOptions('security_master','Status'),
       dbCurrencyOptions(),
     ]);
@@ -1493,6 +1497,7 @@ async function load(){
     groupingOpts = groupings;
     instrumentOpts = instruments;
     portfolioGroupingOpts = portfolioGroupings;
+    sectorOpts = sectors;
     statusOpts = statuses;
     CURRENCY_OPTS = currencyOpts;
 
