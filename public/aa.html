@@ -30,6 +30,8 @@
   table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;min-width:1320px;}
   th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);background:var(--panel);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   th.num{text-align:right;}
+  th.sortable{cursor:pointer;user-select:none;}
+  th.sortable:hover{color:var(--accent);}
   td{padding:2px 6px;border-bottom:1px solid var(--line);vertical-align:middle;height:28px;}
   td input, td select{width:100%;}
   td input[type=text], td select{font-size:12px;padding:2px 6px;height:24px;line-height:18px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);font-family:'Inter',sans-serif;}
@@ -103,7 +105,7 @@
           <colgroup>
             <col style="width:110px"><col style="width:150px"><col style="width:130px"><col style="width:105px"><col style="width:130px"><col><col style="width:170px"><col style="width:110px"><col style="width:90px"><col style="width:40px">
           </colgroup>
-          <thead><tr><th>Asset Class</th><th>Subclass</th><th>Region</th><th>Sub-Region</th><th>Country</th><th>Sub-Security</th><th>Sector</th><th>Currency Risk</th><th class="num">Weight %</th><th></th></tr></thead>
+          <thead><tr><th>Asset Class</th><th>Subclass</th><th>Region</th><th>Sub-Region</th><th>Country</th><th>Sub-Security</th><th>Sector</th><th>Currency Risk</th><th class="num sortable" id="thWeight" title="Nach Weight sortieren (Klick wechselt auf-/absteigend)">Weight % <span id="wSortInd"></span></th><th></th></tr></thead>
           <tbody id="body"><tr><td colspan="10" class="empty">Security wählen…</td></tr></tbody>
           <tfoot><tr><td colspan="8" id="sumLabel">Summe</td><td id="sumCell" style="text-align:right"></td><td></td></tr></tfoot>
         </table>
@@ -166,6 +168,7 @@ const GREY_NA = '#c9ced6', GREY_OTHER = '#8b929c';
 let overview = [];        // [{SecurityID, SecurityName, Currency, W, N, inScope}]
 let secNameById = new Map();
 let currentId = null;
+let wSortDir = 0;   // 0 = Erfassungsreihenfolge, -1 = absteigend, 1 = aufsteigend
 let rows = [];            // {AllocationID, AssetClass, SubCategory, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight(number|NaN), _wText, _new, _dirty}
 let deleteQueue = [];
 
@@ -338,7 +341,7 @@ async function selectSecurity(id){
   renderSelector();
 }
 async function loadRows(){
-  rows = []; deleteQueue = [];
+  rows = []; deleteQueue = []; wSortDir = 0; { const ind = $('wSortInd'); if (ind) ind.textContent = ''; }
   if (currentId === null) { renderAll(); return; }
   const data = await dbQuery(
     'SELECT AllocationID, AssetClass, SubCategory, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight FROM security_asset_allocation WHERE SecurityID = ? ORDER BY AllocationID ASC', [currentId]);
@@ -493,6 +496,13 @@ function renderPies(){
 }
 
 // ---------- actions ----------
+$('thWeight').addEventListener('click', () => {
+  wSortDir = wSortDir === -1 ? 1 : -1;
+  const fin = r => isFinite(r.Weight);
+  rows.sort((a, b) => (fin(a) ? 0 : 1) - (fin(b) ? 0 : 1) || (fin(a) ? wSortDir * (a.Weight - b.Weight) : 0));
+  $('wSortInd').textContent = wSortDir === -1 ? '▼' : '▲';
+  renderAll();
+});
 $('addBtn').addEventListener('click', () => {
   if (currentId === null) return;
   const last = rows[rows.length - 1];
