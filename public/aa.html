@@ -27,7 +27,7 @@
   .sec-head h2{font-family:'Space Grotesk',sans-serif;font-size:16px;margin:0;}
   .sec-head .meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);}
   .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:4px;}
-  table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;min-width:1120px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;min-width:1320px;}
   th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);background:var(--panel);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   th.num{text-align:right;}
   td{padding:2px 6px;border-bottom:1px solid var(--line);vertical-align:middle;height:28px;}
@@ -38,6 +38,8 @@
   a.sub-link{flex:none;display:inline-flex;align-items:center;justify-content:center;width:22px;height:24px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--accent);text-decoration:none;font-size:13px;line-height:1;}
   a.sub-link:hover{border-color:var(--accent);background:#fff;}
   td input.amt-input{text-align:right;font-variant-numeric:tabular-nums;font-family:'IBM Plex Mono',monospace;}
+  td select.bad{border-color:var(--err);background:rgba(192,41,61,.06);}
+  td select:disabled{opacity:.45;cursor:not-allowed;}
   td input.bad{border-color:var(--err);background:rgba(192,41,61,.06);}
   td button.del-btn{width:100%;padding:2px 0;font-size:12px;line-height:16px;}
   tr.new-row td{background:rgba(227,6,19,0.04);}
@@ -95,11 +97,11 @@
       <div class="table-wrap">
         <table>
           <colgroup>
-            <col style="width:110px"><col style="width:120px"><col style="width:130px"><col style="width:130px"><col><col style="width:170px"><col style="width:110px"><col style="width:90px"><col style="width:40px">
+            <col style="width:110px"><col style="width:150px"><col style="width:130px"><col style="width:105px"><col style="width:130px"><col><col style="width:170px"><col style="width:110px"><col style="width:90px"><col style="width:40px">
           </colgroup>
-          <thead><tr><th>Asset Class</th><th>Region</th><th>Sub-Region</th><th>Country</th><th>Sub-Security</th><th>Sector</th><th>Currency Risk</th><th class="num">Weight %</th><th></th></tr></thead>
-          <tbody id="body"><tr><td colspan="9" class="empty">Security wählen…</td></tr></tbody>
-          <tfoot><tr><td colspan="7" id="sumLabel">Summe</td><td id="sumCell" style="text-align:right"></td><td></td></tr></tfoot>
+          <thead><tr><th>Asset Class</th><th>Subclass</th><th>Region</th><th>Sub-Region</th><th>Country</th><th>Sub-Security</th><th>Sector</th><th>Currency Risk</th><th class="num">Weight %</th><th></th></tr></thead>
+          <tbody id="body"><tr><td colspan="10" class="empty">Security wählen…</td></tr></tbody>
+          <tfoot><tr><td colspan="8" id="sumLabel">Summe</td><td id="sumCell" style="text-align:right"></td><td></td></tr></tfoot>
         </table>
       </div>
       <div class="actions">
@@ -116,31 +118,51 @@
     </section>
   </div>
 
-  <p class="note">Pro Security können mehrere Zeilen erfasst werden (z.B. ein Fonds mit Anteilen in verschiedenen Regionen/Sektoren). Die Weights einer Security müssen sich auf exakt 100 % summieren – gespeichert wird nur dann; der Server prüft die Summe zusätzlich im selben Batch. Sub-Security: entweder eine Security aus der Liste wählen (gespeichert wird die SecurityID) oder einen freien Text eingeben. Ist die Sub-Security eine Security aus der Liste, erscheint daneben ein ↗-Link zu ihrer Seite; reiner Text bleibt unformatiert. Sub-Region: Freitext unter der Region (z.B. Eurozone, UK). Country- und Sub-Region-Vorschläge stammen aus bereits erfassten Einträgen. Currency Risk: Währungscode (z.B. CHF, USD) oder „Others“; neue Zeilen übernehmen die Währung der letzten Zeile bzw. der Security.</p>
+  <p class="note">Regeln: <b>Share</b> – Region Switzerland, USA, Europe, Asia Pacific oder Emerging Markets. <b>Bonds</b> – Region Switzerland, USA oder Europe. <b>Alternative</b> – Subclass Pflicht (Real Estate, Commodities &amp; Metals, Real Assets, Crypto Currencies, FX Hedges), Region wählbar (Standard World). <b>Sub-Region</b> nur bei Europe: UK, Eurozone oder Nordics (Sweden, Norway, Denmark). Country: Freitext mit Vorschlägen je Region/Sub-Region. Pro Security können mehrere Zeilen erfasst werden; die Weights müssen exakt 100 % ergeben (der Server prüft Summe und Regeln zusätzlich beim Speichern). Sub-Security: Security aus der Liste (↗-Link zu ihrer Seite) oder freier Text. Currency Risk: Währungscode (z.B. CHF, USD) oder „Others“.</p>
 </div>
 
-<datalist id="countryOptions"></datalist>
-<datalist id="subRegionOptions"></datalist>
+<div id="countryLists"></div>
 <datalist id="subSecOptions"></datalist>
 <datalist id="ccyOptions"></datalist>
 
 <script src="assets/db-data.js"></script>
 <script>
 const ASSET_CLASSES = ['Share','Bonds','Alternative'];
-const REGIONS = ['Switzerland','USA','Europe','AsiaPacific','World'];
+// Rules (mirrors the CHECK constraints in migrations/0007_asset_allocation_rules.sql)
+const REGIONS_BY_CLASS = {
+  Share:       ['Switzerland','USA','Europe','Asia Pacific','Emerging Markets'],
+  Bonds:       ['Switzerland','USA','Europe'],
+  Alternative: ['Switzerland','USA','Europe','Asia Pacific','Emerging Markets','World']
+};
+const DEFAULT_REGION = { Share:'Switzerland', Bonds:'Switzerland', Alternative:'World' };
+const SUBREGIONS = { Europe: ['UK','Eurozone','Nordics'] };
+const SUBCLASSES = ['Real Estate','Commodities & Metals','Real Assets','Crypto Currencies','FX Hedges'];
+// Country suggestions per region / region|sub-region (free text stays allowed); merged with the values found in the data.
+const COUNTRY_DEFAULTS = {
+  'Switzerland': ['Switzerland','Others'],
+  'USA': ['USA','Canada','Others'],
+  'Europe|UK': ['UK'],
+  'Europe|Eurozone': ['Germany','France','Italy','Spain','Netherlands','Belgium','Austria','Portugal','Ireland','Finland','Luxembourg','Greece','Others'],
+  'Europe|Nordics': ['Sweden','Norway','Denmark'],
+  'Asia Pacific': ['Japan','Australia','Hong Kong','Singapore','New Zealand','Others'],
+  'Emerging Markets': ['China','India','Korea','Taiwan','Brazil','South Africa','Mexico','Others']
+};
+// Legacy labels that were entered as Country but are no regions/countries - not offered as suggestions.
+const COUNTRY_NOT_SUGGESTED = ['Eurozone','European Union','Crypto Currencies','Metals','Region World'];
 const CCY_DEFAULTS = ['CHF','EUR','USD','GBP','JPY','CAD','AUD','HKD','SGD','NZD','SEK','DKK','CNY','INR','KRW','TWD','BRL','Others'];
 const SECTORS = ['Basic materials','Communication','Consumer discretionary','Consumer staples','Energy','Financials','Health Care','Industrials','Real Estate','Technology','Telecommunication','Utilities','_not defined'];
 
 // Colors follow the entity for the small fixed dimensions (categorical slots 1..5, validated palette).
 const SLOT = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#6250d6'];
 const CLASS_COLORS = { Share:SLOT[0], Bonds:SLOT[1], Alternative:SLOT[2] };
-const REGION_COLORS = { Switzerland:SLOT[0], USA:SLOT[1], Europe:SLOT[2], AsiaPacific:SLOT[3], World:SLOT[4] };
+const REGION_COLORS = { Switzerland:SLOT[0], USA:SLOT[1], Europe:SLOT[2], 'Asia Pacific':SLOT[3], 'Emerging Markets':SLOT[4], World:SLOT[5] };
+const SUBCLASS_COLORS = { 'Real Estate':SLOT[0], 'Commodities & Metals':SLOT[1], 'Real Assets':SLOT[2], 'Crypto Currencies':SLOT[3], 'FX Hedges':SLOT[4] };
 const GREY_NA = '#c9ced6', GREY_OTHER = '#8b929c';
 
 let overview = [];        // [{SecurityID, SecurityName, Currency, W, N, inScope}]
 let secNameById = new Map();
 let currentId = null;
-let rows = [];            // {AllocationID, AssetClass, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight(number|NaN), _wText, _new, _dirty}
+let rows = [];            // {AllocationID, AssetClass, SubCategory, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight(number|NaN), _wText, _new, _dirty}
 let deleteQueue = [];
 
 const $ = id => document.getElementById(id);
@@ -154,6 +176,24 @@ function fmtW(n){ return isFinite(n) ? n.toFixed(2) : ''; }
 function rowWeightValid(r){ return isFinite(r.Weight) && r.Weight > 0 && r.Weight <= 100; }
 function sumCents(){ return rows.reduce((s, r) => s + (isFinite(r.Weight) ? Math.round(r.Weight * 100) : 0), 0); }
 function isComplete(){ return rows.length > 0 && rows.every(rowWeightValid) && sumCents() === 10000; }
+
+// ---------- class / region rules ----------
+function regionsFor(cls){ return REGIONS_BY_CLASS[cls] || []; }
+function subRegionsFor(region){ return SUBREGIONS[region] || []; }
+function regionBad(r){ return !regionsFor(r.AssetClass).includes(r.Region); }
+function subRegionBad(r){ return !!r.SubRegion && !subRegionsFor(r.Region).includes(r.SubRegion); }
+function subClassBad(r){ return r.AssetClass === 'Alternative' ? !SUBCLASSES.includes(r.SubCategory) : !!r.SubCategory; }
+function rowRuleError(r){
+  if (!ASSET_CLASSES.includes(r.AssetClass)) return 'Asset Class ungültig';
+  if (regionBad(r)) return `Region „${r.Region}“ ist bei ${r.AssetClass} nicht erlaubt`;
+  if (subRegionBad(r)) return 'Sub-Region nur bei Europe (UK, Eurozone, Nordics)';
+  if (subClassBad(r)) return r.AssetClass === 'Alternative' ? 'Subclass fehlt' : 'Subclass nur bei Alternative';
+  return null;
+}
+function firstRuleError(){
+  for (let i = 0; i < rows.length; i++) { const e = rowRuleError(rows[i]); if (e) return `Zeile ${i + 1}: ${e}`; }
+  return null;
+}
 
 // Sector stored in security_master.Sector (if set and a real sector) - used to pre-fill rows.
 function masterSectorOf(secId){
@@ -216,11 +256,32 @@ async function loadOverview(){
   secNameById = new Map(overview.map(r => [r.SecurityID, r.SecurityName]));
   $('subSecOptions').innerHTML = overview.map(r => `<option value="${esc(r.SecurityID + ' · ' + r.SecurityName)}">`).join('');
 }
+let countryLists = new Map();   // key ('Region' or 'Region|SubRegion' or '*') -> datalist id
+function countryListId(r){
+  return countryLists.get(r.Region + (r.SubRegion ? '|' + r.SubRegion : '')) || countryLists.get(r.Region) || countryLists.get('*');
+}
 async function loadCountries(){
-  const c = await dbQuery("SELECT DISTINCT Country FROM security_asset_allocation WHERE Country IS NOT NULL AND Country <> '' ORDER BY Country COLLATE NOCASE ASC");
-  $('countryOptions').innerHTML = c.map(r => `<option value="${esc(r.Country)}">`).join('');
-  const sr = await dbQuery("SELECT DISTINCT SubRegion FROM security_asset_allocation WHERE SubRegion IS NOT NULL AND SubRegion <> '' ORDER BY SubRegion COLLATE NOCASE ASC");
-  $('subRegionOptions').innerHTML = sr.map(r => `<option value="${esc(r.SubRegion)}">`).join('');
+  const c = await dbQuery("SELECT DISTINCT Region, SubRegion, Country FROM security_asset_allocation WHERE Country IS NOT NULL AND Country <> ''");
+  const sets = new Map();
+  const add = (k, v) => { if (!sets.has(k)) sets.set(k, new Set()); sets.get(k).add(v); };
+  Object.entries(COUNTRY_DEFAULTS).forEach(([k, list]) => list.forEach(v => add(k, v)));
+  c.filter(r => !COUNTRY_NOT_SUGGESTED.includes(r.Country)).forEach(r => {
+    add(r.Region, r.Country);
+    if (r.SubRegion) add(r.Region + '|' + r.SubRegion, r.Country);
+  });
+  const europe = new Set(sets.get('Europe') || []);
+  subRegionsFor('Europe').forEach(sr => (sets.get('Europe|' + sr) || []).forEach(v => europe.add(v)));
+  sets.set('Europe', europe);
+  const everything = new Set();
+  sets.forEach((set, k) => { if (k.indexOf('|') < 0) set.forEach(v => everything.add(v)); });
+  sets.set('World', everything); sets.set('*', everything);
+  countryLists = new Map();
+  let html = '', n = 0;
+  sets.forEach((set, k) => {
+    const id = 'cl' + (n++); countryLists.set(k, id);
+    html += `<datalist id="${id}">` + [...set].sort((a, b) => a.localeCompare(b)).map(v => `<option value="${esc(v)}">`).join('') + '</datalist>';
+  });
+  $('countryLists').innerHTML = html;
   const cc = await dbQuery("SELECT DISTINCT CurrencyRisk FROM security_asset_allocation WHERE CurrencyRisk IS NOT NULL AND CurrencyRisk <> ''");
   const all = [...new Set(CCY_DEFAULTS.concat(cc.map(r => r.CurrencyRisk)))];
   $('ccyOptions').innerHTML = all.map(v => `<option value="${esc(v)}">`).join('');
@@ -259,7 +320,7 @@ async function loadRows(){
   rows = []; deleteQueue = [];
   if (currentId === null) { renderAll(); return; }
   const data = await dbQuery(
-    'SELECT AllocationID, AssetClass, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight FROM security_asset_allocation WHERE SecurityID = ? ORDER BY AllocationID ASC', [currentId]);
+    'SELECT AllocationID, AssetClass, SubCategory, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight FROM security_asset_allocation WHERE SecurityID = ? ORDER BY AllocationID ASC', [currentId]);
   rows = data.map(r => ({ ...r, _wText: fmtW(r.Weight), _new: false, _dirty: false }));
   renderAll();
   setStatus('', '');
@@ -267,14 +328,22 @@ async function loadRows(){
 
 // ---------- editor ----------
 function optionsHtml(list, sel){ return list.map(v => `<option value="${esc(v)}" ${v === sel ? 'selected' : ''}>${esc(v)}</option>`).join(''); }
+// <select> with optional blank entry; a stored value outside the list stays visible (marked ⚠) so legacy data is never hidden.
+function selHtml(field, list, cur, o = {}){
+  const blank = o.blank ? `<option value="" ${!cur ? 'selected' : ''}>${esc(o.blank)}</option>` : '';
+  const extra = (cur && !list.includes(cur)) ? `<option value="${esc(cur)}" selected>${esc(cur)} ⚠</option>` : '';
+  return `<select data-f="${field}" class="${o.bad ? 'bad' : ''}" ${o.disabled ? 'disabled' : ''}>${blank}${extra}${optionsHtml(list, cur)}</select>`;
+}
 function renderRow(r, i){
+  const isAlt = r.AssetClass === 'Alternative', isEu = r.Region === 'Europe';
   return `<tr data-idx="${i}" class="${r._new ? 'new-row' : ''}">
-    <td><select data-f="AssetClass">${optionsHtml(ASSET_CLASSES, r.AssetClass)}</select></td>
-    <td><select data-f="Region">${optionsHtml(REGIONS, r.Region)}</select></td>
-    <td><input type="text" data-f="SubRegion" list="subRegionOptions" value="${esc(r.SubRegion || '')}" placeholder="z.B. Eurozone"></td>
-    <td><input type="text" data-f="Country" list="countryOptions" value="${esc(r.Country || '')}" placeholder="Land"></td>
+    <td>${selHtml('AssetClass', ASSET_CLASSES, r.AssetClass)}</td>
+    <td>${selHtml('SubCategory', SUBCLASSES, r.SubCategory, { blank: isAlt ? '— wählen —' : '', disabled: !isAlt, bad: subClassBad(r) })}</td>
+    <td>${selHtml('Region', regionsFor(r.AssetClass), r.Region, { bad: regionBad(r) })}</td>
+    <td>${selHtml('SubRegion', subRegionsFor(r.Region), r.SubRegion, { blank: '—', disabled: !isEu && !r.SubRegion, bad: subRegionBad(r) })}</td>
+    <td><input type="text" data-f="Country" list="${countryListId(r) || ''}" value="${esc(r.Country || '')}" placeholder="Land"></td>
     <td><div class="subsec-cell"><input type="text" data-f="SubSecurity" list="subSecOptions" value="${esc(subSecDisplay(r.SubSecurity))}" placeholder="Security wählen oder Text"><span class="sublink-slot">${subSecLinkHtml(r.SubSecurity)}</span></div></td>
-    <td><select data-f="Sector">${optionsHtml(SECTORS, r.Sector)}</select></td>
+    <td>${selHtml('Sector', SECTORS, r.Sector)}</td>
     <td><input type="text" data-f="CurrencyRisk" list="ccyOptions" value="${esc(r.CurrencyRisk || '')}" placeholder="CHF"></td>
     <td><input type="text" inputmode="decimal" class="amt-input ${rowWeightValid(r) ? '' : 'bad'}" data-f="Weight" value="${esc(r._wText)}"></td>
     <td><button class="del-btn" data-del="${i}" title="Zeile löschen">✕</button></td>
@@ -282,8 +351,8 @@ function renderRow(r, i){
 }
 function renderTable(){
   const body = $('body');
-  if (currentId === null) { body.innerHTML = '<tr><td colspan="9" class="empty">Security wählen…</td></tr>'; return; }
-  body.innerHTML = rows.length ? rows.map(renderRow).join('') : '<tr><td colspan="9" class="empty">Noch keine Allokation erfasst – „+ Zeile“ klicken.</td></tr>';
+  if (currentId === null) { body.innerHTML = '<tr><td colspan="10" class="empty">Security wählen…</td></tr>'; return; }
+  body.innerHTML = rows.length ? rows.map(renderRow).join('') : '<tr><td colspan="10" class="empty">Noch keine Allokation erfasst – „+ Zeile“ klicken.</td></tr>';
   body.querySelectorAll('[data-f]').forEach(el => {
     el.addEventListener(el.dataset.f === 'Weight' ? 'input' : 'change', () => onField(el));
     if (el.dataset.f === 'Weight') el.addEventListener('change', () => { const r = rows[Number(el.closest('tr').dataset.idx)]; if (isFinite(r.Weight)) { r._wText = fmtW(r.Weight); el.value = r._wText; } });
@@ -297,6 +366,7 @@ function renderTable(){
 }
 function onField(el){
   const r = rows[Number(el.closest('tr').dataset.idx)], f = el.dataset.f;
+  let structural = false;
   if (f === 'Weight') { r._wText = el.value; r.Weight = parseW(el.value); el.classList.toggle('bad', !rowWeightValid(r)); }
   else if (f === 'SubSecurity') {
     r.SubSecurity = subSecParse(el.value); el.value = subSecDisplay(r.SubSecurity);
@@ -305,11 +375,21 @@ function onField(el){
     const sec = (r.SubSecurity && /^\d+$/.test(String(r.SubSecurity))) ? masterSectorOf(r.SubSecurity) : null;
     if (sec) { r.Sector = sec; const sel = el.closest('tr').querySelector('[data-f="Sector"]'); if (sel) sel.value = sec; }
   }
+  else if (f === 'AssetClass') {
+    r.AssetClass = el.value;
+    if (!regionsFor(r.AssetClass).includes(r.Region)) r.Region = DEFAULT_REGION[r.AssetClass];
+    if (r.AssetClass !== 'Alternative') r.SubCategory = null;
+    if (r.Region !== 'Europe') r.SubRegion = null;
+    structural = true;
+  }
+  else if (f === 'Region') { r.Region = el.value; if (r.Region !== 'Europe') r.SubRegion = null; structural = true; }
+  else if (f === 'SubRegion') { r.SubRegion = el.value || null; structural = true; }
+  else if (f === 'SubCategory') { r.SubCategory = el.value || null; structural = true; }
   else if (f === 'Country') { r.Country = el.value.trim() || null; }
-  else if (f === 'SubRegion') { r.SubRegion = el.value.trim() || null; }
   else if (f === 'CurrencyRisk') { r.CurrencyRisk = ccyParse(el.value); el.value = r.CurrencyRisk || ''; }
   else { r[f] = el.value; }
   r._dirty = true;
+  if (structural) renderTable();
   renderSummary(); renderPies();
 }
 function renderSummary(){
@@ -318,16 +398,18 @@ function renderSummary(){
   if (currentId === null) { cell.textContent = ''; label.textContent = 'Summe'; $('saveBtn').disabled = true; $('fillBtn').disabled = true; $('addBtn').disabled = true; $('revertBtn').disabled = true; return; }
   $('addBtn').disabled = false;
   const ok = isComplete();
+  const ruleErr = firstRuleError();
   cell.textContent = `${sum.toFixed(2)} %`;
   cell.className = rows.length === 0 ? '' : (ok ? 'sum-ok' : 'sum-bad');
   if (rows.length === 0) label.textContent = 'Summe (keine Allokation)';
+  else if (ok && ruleErr) label.textContent = `Summe ✓ 100 % – aber ${ruleErr}`;
   else if (ok) label.textContent = 'Summe ✓ 100 %';
   else {
     const diff = (10000 - cents) / 100;
     label.textContent = diff > 0 ? `Summe – es fehlen ${diff.toFixed(2)} %` : `Summe – ${Math.abs(diff).toFixed(2)} % zu viel`;
   }
-  label.className = rows.length === 0 ? '' : (ok ? 'sum-ok' : 'sum-bad');
-  const canSave = isDirty() && (ok || (rows.length === 0 && deleteQueue.length > 0));
+  label.className = rows.length === 0 ? '' : (ok && !ruleErr ? 'sum-ok' : 'sum-bad');
+  const canSave = isDirty() && ((ok && !ruleErr) || (rows.length === 0 && deleteQueue.length > 0));
   $('saveBtn').disabled = !canSave;
   $('fillBtn').disabled = rows.length === 0 || ok;
   $('revertBtn').disabled = !isDirty();
@@ -348,7 +430,7 @@ function describeArcPath(cx, cy, r, a0, a1){
 }
 function aggregate(keyFn){
   const m = new Map();
-  rows.forEach(r => { if (!isFinite(r.Weight) || r.Weight <= 0) return; const k = keyFn(r); m.set(k, (m.get(k) || 0) + r.Weight); });
+  rows.forEach(r => { if (!isFinite(r.Weight) || r.Weight <= 0) return; const k = keyFn(r); if (k === null) return; m.set(k, (m.get(k) || 0) + r.Weight); });
   return [...m.entries()].map(([label, value]) => ({ label, value }));
 }
 // fixed: map label -> color (entity colors). ranked: top-7 by weight get slots, rest folds into "Other".
@@ -382,6 +464,7 @@ function renderPies(){
   if (currentId === null) { $('pies').innerHTML = ''; return; }
   $('pies').innerHTML =
     pieHtml('Asset Class', colorize(aggregate(r => r.AssetClass), CLASS_COLORS)) +
+    (rows.some(r => r.SubCategory) ? pieHtml('Subclass (Alternative)', colorize(aggregate(r => r.SubCategory || null), SUBCLASS_COLORS)) : '') +
     pieHtml('Region', colorize(aggregate(r => r.Region), REGION_COLORS)) +
     pieHtml('Sector', colorize(aggregate(r => r.Sector), null, ['_not defined'])) +
     pieHtml('Currency Risk', colorize(aggregate(r => r.CurrencyRisk || '(ohne Währung)'), null, ['(ohne Währung)'])) +
@@ -394,7 +477,9 @@ $('addBtn').addEventListener('click', () => {
   const last = rows[rows.length - 1];
   const rest = (10000 - sumCents()) / 100;
   const w = rest > 0 ? rest : NaN;
-  rows.push({ AllocationID: null, AssetClass: last ? last.AssetClass : 'Share', Region: last ? last.Region : 'World', SubRegion: null, Country: null, SubSecurity: null,
+  const cls = last ? last.AssetClass : 'Share';
+  const region = (last && regionsFor(cls).includes(last.Region)) ? last.Region : DEFAULT_REGION[cls];
+  rows.push({ AllocationID: null, AssetClass: cls, SubCategory: (cls === 'Alternative' && last) ? last.SubCategory : null, Region: region, SubRegion: null, Country: null, SubSecurity: null,
     Sector: masterSectorOf(currentId) || '_not defined',
     CurrencyRisk: last ? last.CurrencyRisk : masterCurrencyOf(currentId), Weight: w, _wText: fmtW(w), _new: true, _dirty: true });
   renderAll();
@@ -415,18 +500,20 @@ $('revertBtn').addEventListener('click', async () => { if (!isDirty() || confirm
 $('saveBtn').addEventListener('click', async () => {
   if (currentId === null) return;
   if (rows.length && !isComplete()) { setStatus('Die Weights müssen exakt 100 % ergeben.', 'error'); return; }
+  const ruleErr = firstRuleError();
+  if (ruleErr) { setStatus(ruleErr, 'error'); return; }
   if (!rows.length && !confirm('Keine Zeilen mehr – die gesamte Allokation dieser Security wird gelöscht. Fortfahren?')) return;
   const stmts = [], newIdx = [];
   const nowSql = "strftime('%Y-%m-%d %H:%M:%S','now')";
   deleteQueue.forEach(id => stmts.push({ sql: 'DELETE FROM security_asset_allocation WHERE AllocationID = ? AND SecurityID = ?', args: [id, currentId] }));
   rows.forEach((r, i) => {
     if (r._new) {
-      stmts.push({ sql: 'INSERT INTO security_asset_allocation (SecurityID, AssetClass, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight) VALUES (?,?,?,?,?,?,?,?,?)',
-        args: [currentId, r.AssetClass, r.Region, r.SubRegion || null, r.Country, r.SubSecurity === null ? null : String(r.SubSecurity), r.Sector, r.CurrencyRisk || null, r.Weight] });
+      stmts.push({ sql: 'INSERT INTO security_asset_allocation (SecurityID, AssetClass, SubCategory, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight) VALUES (?,?,?,?,?,?,?,?,?,?)',
+        args: [currentId, r.AssetClass, r.SubCategory || null, r.Region, r.SubRegion || null, r.Country, r.SubSecurity === null ? null : String(r.SubSecurity), r.Sector, r.CurrencyRisk || null, r.Weight] });
       newIdx.push(i);
     } else if (r._dirty) {
-      stmts.push({ sql: `UPDATE security_asset_allocation SET AssetClass = ?, Region = ?, SubRegion = ?, Country = ?, SubSecurity = ?, Sector = ?, CurrencyRisk = ?, Weight = ?, modified_at_utc = ${nowSql} WHERE AllocationID = ? AND SecurityID = ?`,
-        args: [r.AssetClass, r.Region, r.SubRegion || null, r.Country, r.SubSecurity === null ? null : String(r.SubSecurity), r.Sector, r.CurrencyRisk || null, r.Weight, r.AllocationID, currentId] });
+      stmts.push({ sql: `UPDATE security_asset_allocation SET AssetClass = ?, SubCategory = ?, Region = ?, SubRegion = ?, Country = ?, SubSecurity = ?, Sector = ?, CurrencyRisk = ?, Weight = ?, modified_at_utc = ${nowSql} WHERE AllocationID = ? AND SecurityID = ?`,
+        args: [r.AssetClass, r.SubCategory || null, r.Region, r.SubRegion || null, r.Country, r.SubSecurity === null ? null : String(r.SubSecurity), r.Sector, r.CurrencyRisk || null, r.Weight, r.AllocationID, currentId] });
     }
   });
   if (!stmts.length) { setStatus('Keine Änderungen.', 'ok'); return; }
@@ -441,7 +528,8 @@ $('saveBtn').addEventListener('click', async () => {
     renderSelector();
     setStatus('Gespeichert ✓ ' + nowZurichString(), 'ok');
   } catch (e) {
-    const msg = /malformed JSON|WEIGHT_SUM/i.test(e.message) ? 'Server: Weights ergeben nicht 100 % – nichts gespeichert.' : e.message;
+    const msg = /malformed JSON|WEIGHT_SUM/i.test(e.message) ? 'Server: Weights ergeben nicht 100 % – nichts gespeichert.'
+      : /CHECK constraint/i.test(e.message) ? 'Server: Regel verletzt (Asset Class / Region / Sub-Region / Subclass) – nichts gespeichert.' : e.message;
     setStatus('Fehler beim Speichern: ' + msg, 'error');
     renderSummary();
   }

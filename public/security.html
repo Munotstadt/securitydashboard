@@ -377,7 +377,7 @@
     <div class="pie-row" id="manualAllocPies"><div class="chart-empty">Loading…</div></div>
     <div class="table-wrap" id="manualAllocTableWrap" style="margin-top:14px;">
     <table id="manualAllocTable">
-      <thead><tr><th>Asset Class</th><th>Region</th><th>Sub-Region</th><th>Country</th><th>Sub-Security</th><th>Sector</th><th>Currency Risk</th><th class="num">Weight %</th></tr></thead>
+      <thead><tr><th>Asset Class</th><th>Subclass</th><th>Region</th><th>Sub-Region</th><th>Country</th><th>Sub-Security</th><th>Sector</th><th>Currency Risk</th><th class="num">Weight %</th></tr></thead>
       <tbody id="manualAllocBody"></tbody>
     </table>
     </div>
@@ -1691,7 +1691,7 @@ async function loadManualAllocation(secId){
   let rows;
   try {
     rows = await dbQuery(
-      'SELECT AssetClass, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight, modified_at_utc FROM security_asset_allocation WHERE SecurityID = ? ORDER BY AllocationID ASC',
+      'SELECT AssetClass, SubCategory, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight, modified_at_utc FROM security_asset_allocation WHERE SecurityID = ? ORDER BY AllocationID ASC',
       [secId]);
   } catch(e) {
     wrap.classList.add('hidden');
@@ -1711,6 +1711,12 @@ async function loadManualAllocation(secId){
     rows.forEach(r => { const k = keyFn(r); m.set(k, (m.get(k)||0) + Number(r.Weight||0)); });
     return [...m.entries()].sort((a,b) => b[1]-a[1]);
   }
+  // Subclass pie covers only the Alternative rows (SubCategory is empty for Shares/Bonds).
+  function aggAlt(){
+    const m = new Map();
+    rows.filter(r => r.SubCategory).forEach(r => m.set(r.SubCategory, (m.get(r.SubCategory)||0) + Number(r.Weight||0)));
+    return [...m.entries()].sort((a,b) => b[1]-a[1]);
+  }
   function pieBlock(title, entries){
     const total = entries.reduce((s,e) => s+e[1], 0);
     const size=160, r=70, cx=size/2, cy=size/2;
@@ -1727,6 +1733,7 @@ async function loadManualAllocation(secId){
   // Same order as the Yahoo section below (Asset Class, Sector), then Region and Country.
   pies.innerHTML =
     pieBlock('Asset Class', agg(r => r.AssetClass)) +
+    (rows.some(r => r.SubCategory) ? pieBlock('Subclass (Alternative)', aggAlt()) : '') +
     pieBlock('Sector', agg(r => r.Sector)) +
     pieBlock('Region', agg(r => r.Region)) +
     pieBlock('Currency Risk', agg(r => r.CurrencyRisk || '(ohne Währung)')) +
@@ -1739,7 +1746,7 @@ async function loadManualAllocation(secId){
     return m ? `<a class="sub-link" href="security.html?id=${escA(m.SecurityID)}">${escA(v + ' · ' + m.SecurityName)}</a>` : escA(v);
   };
   body.innerHTML = rows.map(r => `<tr>
-    <td>${escA(r.AssetClass)}</td><td>${escA(r.Region)}</td><td>${escA(r.SubRegion)}</td><td>${escA(r.Country)}</td>
+    <td>${escA(r.AssetClass)}</td><td>${escA(r.SubCategory)}</td><td>${escA(r.Region)}</td><td>${escA(r.SubRegion)}</td><td>${escA(r.Country)}</td>
     <td>${subCell(r.SubSecurity)}</td><td>${escA(r.Sector)}</td><td>${escA(r.CurrencyRisk)}</td><td class="num">${Number(r.Weight).toFixed(2)}</td>
   </tr>`).join('');
   const sum = rows.reduce((s,r) => s+Number(r.Weight||0), 0);
