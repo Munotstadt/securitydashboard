@@ -9,5 +9,5 @@ Tabelle `security_asset_allocation` (Migration 0007), Pflege über `aa.html`. We
 | Alternative | optional-Wert aus: Switzerland, USA, Europe, Asia Pacific, Emerging Markets, World | nur bei Europe | **Pflicht**: Real Estate, Commodities & Metals, Real Assets, Crypto Currencies, FX Hedges |
 
 - Nordics = Sweden, Norway, Denmark. Canada bleibt unter USA. Country ist Freitext (Vorschläge je Region).
-- Wert-Mapping gegenüber früher (für ERP/Access-Abfragen): `AsiaPacific` → `Asia Pacific`; Share/`World` → `Emerging Markets`; neue SubRegion `Nordics`; `SubCategory` = Subclass.
+- Wert-Mapping gegenüber früher (für ERP-Auswertung / Import-Skripte): `AsiaPacific` → `Asia Pacific`; Share/`World` → `Emerging Markets`; neue SubRegion `Nordics`; `SubCategory` = Subclass.
 - Backup der alten Tabelle: `security_asset_allocation_bak_20261024` (später löschen).
