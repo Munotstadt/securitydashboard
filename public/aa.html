@@ -35,6 +35,10 @@
   td input[type=text], td select{font-size:12px;padding:2px 6px;height:24px;line-height:18px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);font-family:'Inter',sans-serif;}
   .subsec-cell{display:flex;align-items:center;gap:4px;}
   .subsec-cell input{flex:1;min-width:0;}
+  a.sub-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--accent);text-decoration:none;font-size:12px;line-height:24px;}
+  a.sub-name:hover{text-decoration:underline;}
+  button.sub-edit{flex:none;width:22px;height:24px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--muted);cursor:pointer;font-size:12px;padding:0;}
+  button.sub-edit:hover{border-color:var(--accent);color:var(--accent);}
   a.sub-link{flex:none;display:inline-flex;align-items:center;justify-content:center;width:22px;height:24px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--accent);text-decoration:none;font-size:13px;line-height:1;}
   a.sub-link:hover{border-color:var(--accent);background:#fff;}
   td input.amt-input{text-align:right;font-variant-numeric:tabular-nums;font-family:'IBM Plex Mono',monospace;}
@@ -217,27 +221,44 @@ function masterCurrencyOf(secId){
 
 // ---------- sub-security helpers ----------
 // A Sub-Security that is a known SecurityID gets a link to its security page; free text stays plain.
-function subSecHref(v){
-  const s = String(v ?? '');
-  return (/^\d+$/.test(s) && secNameById.has(Number(s))) ? `security.html?id=${s}` : null;
+// Stored values may be float-like text ("21048333.0"); normalise to the plain SecurityID string.
+function subSecId(v){
+  const m = String(v ?? '').trim().match(/^(\d+)(?:\.0+)?$/);
+  return (m && secNameById.has(Number(m[1]))) ? m[1] : null;
 }
-function subSecLinkHtml(v){
-  const href = subSecHref(v);
-  return href ? `<a class="sub-link" href="${href}" target="_blank" rel="noopener" title="Security öffnen (${esc(secNameById.get(Number(v)))})">↗</a>` : '';
-}
-function subSecDisplay(v){
+function subSecNorm(v){ const id = subSecId(v); return id !== null ? id : v; }
+function subSecDisplay(v){            // text for the edit input (matches the datalist entries)
   if (v === null || v === undefined || v === '') return '';
-  const s = String(v);
-  if (/^\d+$/.test(s) && secNameById.has(Number(s))) return `${s} · ${secNameById.get(Number(s))}`;
-  return s;
+  const id = subSecId(v);
+  return id !== null ? `${id} · ${secNameById.get(Number(id))}` : String(v);
 }
 function subSecParse(text){
   const t = String(text || '').trim();
   if (!t) return null;
-  let m = t.match(/^(\d+)\s·\s/);
+  const m = t.match(/^(\d+)\s·\s/);
   if (m && secNameById.has(Number(m[1]))) return m[1];
-  if (/^\d+$/.test(t) && secNameById.has(Number(t))) return t;
-  return t;
+  const id = subSecId(t);
+  return id !== null ? id : t;
+}
+// Known SecurityID -> SecurityName as link (new tab) + edit button; free text -> plain input, no link.
+function subSecCellHtml(v){
+  const id = subSecId(v);
+  if (id !== null) return `<a class="sub-name" href="security.html?id=${id}" target="_blank" rel="noopener" title="Security ${id} in neuem Fenster öffnen">${esc(secNameById.get(Number(id)))}</a><button type="button" class="sub-edit" title="Ändern">✎</button>`;
+  return `<input type="text" data-f="SubSecurity" list="subSecOptions" value="${esc(subSecDisplay(v))}" placeholder="Security wählen oder Text">`;
+}
+function mountSubSec(tr){
+  const r = rows[Number(tr.dataset.idx)], cell = tr.querySelector('.subsec-cell');
+  cell.innerHTML = subSecCellHtml(r.SubSecurity);
+  const inp = cell.querySelector('input'), btn = cell.querySelector('.sub-edit');
+  if (btn) btn.addEventListener('click', () => {
+    cell.innerHTML = `<input type="text" data-f="SubSecurity" list="subSecOptions" value="${esc(subSecDisplay(r.SubSecurity))}" placeholder="Security wählen oder Text">`;
+    const i2 = cell.querySelector('input'); wireSubSec(tr, i2); i2.focus(); i2.select();
+  });
+  if (inp) wireSubSec(tr, inp);
+}
+function wireSubSec(tr, inp){
+  inp.addEventListener('change', () => onField(inp));
+  inp.addEventListener('blur', () => setTimeout(() => { if (tr.isConnected && inp.isConnected) mountSubSec(tr); }, 150));
 }
 
 // ---------- load ----------
@@ -321,7 +342,7 @@ async function loadRows(){
   if (currentId === null) { renderAll(); return; }
   const data = await dbQuery(
     'SELECT AllocationID, AssetClass, SubCategory, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight FROM security_asset_allocation WHERE SecurityID = ? ORDER BY AllocationID ASC', [currentId]);
-  rows = data.map(r => ({ ...r, _wText: fmtW(r.Weight), _new: false, _dirty: false }));
+  rows = data.map(r => ({ ...r, SubSecurity: subSecNorm(r.SubSecurity), _wText: fmtW(r.Weight), _new: false, _dirty: false }));
   renderAll();
   setStatus('', '');
 }
@@ -342,7 +363,7 @@ function renderRow(r, i){
     <td>${selHtml('Region', regionsFor(r.AssetClass), r.Region, { bad: regionBad(r) })}</td>
     <td>${selHtml('SubRegion', subRegionsFor(r.Region), r.SubRegion, { blank: '—', disabled: !isEu && !r.SubRegion, bad: subRegionBad(r) })}</td>
     <td><input type="text" data-f="Country" list="${countryListId(r) || ''}" value="${esc(r.Country || '')}" placeholder="Land"></td>
-    <td><div class="subsec-cell"><input type="text" data-f="SubSecurity" list="subSecOptions" value="${esc(subSecDisplay(r.SubSecurity))}" placeholder="Security wählen oder Text"><span class="sublink-slot">${subSecLinkHtml(r.SubSecurity)}</span></div></td>
+    <td><div class="subsec-cell"></div></td>
     <td>${selHtml('Sector', SECTORS, r.Sector)}</td>
     <td><input type="text" data-f="CurrencyRisk" list="ccyOptions" value="${esc(r.CurrencyRisk || '')}" placeholder="CHF"></td>
     <td><input type="text" inputmode="decimal" class="amt-input ${rowWeightValid(r) ? '' : 'bad'}" data-f="Weight" value="${esc(r._wText)}"></td>
@@ -357,6 +378,7 @@ function renderTable(){
     el.addEventListener(el.dataset.f === 'Weight' ? 'input' : 'change', () => onField(el));
     if (el.dataset.f === 'Weight') el.addEventListener('change', () => { const r = rows[Number(el.closest('tr').dataset.idx)]; if (isFinite(r.Weight)) { r._wText = fmtW(r.Weight); el.value = r._wText; } });
   });
+  body.querySelectorAll('tr[data-idx]').forEach(mountSubSec);
   body.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
     const i = Number(b.dataset.del);
     if (!rows[i]._new) deleteQueue.push(rows[i].AllocationID);
@@ -369,10 +391,9 @@ function onField(el){
   let structural = false;
   if (f === 'Weight') { r._wText = el.value; r.Weight = parseW(el.value); el.classList.toggle('bad', !rowWeightValid(r)); }
   else if (f === 'SubSecurity') {
-    r.SubSecurity = subSecParse(el.value); el.value = subSecDisplay(r.SubSecurity);
-    const slot = el.closest('tr').querySelector('.sublink-slot'); if (slot) slot.innerHTML = subSecLinkHtml(r.SubSecurity);
+    r.SubSecurity = subSecParse(el.value);
     // A selected security brings its master sector along (can still be overridden manually).
-    const sec = (r.SubSecurity && /^\d+$/.test(String(r.SubSecurity))) ? masterSectorOf(r.SubSecurity) : null;
+    const sec = subSecId(r.SubSecurity) !== null ? masterSectorOf(r.SubSecurity) : null;
     if (sec) { r.Sector = sec; const sel = el.closest('tr').querySelector('[data-f="Sector"]'); if (sel) sel.value = sec; }
   }
   else if (f === 'AssetClass') {

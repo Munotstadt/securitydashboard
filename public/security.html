@@ -1742,8 +1742,9 @@ async function loadManualAllocation(secId){
   // Sub-Security that is a known SecurityID -> link to its page; free text stays plain (unformatted).
   const subCell = v => {
     if(v === null || v === undefined || v === '') return '';
-    const m = /^\d+$/.test(String(v)) ? masterAll.find(x => String(x.SecurityID) === String(v)) : null;
-    return m ? `<a class="sub-link" href="security.html?id=${escA(m.SecurityID)}">${escA(v + ' · ' + m.SecurityName)}</a>` : escA(v);
+    const mm = String(v).trim().match(/^(\d+)(?:\.0+)?$/);
+    const m = mm ? masterAll.find(x => String(x.SecurityID) === mm[1]) : null;
+    return m ? `<a class="sub-link" href="security.html?id=${escA(m.SecurityID)}" target="_blank" rel="noopener">${escA(m.SecurityName)}</a>` : escA(v);
   };
   body.innerHTML = rows.map(r => `<tr>
     <td>${escA(r.AssetClass)}</td><td>${escA(r.SubCategory)}</td><td>${escA(r.Region)}</td><td>${escA(r.SubRegion)}</td><td>${escA(r.Country)}</td>
