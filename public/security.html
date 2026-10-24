@@ -41,6 +41,8 @@
   .detail-stats{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
   .detail-price{font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:600;}
   .ccy{color:var(--muted);font-size:13px;}
+  a.sub-link{color:var(--accent);text-decoration:none;}
+  a.sub-link:hover{text-decoration:underline;}
   .detail-meta{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
   .returns{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
   .return-box{display:flex;flex-direction:column;gap:4px;padding:10px 14px;background:var(--panel);border:1px solid var(--line);border-radius:3px;min-width:80px;}
@@ -375,7 +377,7 @@
     <div class="pie-row" id="manualAllocPies"><div class="chart-empty">Loading…</div></div>
     <div class="table-wrap" id="manualAllocTableWrap" style="margin-top:14px;">
     <table id="manualAllocTable">
-      <thead><tr><th>Asset Class</th><th>Region</th><th>Country</th><th>Sub-Security</th><th>Sector</th><th>Currency Risk</th><th class="num">Weight %</th></tr></thead>
+      <thead><tr><th>Asset Class</th><th>Region</th><th>Sub-Region</th><th>Country</th><th>Sub-Security</th><th>Sector</th><th>Currency Risk</th><th class="num">Weight %</th></tr></thead>
       <tbody id="manualAllocBody"></tbody>
     </table>
     </div>
@@ -1689,7 +1691,7 @@ async function loadManualAllocation(secId){
   let rows;
   try {
     rows = await dbQuery(
-      'SELECT AssetClass, Region, Country, SubSecurity, Sector, CurrencyRisk, Weight, modified_at_utc FROM security_asset_allocation WHERE SecurityID = ? ORDER BY AllocationID ASC',
+      'SELECT AssetClass, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight, modified_at_utc FROM security_asset_allocation WHERE SecurityID = ? ORDER BY AllocationID ASC',
       [secId]);
   } catch(e) {
     wrap.classList.add('hidden');
@@ -1730,14 +1732,15 @@ async function loadManualAllocation(secId){
     pieBlock('Currency Risk', agg(r => r.CurrencyRisk || '(ohne Währung)')) +
     pieBlock('Country', agg(r => r.Country || '(ohne Land)'));
 
-  const subName = v => {
+  // Sub-Security that is a known SecurityID -> link to its page; free text stays plain (unformatted).
+  const subCell = v => {
     if(v === null || v === undefined || v === '') return '';
     const m = /^\d+$/.test(String(v)) ? masterAll.find(x => String(x.SecurityID) === String(v)) : null;
-    return m ? `${v} · ${m.SecurityName}` : String(v);
+    return m ? `<a class="sub-link" href="security.html?id=${escA(m.SecurityID)}">${escA(v + ' · ' + m.SecurityName)}</a>` : escA(v);
   };
   body.innerHTML = rows.map(r => `<tr>
-    <td>${escA(r.AssetClass)}</td><td>${escA(r.Region)}</td><td>${escA(r.Country)}</td>
-    <td>${escA(subName(r.SubSecurity))}</td><td>${escA(r.Sector)}</td><td>${escA(r.CurrencyRisk)}</td><td class="num">${Number(r.Weight).toFixed(2)}</td>
+    <td>${escA(r.AssetClass)}</td><td>${escA(r.Region)}</td><td>${escA(r.SubRegion)}</td><td>${escA(r.Country)}</td>
+    <td>${subCell(r.SubSecurity)}</td><td>${escA(r.Sector)}</td><td>${escA(r.CurrencyRisk)}</td><td class="num">${Number(r.Weight).toFixed(2)}</td>
   </tr>`).join('');
   const sum = rows.reduce((s,r) => s+Number(r.Weight||0), 0);
   const newest = rows.reduce((m,r) => (r.modified_at_utc > m ? r.modified_at_utc : m), '');

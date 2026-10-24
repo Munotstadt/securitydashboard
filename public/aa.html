@@ -22,18 +22,21 @@
   button:hover{border-color:var(--text);}
   button:disabled{opacity:.4;cursor:not-allowed;pointer-events:none;}
   .count-line{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin:0 0 14px;}
-  .layout{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:24px;align-items:start;}
-  @media (max-width:1100px){ .layout{grid-template-columns:minmax(0,1fr);} }
+  .layout{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start;}
   .sec-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 10px;}
   .sec-head h2{font-family:'Space Grotesk',sans-serif;font-size:16px;margin:0;}
   .sec-head .meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);}
   .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:4px;}
-  table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;min-width:760px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed;min-width:1120px;}
   th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);background:var(--panel);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   th.num{text-align:right;}
   td{padding:2px 6px;border-bottom:1px solid var(--line);vertical-align:middle;height:28px;}
   td input, td select{width:100%;}
   td input[type=text], td select{font-size:12px;padding:2px 6px;height:24px;line-height:18px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--text);font-family:'Inter',sans-serif;}
+  .subsec-cell{display:flex;align-items:center;gap:4px;}
+  .subsec-cell input{flex:1;min-width:0;}
+  a.sub-link{flex:none;display:inline-flex;align-items:center;justify-content:center;width:22px;height:24px;border:1px solid var(--line);border-radius:3px;background:var(--panel);color:var(--accent);text-decoration:none;font-size:13px;line-height:1;}
+  a.sub-link:hover{border-color:var(--accent);background:#fff;}
   td input.amt-input{text-align:right;font-variant-numeric:tabular-nums;font-family:'IBM Plex Mono',monospace;}
   td input.bad{border-color:var(--err);background:rgba(192,41,61,.06);}
   td button.del-btn{width:100%;padding:2px 0;font-size:12px;line-height:16px;}
@@ -44,7 +47,7 @@
   .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);margin-top:10px;min-height:16px;}
   .status.error{color:var(--err);} .status.ok{color:var(--ok);}
   .empty{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);padding:18px 6px;}
-  .pies{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;}
+  .pies{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;}
   .pie-box{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px;}
   .pie-title{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
   .pie-body{display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
@@ -92,11 +95,11 @@
       <div class="table-wrap">
         <table>
           <colgroup>
-            <col style="width:120px"><col style="width:130px"><col style="width:140px"><col><col style="width:190px"><col style="width:100px"><col style="width:100px"><col style="width:40px">
+            <col style="width:110px"><col style="width:120px"><col style="width:130px"><col style="width:130px"><col><col style="width:170px"><col style="width:110px"><col style="width:90px"><col style="width:40px">
           </colgroup>
-          <thead><tr><th>Asset Class</th><th>Region</th><th>Country</th><th>Sub-Security</th><th>Sector</th><th>Currency Risk</th><th class="num">Weight %</th><th></th></tr></thead>
-          <tbody id="body"><tr><td colspan="8" class="empty">Security wählen…</td></tr></tbody>
-          <tfoot><tr><td colspan="6" id="sumLabel">Summe</td><td id="sumCell" style="text-align:right"></td><td></td></tr></tfoot>
+          <thead><tr><th>Asset Class</th><th>Region</th><th>Sub-Region</th><th>Country</th><th>Sub-Security</th><th>Sector</th><th>Currency Risk</th><th class="num">Weight %</th><th></th></tr></thead>
+          <tbody id="body"><tr><td colspan="9" class="empty">Security wählen…</td></tr></tbody>
+          <tfoot><tr><td colspan="7" id="sumLabel">Summe</td><td id="sumCell" style="text-align:right"></td><td></td></tr></tfoot>
         </table>
       </div>
       <div class="actions">
@@ -113,10 +116,11 @@
     </section>
   </div>
 
-  <p class="note">Pro Security können mehrere Zeilen erfasst werden (z.B. ein Fonds mit Anteilen in verschiedenen Regionen/Sektoren). Die Weights einer Security müssen sich auf exakt 100 % summieren – gespeichert wird nur dann; der Server prüft die Summe zusätzlich im selben Batch. Sub-Security: entweder eine Security aus der Liste wählen (gespeichert wird die SecurityID) oder einen freien Text eingeben. Country-Vorschläge stammen aus bereits erfassten Einträgen. Currency Risk: Währungscode (z.B. CHF, USD) oder „Others“; neue Zeilen übernehmen die Währung der letzten Zeile bzw. der Security.</p>
+  <p class="note">Pro Security können mehrere Zeilen erfasst werden (z.B. ein Fonds mit Anteilen in verschiedenen Regionen/Sektoren). Die Weights einer Security müssen sich auf exakt 100 % summieren – gespeichert wird nur dann; der Server prüft die Summe zusätzlich im selben Batch. Sub-Security: entweder eine Security aus der Liste wählen (gespeichert wird die SecurityID) oder einen freien Text eingeben. Ist die Sub-Security eine Security aus der Liste, erscheint daneben ein ↗-Link zu ihrer Seite; reiner Text bleibt unformatiert. Sub-Region: Freitext unter der Region (z.B. Eurozone, UK). Country- und Sub-Region-Vorschläge stammen aus bereits erfassten Einträgen. Currency Risk: Währungscode (z.B. CHF, USD) oder „Others“; neue Zeilen übernehmen die Währung der letzten Zeile bzw. der Security.</p>
 </div>
 
 <datalist id="countryOptions"></datalist>
+<datalist id="subRegionOptions"></datalist>
 <datalist id="subSecOptions"></datalist>
 <datalist id="ccyOptions"></datalist>
 
@@ -136,7 +140,7 @@ const GREY_NA = '#c9ced6', GREY_OTHER = '#8b929c';
 let overview = [];        // [{SecurityID, SecurityName, Currency, W, N, inScope}]
 let secNameById = new Map();
 let currentId = null;
-let rows = [];            // {AllocationID, AssetClass, Region, Country, SubSecurity, Sector, CurrencyRisk, Weight(number|NaN), _wText, _new, _dirty}
+let rows = [];            // {AllocationID, AssetClass, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight(number|NaN), _wText, _new, _dirty}
 let deleteQueue = [];
 
 const $ = id => document.getElementById(id);
@@ -172,6 +176,15 @@ function masterCurrencyOf(secId){
 }
 
 // ---------- sub-security helpers ----------
+// A Sub-Security that is a known SecurityID gets a link to its security page; free text stays plain.
+function subSecHref(v){
+  const s = String(v ?? '');
+  return (/^\d+$/.test(s) && secNameById.has(Number(s))) ? `security.html?id=${s}` : null;
+}
+function subSecLinkHtml(v){
+  const href = subSecHref(v);
+  return href ? `<a class="sub-link" href="${href}" target="_blank" rel="noopener" title="Security öffnen (${esc(secNameById.get(Number(v)))})">↗</a>` : '';
+}
 function subSecDisplay(v){
   if (v === null || v === undefined || v === '') return '';
   const s = String(v);
@@ -206,6 +219,8 @@ async function loadOverview(){
 async function loadCountries(){
   const c = await dbQuery("SELECT DISTINCT Country FROM security_asset_allocation WHERE Country IS NOT NULL AND Country <> '' ORDER BY Country COLLATE NOCASE ASC");
   $('countryOptions').innerHTML = c.map(r => `<option value="${esc(r.Country)}">`).join('');
+  const sr = await dbQuery("SELECT DISTINCT SubRegion FROM security_asset_allocation WHERE SubRegion IS NOT NULL AND SubRegion <> '' ORDER BY SubRegion COLLATE NOCASE ASC");
+  $('subRegionOptions').innerHTML = sr.map(r => `<option value="${esc(r.SubRegion)}">`).join('');
   const cc = await dbQuery("SELECT DISTINCT CurrencyRisk FROM security_asset_allocation WHERE CurrencyRisk IS NOT NULL AND CurrencyRisk <> ''");
   const all = [...new Set(CCY_DEFAULTS.concat(cc.map(r => r.CurrencyRisk)))];
   $('ccyOptions').innerHTML = all.map(v => `<option value="${esc(v)}">`).join('');
@@ -244,7 +259,7 @@ async function loadRows(){
   rows = []; deleteQueue = [];
   if (currentId === null) { renderAll(); return; }
   const data = await dbQuery(
-    'SELECT AllocationID, AssetClass, Region, Country, SubSecurity, Sector, CurrencyRisk, Weight FROM security_asset_allocation WHERE SecurityID = ? ORDER BY AllocationID ASC', [currentId]);
+    'SELECT AllocationID, AssetClass, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight FROM security_asset_allocation WHERE SecurityID = ? ORDER BY AllocationID ASC', [currentId]);
   rows = data.map(r => ({ ...r, _wText: fmtW(r.Weight), _new: false, _dirty: false }));
   renderAll();
   setStatus('', '');
@@ -256,8 +271,9 @@ function renderRow(r, i){
   return `<tr data-idx="${i}" class="${r._new ? 'new-row' : ''}">
     <td><select data-f="AssetClass">${optionsHtml(ASSET_CLASSES, r.AssetClass)}</select></td>
     <td><select data-f="Region">${optionsHtml(REGIONS, r.Region)}</select></td>
+    <td><input type="text" data-f="SubRegion" list="subRegionOptions" value="${esc(r.SubRegion || '')}" placeholder="z.B. Eurozone"></td>
     <td><input type="text" data-f="Country" list="countryOptions" value="${esc(r.Country || '')}" placeholder="Land"></td>
-    <td><input type="text" data-f="SubSecurity" list="subSecOptions" value="${esc(subSecDisplay(r.SubSecurity))}" placeholder="Security wählen oder Text"></td>
+    <td><div class="subsec-cell"><input type="text" data-f="SubSecurity" list="subSecOptions" value="${esc(subSecDisplay(r.SubSecurity))}" placeholder="Security wählen oder Text"><span class="sublink-slot">${subSecLinkHtml(r.SubSecurity)}</span></div></td>
     <td><select data-f="Sector">${optionsHtml(SECTORS, r.Sector)}</select></td>
     <td><input type="text" data-f="CurrencyRisk" list="ccyOptions" value="${esc(r.CurrencyRisk || '')}" placeholder="CHF"></td>
     <td><input type="text" inputmode="decimal" class="amt-input ${rowWeightValid(r) ? '' : 'bad'}" data-f="Weight" value="${esc(r._wText)}"></td>
@@ -266,8 +282,8 @@ function renderRow(r, i){
 }
 function renderTable(){
   const body = $('body');
-  if (currentId === null) { body.innerHTML = '<tr><td colspan="8" class="empty">Security wählen…</td></tr>'; return; }
-  body.innerHTML = rows.length ? rows.map(renderRow).join('') : '<tr><td colspan="8" class="empty">Noch keine Allokation erfasst – „+ Zeile“ klicken.</td></tr>';
+  if (currentId === null) { body.innerHTML = '<tr><td colspan="9" class="empty">Security wählen…</td></tr>'; return; }
+  body.innerHTML = rows.length ? rows.map(renderRow).join('') : '<tr><td colspan="9" class="empty">Noch keine Allokation erfasst – „+ Zeile“ klicken.</td></tr>';
   body.querySelectorAll('[data-f]').forEach(el => {
     el.addEventListener(el.dataset.f === 'Weight' ? 'input' : 'change', () => onField(el));
     if (el.dataset.f === 'Weight') el.addEventListener('change', () => { const r = rows[Number(el.closest('tr').dataset.idx)]; if (isFinite(r.Weight)) { r._wText = fmtW(r.Weight); el.value = r._wText; } });
@@ -284,11 +300,13 @@ function onField(el){
   if (f === 'Weight') { r._wText = el.value; r.Weight = parseW(el.value); el.classList.toggle('bad', !rowWeightValid(r)); }
   else if (f === 'SubSecurity') {
     r.SubSecurity = subSecParse(el.value); el.value = subSecDisplay(r.SubSecurity);
+    const slot = el.closest('tr').querySelector('.sublink-slot'); if (slot) slot.innerHTML = subSecLinkHtml(r.SubSecurity);
     // A selected security brings its master sector along (can still be overridden manually).
     const sec = (r.SubSecurity && /^\d+$/.test(String(r.SubSecurity))) ? masterSectorOf(r.SubSecurity) : null;
     if (sec) { r.Sector = sec; const sel = el.closest('tr').querySelector('[data-f="Sector"]'); if (sel) sel.value = sec; }
   }
   else if (f === 'Country') { r.Country = el.value.trim() || null; }
+  else if (f === 'SubRegion') { r.SubRegion = el.value.trim() || null; }
   else if (f === 'CurrencyRisk') { r.CurrencyRisk = ccyParse(el.value); el.value = r.CurrencyRisk || ''; }
   else { r[f] = el.value; }
   r._dirty = true;
@@ -376,7 +394,7 @@ $('addBtn').addEventListener('click', () => {
   const last = rows[rows.length - 1];
   const rest = (10000 - sumCents()) / 100;
   const w = rest > 0 ? rest : NaN;
-  rows.push({ AllocationID: null, AssetClass: last ? last.AssetClass : 'Share', Region: last ? last.Region : 'World', Country: null, SubSecurity: null,
+  rows.push({ AllocationID: null, AssetClass: last ? last.AssetClass : 'Share', Region: last ? last.Region : 'World', SubRegion: null, Country: null, SubSecurity: null,
     Sector: masterSectorOf(currentId) || '_not defined',
     CurrencyRisk: last ? last.CurrencyRisk : masterCurrencyOf(currentId), Weight: w, _wText: fmtW(w), _new: true, _dirty: true });
   renderAll();
@@ -403,12 +421,12 @@ $('saveBtn').addEventListener('click', async () => {
   deleteQueue.forEach(id => stmts.push({ sql: 'DELETE FROM security_asset_allocation WHERE AllocationID = ? AND SecurityID = ?', args: [id, currentId] }));
   rows.forEach((r, i) => {
     if (r._new) {
-      stmts.push({ sql: 'INSERT INTO security_asset_allocation (SecurityID, AssetClass, Region, Country, SubSecurity, Sector, CurrencyRisk, Weight) VALUES (?,?,?,?,?,?,?,?)',
-        args: [currentId, r.AssetClass, r.Region, r.Country, r.SubSecurity === null ? null : String(r.SubSecurity), r.Sector, r.CurrencyRisk || null, r.Weight] });
+      stmts.push({ sql: 'INSERT INTO security_asset_allocation (SecurityID, AssetClass, Region, SubRegion, Country, SubSecurity, Sector, CurrencyRisk, Weight) VALUES (?,?,?,?,?,?,?,?,?)',
+        args: [currentId, r.AssetClass, r.Region, r.SubRegion || null, r.Country, r.SubSecurity === null ? null : String(r.SubSecurity), r.Sector, r.CurrencyRisk || null, r.Weight] });
       newIdx.push(i);
     } else if (r._dirty) {
-      stmts.push({ sql: `UPDATE security_asset_allocation SET AssetClass = ?, Region = ?, Country = ?, SubSecurity = ?, Sector = ?, CurrencyRisk = ?, Weight = ?, modified_at_utc = ${nowSql} WHERE AllocationID = ? AND SecurityID = ?`,
-        args: [r.AssetClass, r.Region, r.Country, r.SubSecurity === null ? null : String(r.SubSecurity), r.Sector, r.CurrencyRisk || null, r.Weight, r.AllocationID, currentId] });
+      stmts.push({ sql: `UPDATE security_asset_allocation SET AssetClass = ?, Region = ?, SubRegion = ?, Country = ?, SubSecurity = ?, Sector = ?, CurrencyRisk = ?, Weight = ?, modified_at_utc = ${nowSql} WHERE AllocationID = ? AND SecurityID = ?`,
+        args: [r.AssetClass, r.Region, r.SubRegion || null, r.Country, r.SubSecurity === null ? null : String(r.SubSecurity), r.Sector, r.CurrencyRisk || null, r.Weight, r.AllocationID, currentId] });
     }
   });
   if (!stmts.length) { setStatus('Keine Änderungen.', 'ok'); return; }
