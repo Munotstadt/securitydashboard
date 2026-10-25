@@ -296,7 +296,7 @@ async function renderComparison(){
   const [mastersRaw, prices, distRows, dataRows] = await Promise.all([
     dbQueryIn(ph => `SELECT SecurityID, SecurityName, Currency FROM security_master WHERE SecurityID IN (${ph})`, secIds),
     dbQueryIn(ph => `SELECT SecurityID, Price, Price_date AS PriceDate FROM security_prices WHERE SecurityID IN (${ph})`, secIds),
-    dbQueryIn(ph => `SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions WHERE SecurityID IN (${ph})`, secIds),
+    dbQueryIn(ph => `SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions WHERE SecurityID IN (${ph}) AND (distribution_type IS NULL OR distribution_type NOT IN (SELECT ParameterID FROM security_parameter WHERE ParaTable='security_distributions' AND ParaField='distribution_type' AND ParameterName='Swiss Tax Income (CHF)'))`, secIds),
     dbQueryIn(ph => `SELECT sd.SecurityID, sd.DataType, sd.FieldNameID, sd.FieldValue, sd.NumericValue, sd.AsOfDate, sp.ParameterName
                 FROM security_data sd LEFT JOIN security_parameter sp ON sp.ParameterID = sd.FieldNameID
                 WHERE sd.SecurityID IN (${ph}) AND (sd.DataType = 'SectorWeight' OR sd.FieldNameID IN (${TER_PARAM_ID},${TRXCRY_PARAM_ID},${SPREAD_PARAM_ID}))`, secIds),

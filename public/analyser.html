@@ -167,7 +167,7 @@ async function load(){
       dbQuery(`SELECT t.SecurityID, t.Quantity, ta.ParameterName AS TrxArtName
                   FROM security_transactions t LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt`),
       dbRecentDailyPrices(600),
-      dbQuery(`SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions`, [], 3600000),
+      dbQuery(`SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions WHERE (distribution_type IS NULL OR distribution_type NOT IN (SELECT ParameterID FROM security_parameter WHERE ParaTable='security_distributions' AND ParaField='distribution_type' AND ParameterName='Swiss Tax Income (CHF)'))`, [], 3600000),
     ]);
 
     const pricesBySecId = new Map();

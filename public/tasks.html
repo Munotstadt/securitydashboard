@@ -751,7 +751,7 @@ document.getElementById('qualityCheckBtn').addEventListener('click', async () =>
     const urgentDue = (() => { const d = new Date(today + 'T00:00:00'); d.setDate(d.getDate() + 10); return d.toISOString().slice(0,10); })();
     if(activeSecurities.length){
       const distRows = await dbQueryIn(
-        ph => `SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions WHERE SecurityID IN (${ph})`,
+        ph => `SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions WHERE SecurityID IN (${ph}) AND (distribution_type IS NULL OR distribution_type NOT IN (SELECT ParameterID FROM security_parameter WHERE ParaTable='security_distributions' AND ParaField='distribution_type' AND ParameterName='Swiss Tax Income (CHF)'))`,
         activeSecurities.map(s => s.SecurityID)
       );
       const distBySec = new Map();
