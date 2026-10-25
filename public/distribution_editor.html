@@ -151,7 +151,7 @@ function renderRow(row, idx) {
     <td><input type="date" data-field="PayDate" value="${row.PayDate||''}"></td>
     <td><select data-field="DistributionType">
       <option value="" ${!row.DistributionType?'selected':''}></option>
-      <option value="Distribution" ${row.DistributionType==='Distribution'?'selected':''}>Distribution</option>
+      <option value="Dividend" ${row.DistributionType==='Dividend'?'selected':''}>Dividend</option>
       <option value="Capital" ${row.DistributionType==='Capital'?'selected':''}>Capital</option>
     </select></td>
     <td><input type="text" class="src-input" data-field="Source" value="${row.Source||''}" title="${row.Source||''}"></td>
