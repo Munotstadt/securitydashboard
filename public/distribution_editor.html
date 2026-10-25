@@ -90,7 +90,7 @@
       <col style="width:90px">
       <col style="width:128px">
       <col style="width:128px">
-      <col style="width:110px">
+      <col style="width:170px">
       <col style="width:130px">
       <col style="width:44px">
     </colgroup>
@@ -100,7 +100,7 @@
       <th>Currency</th>
       <th data-sort="ExDate">ExDate</th>
       <th data-sort="PayDate">PayDate</th>
-      <th data-sort="DistributionType">Type</th>
+      <th data-sort="distribution_type">Type</th>
       <th data-sort="Source">Source</th>
       <th></th>
     </tr></thead>
@@ -127,6 +127,7 @@ let deleteQueue = [];
 let sortKey = 'ExDate';
 let sortDir = 'desc';
 let CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD']; // fallback until dbCurrencyOptions() resolves in load()
+let TYPE_OPTS = []; // [{ParameterID, ParameterName}] from security_parameter (security_distributions / distribution_type)
 
 function secOptions(selected) {
   return masterRows.map(m => `<option value="${m.SecurityID}" ${String(m.SecurityID)===String(selected)?'selected':''}>${m.SecurityName} · ${m.SecurityID}</option>`).join('');
@@ -149,10 +150,9 @@ function renderRow(row, idx) {
     <td><select data-field="Currency">${CURRENCY_OPTS.map(c => `<option value="${c}" ${c===row.Currency?'selected':''}>${c}</option>`).join('')}</select></td>
     <td><input type="date" data-field="ExDate" value="${row.ExDate||''}"></td>
     <td><input type="date" data-field="PayDate" value="${row.PayDate||''}"></td>
-    <td><select data-field="DistributionType">
-      <option value="" ${!row.DistributionType?'selected':''}></option>
-      <option value="Dividend" ${row.DistributionType==='Dividend'?'selected':''}>Dividend</option>
-      <option value="Capital" ${row.DistributionType==='Capital'?'selected':''}>Capital</option>
+    <td><select data-field="distribution_type">
+      <option value="" ${row.distribution_type==null||row.distribution_type===''?'selected':''}></option>
+      ${TYPE_OPTS.map(o => `<option value="${o.ParameterID}" ${String(o.ParameterID)===String(row.distribution_type)?'selected':''}>${o.ParameterName}</option>`).join('')}
     </select></td>
     <td><input type="text" class="src-input" data-field="Source" value="${row.Source||''}" title="${row.Source||''}"></td>
     <td><button class="del-btn" data-del="${idx}">✕</button></td>
@@ -177,6 +177,7 @@ function updateSelectionLinks(secId) {
 function sortValue(r, key){
   if(key === 'DistributionAmount') return parseFloat(r.DistributionAmount) || 0;
   if(key === 'ExDate' || key === 'PayDate') return parseSwissDate(r[key]) || new Date(0);
+  if(key === 'distribution_type'){ const o = TYPE_OPTS.find(t => String(t.ParameterID) === String(r.distribution_type)); return (o ? o.ParameterName : '').toLowerCase(); }
   return (r[key] || '').toString().toLowerCase();
 }
 function updateSortHeaders(){
@@ -250,12 +251,14 @@ updateSortHeaders();
 async function load() {
   try {
     
-    const [distRows, master, currencyOpts] = await Promise.all([
-      dbQuery('SELECT id, SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source, DistributionType FROM security_distributions'),
+    const [distRows, master, currencyOpts, typeOpts] = await Promise.all([
+      dbQuery('SELECT id, SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source, distribution_type FROM security_distributions'),
       dbQuery('SELECT SecurityID, SecurityName, Currency FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC', [], 3600000),
       dbCurrencyOptions(),
+      dbParameterOptions('security_distributions', 'distribution_type'),
     ]);
     CURRENCY_OPTS = currencyOpts;
+    TYPE_OPTS = typeOpts;
     // DB stores ISO (yyyy-mm-dd); the editor now displays/edits dates as ISO
     // too (<input type="date"> requires ISO), so just normalize via the
     // existing parse/format helpers (parseSwissDate also accepts ISO input).
@@ -289,7 +292,7 @@ document.getElementById('filterTo').addEventListener('change', () => renderAll(d
 document.getElementById('addBtn').addEventListener('click', () => {
   const secId = document.getElementById('filterSecurity').value || (masterRows[0] && masterRows[0].SecurityID) || '';
   const master = masterRows.find(m => String(m.SecurityID) === String(secId));
-  rows.push({ id:null, SecurityID: secId, DistributionAmount:'', Currency: master ? master.Currency : '', ExDate: nowZurichIsoDateString(), PayDate:'', Source:'manual', DistributionType:null, _dirty:true, _new:true });
+  rows.push({ id:null, SecurityID: secId, DistributionAmount:'', Currency: master ? master.Currency : '', ExDate: nowZurichIsoDateString(), PayDate:'', Source:'manual', distribution_type:null, _dirty:true, _new:true });
   renderAll(document.getElementById('filterSecurity').value);
 });
 
@@ -299,15 +302,16 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
     if (r.PayDate && !parseSwissDate(r.PayDate)) { setStatus(`Ungültiges Pay-Date "${r.PayDate}" - erwartet yyyy-mm-dd.`, 'error'); return; }
   }
   const stmts = []; const newRowIdxs = [];
+  const typeArg = r => (r.distribution_type === '' || r.distribution_type == null) ? null : Number(r.distribution_type);
   rows.forEach((r,i) => {
     if (!r._dirty) return;
     if (r._new) {
-      stmts.push({ sql:`INSERT INTO security_distributions (SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source, DistributionType, created_at) VALUES (?,?,?,?,?,?,?,?)`,
-        args:[r.SecurityID, r.DistributionAmount||null, r.Currency, toIsoDate(parseSwissDate(r.ExDate)), r.PayDate ? toIsoDate(parseSwissDate(r.PayDate)) : null, r.Source, r.DistributionType||null, nowZurichString()] });
+      stmts.push({ sql:`INSERT INTO security_distributions (SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source, distribution_type, created_at) VALUES (?,?,?,?,?,?,?,?)`,
+        args:[r.SecurityID, r.DistributionAmount||null, r.Currency, toIsoDate(parseSwissDate(r.ExDate)), r.PayDate ? toIsoDate(parseSwissDate(r.PayDate)) : null, r.Source, typeArg(r), nowZurichString()] });
       newRowIdxs.push(i);
     } else {
-      stmts.push({ sql:`UPDATE security_distributions SET SecurityID=?, DistributionAmount=?, Currency=?, ExDate=?, PayDate=?, Source=?, DistributionType=? WHERE id=?`,
-        args:[r.SecurityID, r.DistributionAmount||null, r.Currency, toIsoDate(parseSwissDate(r.ExDate)), r.PayDate ? toIsoDate(parseSwissDate(r.PayDate)) : null, r.Source, r.DistributionType||null, r.id] });
+      stmts.push({ sql:`UPDATE security_distributions SET SecurityID=?, DistributionAmount=?, Currency=?, ExDate=?, PayDate=?, Source=?, distribution_type=? WHERE id=?`,
+        args:[r.SecurityID, r.DistributionAmount||null, r.Currency, toIsoDate(parseSwissDate(r.ExDate)), r.PayDate ? toIsoDate(parseSwissDate(r.PayDate)) : null, r.Source, typeArg(r), r.id] });
     }
   });
   for (const id of deleteQueue) stmts.push({ sql:`DELETE FROM security_distributions WHERE id=?`, args:[id] });
