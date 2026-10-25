@@ -258,7 +258,7 @@
   <div class="subnav-tabs" id="subnavTabs">
     <button type="button" class="subnav-tab active" data-tab="price">Price</button>
     <button type="button" class="subnav-tab" data-tab="returns">Returns</button>
-    <button type="button" class="subnav-tab" data-tab="dividends">Dividenden</button>
+    <button type="button" class="subnav-tab" data-tab="dividends">Distributions</button>
     <button type="button" class="subnav-tab" data-tab="risk">Risk</button>
     <button type="button" class="subnav-tab" data-tab="fundamentals">Fundamentals</button>
     <button type="button" class="subnav-tab" data-tab="notes">Notes</button>
@@ -352,7 +352,7 @@
   <div class="tab-panel" data-tab="dividends" id="tabPanelDividends">
   <div id="dividendSection">
     <div class="fundamentals-grid" id="dividendYieldStats"></div>
-    <div class="section-title-row" style="margin-top:20px;"><span class="section-title-text">Dividend Chart</span></div>
+    <div class="section-title-row" style="margin-top:20px;"><span class="section-title-text">Distributions</span></div>
     <div class="chart-wrap" id="distChartWrap"><div class="chart-empty">Loading chart…</div></div>
     <div class="chart-controls-row">
       <div class="toggle-row" id="distRangeRow">
@@ -361,8 +361,8 @@
         <button type="button" class="toggle-btn" data-range="ALL">All</button>
       </div>
       <div class="chart-actions-inline">
-        <a class="chart-icon-btn" id="linkDividendHistory" href="distribution_editor.html" title="View Dividend History">👁</a>
-        <a class="chart-icon-btn" id="linkDividendAdd" href="distribution_editor.html" title="Add Dividend">+</a>
+        <a class="chart-icon-btn" id="linkDividendHistory" href="distribution_editor.html" title="View Distributions">👁</a>
+        <a class="chart-icon-btn" id="linkDividendAdd" href="distribution_editor.html" title="Add Distribution">+</a>
       </div>
     </div>
   </div>
@@ -612,7 +612,9 @@ function endOfDay(d){ const r = new Date(d); r.setHours(23,59,59,999); return r;
 let masterAll = [];
 let curSecId = null;
 let priceRows = [];
-let distRows = [];
+let distRows = [];      // return-relevant distributions only (Dividends + Capital + untyped): yield, total return, rolling sum
+let distRowsAll = [];   // all distributions incl. Swiss Tax Income: chart bars only
+const DIST_EXCLUDED_TYPE = 'Swiss Tax Income (CHF)'; // security_parameter name; never part of total return / yield
 let annualDataFull = [];
 let annualExpanded = false;
 let renderAnnualTable = function(){};
@@ -945,7 +947,7 @@ function computeRolling12m(sorted, allDist){
   return points;
 }
 function drawDistributionChart(container, tooltip, displayDist, allDist, currency){
-  if(!displayDist.length){ container.innerHTML = '<div class="chart-empty">Keine Dividenden für diesen Zeitraum.</div>'; return; }
+  if(!displayDist.length){ container.innerHTML = '<div class="chart-empty">Keine Distributions für diesen Zeitraum.</div>'; return; }
   const width=800, height=240;
   const sorted = [...displayDist].sort((a,b)=>a.exDate-b.exDate);
   const maxBar = Math.max(...sorted.map(d=>d.amount))*1.15 || 1;
@@ -964,10 +966,14 @@ function drawDistributionChart(container, tooltip, displayDist, allDist, currenc
   const yScaleBar = v => pad.top + innerH - (v/maxBar)*innerH;
   const yScaleRoll = v => pad.top + innerH - (v/maxRoll)*innerH;
 
-  let bars = '';
+  let bars = ''; let hasTaxBars = false, hasCapitalBars = false;
   sorted.forEach(d => {
     const x = xScale(d.exDate.getTime())-barW/2, y = yScaleBar(d.amount), h = (pad.top+innerH)-y;
-    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="#1F8A6E" opacity="0.55" data-date="${fmtDateOnly(d.exDate)}" data-amount="${fmtDecimal(d.amount,2)}" class="bar-pt"/>`;
+    const isTax = d.typeName === DIST_EXCLUDED_TYPE;
+    const barFill = isTax ? '#9AA1AB' : (d.typeName === 'Capital' ? '#2F6FB5' : '#1F8A6E');
+    if(isTax) hasTaxBars = true;
+    if(d.typeName === 'Capital') hasCapitalBars = true;
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${barFill}" opacity="0.55" data-date="${fmtDateOnly(d.exDate)}" data-amount="${fmtDecimal(d.amount,2)}" data-type="${d.typeName||''}" class="bar-pt"/>`;
   });
   let rollLine = '';
   if(rolling.length>=2){
@@ -997,11 +1003,11 @@ function drawDistributionChart(container, tooltip, displayDist, allDist, currenc
   }).join('');
 
   container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Distribution chart">${grid}${bars}${rollLine}${rightLabels}${xLabels}</svg>
-    <div class="chart-legend">Balken: Dividende pro Ex-Date (linke Achse) · Gestrichelt: rollierende 12-Monats-Summe (rechte Achse)</div>`;
+    <div class="chart-legend">Balken: Distribution pro Ex-Date (linke Achse)${hasCapitalBars ? ' · Blau: Capital' : ''}${hasTaxBars ? ' · Grau: Swiss Tax Income (nicht in Total Return/Yield)' : ''} · Gestrichelt: rollierende 12-Monats-Summe Dividends + Capital (rechte Achse)</div>`;
   container.appendChild(tooltip);
   const svgEl = container.querySelector('svg');
   svgEl.querySelectorAll('.bar-pt').forEach(bar => {
-    const show = (evt) => { evt.preventDefault(); showTooltip(evt, container, tooltip, `${bar.dataset.date}: ${bar.dataset.amount} ${currency||''}`); };
+    const show = (evt) => { evt.preventDefault(); showTooltip(evt, container, tooltip, `${bar.dataset.date}: ${bar.dataset.amount} ${currency||''}${bar.dataset.type ? ' · ' + bar.dataset.type : ''}`); };
     bar.addEventListener('mouseenter', show); bar.addEventListener('mousemove', show);
     bar.addEventListener('touchstart', show, {passive:false});
     bar.addEventListener('mouseleave', () => tooltip.style.display='none');
@@ -1154,14 +1160,17 @@ async function loadSecurity(secId){
   // other two since it resolves to its own query/queries independently.
   const [prices, dists, txns] = await Promise.all([
     loadTieredPriceHistory(secId),
-    dbQuery('SELECT id, SecurityID, DistributionAmount, Currency, ExDate, PayDate, Source FROM security_distributions WHERE SecurityID = ?', [secId], 300000),
+    dbQuery(`SELECT d.id, d.SecurityID, d.DistributionAmount, d.Currency, d.ExDate, d.PayDate, d.Source, d.distribution_type, p.ParameterName AS TypeName
+                FROM security_distributions d LEFT JOIN security_parameter p ON p.ParameterID = d.distribution_type
+                WHERE d.SecurityID = ?`, [secId], 300000),
     dbQuery(`SELECT t.DateTrx, t.Quantity, t.AmtCHF, t.AmtLC, t.Source, ta.ParameterName AS TrxArtName
                 FROM security_transactions t LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt
                 WHERE t.SecurityID = ?`, [secId], 300000),
   ]);
   priceRows = prices;
-  distRows = dists.map(d => ({ exDate: parseSwissDate(d.ExDate), payDate: parseSwissDate(d.PayDate), amount: parseFloat(d.DistributionAmount), currency: d.Currency || master.Currency, source: d.Source||'' }))
+  distRowsAll = dists.map(d => ({ exDate: parseSwissDate(d.ExDate), payDate: parseSwissDate(d.PayDate), amount: parseFloat(d.DistributionAmount), currency: d.Currency || master.Currency, source: d.Source||'', typeName: d.TypeName||'' }))
     .filter(d => d.exDate && !isNaN(d.amount)).sort((a,b) => a.exDate-b.exDate);
+  distRows = distRowsAll.filter(d => d.typeName !== DIST_EXCLUDED_TYPE);
 
   const txnSorted = [...txns].sort((a,b) => (parseSwissDate(b.DateTrx)||0) - (parseSwissDate(a.DateTrx)||0)).slice(0,10);
   document.getElementById('txnBody').innerHTML = txnSorted.length
@@ -1174,19 +1183,19 @@ async function loadSecurity(secId){
       </tr>`).join('')
     : '<tr><td colspan="6" class="empty">No transactions for this security.</td></tr>';
   document.getElementById('transactionsSection').style.display = txnSorted.length ? '' : 'none';
-  document.getElementById('dividendSection').style.display = distRows.length ? '' : 'none';
+  document.getElementById('dividendSection').style.display = distRowsAll.length ? '' : 'none';
 
   document.getElementById('detailName').textContent = master.SecurityName;
   document.title = `${master.SecurityName} · Security Detail`;
   document.getElementById('detailCcy').textContent = master.Currency || '';
   renderMasterForm(master);
 
-  document.getElementById('pointCountNote').textContent = `${priceRows.length} Kurs-Datenpunkt(e) · ${distRows.length} Dividenden-Datenpunkt(e)`;
+  document.getElementById('pointCountNote').textContent = `${priceRows.length} Kurs-Datenpunkt(e) · ${distRowsAll.length} Distributions-Datenpunkt(e)`;
 
   if(!priceRows.length){
     document.getElementById('detailPrice').textContent = '—';
     document.getElementById('priceChartWrap').innerHTML = '<div class="chart-empty">Keine Kursdaten für diese Security.</div>';
-    document.getElementById('distChartWrap').innerHTML = '<div class="chart-empty">Keine Dividendendaten.</div>';
+    document.getElementById('distChartWrap').innerHTML = '<div class="chart-empty">Keine Distributions-Daten.</div>';
     document.getElementById('perfBody').innerHTML = '<tr><td colspan="6" class="empty">Keine Daten.</td></tr>';
     document.getElementById('perfBodyPrice').innerHTML = '<tr><td colspan="6" class="empty">Keine Daten.</td></tr>';
     document.getElementById('returnsBoxes').innerHTML = '';
@@ -1433,7 +1442,7 @@ async function loadSecurity(secId){
   }
   function renderDistChart(){
     const tooltip = document.createElement('div'); tooltip.className='chart-tooltip';
-    const displayDist = filterDistByRange(distRows, currentDistRange);
+    const displayDist = filterDistByRange(distRowsAll, currentDistRange);
     drawDistributionChart(distChartWrap, tooltip, displayDist, distRows, master.Currency);
   }
   renderPriceChart();
