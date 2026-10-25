@@ -81,16 +81,16 @@
     <colgroup>
       <col style="width:56px"><col style="width:17%"><col style="width:58px"><col style="width:9%"><col style="width:9%">
       <col style="width:7%"><col style="width:9%"><col style="width:6%"><col style="width:9%"><col style="width:9%">
-      <col style="width:7%"><col style="width:84px">
+      <col style="width:7%"><col style="width:52px"><col style="width:84px">
     </colgroup>
     <thead><tr id="headerRow">
       <th data-sort="SecurityID">ID</th><th data-sort="SecurityName">Name</th><th data-sort="Currency">Ccy</th>
       <th data-sort="Instrument">Instrument</th><th data-sort="Sector">Sector</th><th data-sort="Ticker">Ticker</th>
       <th data-sort="ID_ISIN">ISIN</th><th data-sort="ID_Valor">Valor</th>
       <th data-sort="DashboardGrouping">DashboardGrouping</th><th data-sort="PortfolioGrouping">PortfolioGrouping</th>
-      <th data-sort="Collector">Collector</th><th></th>
+      <th data-sort="Collector">Collector</th><th data-sort="price_freq_days" title="Preisfrequenz in Tagen (1 = täglich)">Freq (d)</th><th></th>
     </tr></thead>
-    <tbody id="body"><tr><td colspan="12">Loading…</td></tr></tbody>
+    <tbody id="body"><tr><td colspan="13">Loading…</td></tr></tbody>
   </table>
   </div>
   <div class="status" id="status"></div>
@@ -106,7 +106,7 @@
 let CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD']; // fallback until dbCurrencyOptions() resolves in load()
 const EYE_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>`;
 
-let rows = [];          // {SecurityID, SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, DashboardGrouping, Instrument, Sector, PortfolioGrouping, _dirty, _new}
+let rows = [];          // {SecurityID, SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, price_freq_days, DashboardGrouping, Instrument, Sector, PortfolioGrouping, _dirty, _new}
 let collectorOpts = []; // [{ParameterID, ParameterName}]
 let groupingOpts = [];
 let instrumentOpts = [];
@@ -116,6 +116,7 @@ let deleteQueue = [];
 let sortField = null;
 let sortDir = 'asc';
 
+function parseFreq(v){ if (v === null || v === undefined || String(v).trim() === '') return null; const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) && n > 0 ? n : null; }
 function esc(v){ return String(v ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function paramName(opts, id) {
   if (!id) return '';
@@ -130,7 +131,7 @@ function compareRows(a, b, field) {
     case 'Instrument': av = paramName(instrumentOpts, a.Instrument); bv = paramName(instrumentOpts, b.Instrument); break;
     case 'Sector': av = paramName(sectorOpts, a.Sector); bv = paramName(sectorOpts, b.Sector); break;
     case 'PortfolioGrouping': av = paramName(portfolioGroupingOpts, a.PortfolioGrouping); bv = paramName(portfolioGroupingOpts, b.PortfolioGrouping); break;
-    case 'ID_Valor': case 'SecurityID': return (Number(a[field]) || 0) - (Number(b[field]) || 0);
+    case 'ID_Valor': case 'SecurityID': case 'price_freq_days': return (Number(a[field]) || 0) - (Number(b[field]) || 0);
     default: av = a[field] || ''; bv = b[field] || '';
   }
   return String(av).toLowerCase().localeCompare(String(bv).toLowerCase());
@@ -168,6 +169,7 @@ function renderRow(row, idx) {
     <td><select data-field="DashboardGrouping">${optionList(groupingOpts, row.DashboardGrouping, true)}</select></td>
     <td><select data-field="PortfolioGrouping">${optionList(portfolioGroupingOpts, row.PortfolioGrouping, true)}</select></td>
     <td><select data-field="Collector">${optionList(collectorOpts, row.Collector, true)}</select></td>
+    <td><input type="text" inputmode="decimal" class="num-input" data-field="price_freq_days" value="${esc(row.price_freq_days)}" title="Preisfrequenz in Tagen (1 = täglich)"></td>
     <td class="act-col">${viewLink}<button class="icon-btn save" data-save="${idx}" title="Diese Zeile speichern">&#128190;</button><button class="icon-btn danger" data-del="${idx}" title="Zeile löschen">✕</button></td>
   </tr>`;
 }
@@ -199,7 +201,7 @@ function renderAll(filter='') {
   }
   updateSortIndicators();
 
-  body.innerHTML = filtered.length ? filtered.map(({r,i}) => renderRow(r,i)).join('') : '<tr><td colspan="12">No matches.</td></tr>';
+  body.innerHTML = filtered.length ? filtered.map(({r,i}) => renderRow(r,i)).join('') : '<tr><td colspan="13">No matches.</td></tr>';
 
   body.querySelectorAll('input:not(:disabled), select').forEach(el => {
     el.addEventListener('change', () => {
@@ -235,7 +237,7 @@ function renderAll(filter='') {
 async function load() {
   try {
     const [masterRows, collectors, groupings, instruments, portfolioGroupings, sectors, currencyOpts] = await Promise.all([
-      dbQuery('SELECT SecurityID, SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, DashboardGrouping, Instrument, Sector, PortfolioGrouping FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC'),
+      dbQuery('SELECT SecurityID, SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, price_freq_days, DashboardGrouping, Instrument, Sector, PortfolioGrouping FROM security_master ORDER BY SecurityName COLLATE NOCASE ASC'),
       dbParameterOptions('security_master','Collector'),
       dbParameterOptions('security_master','DashboardGrouping'),
       dbParameterOptions('security_master','Instrument'),
@@ -254,7 +256,7 @@ async function load() {
     renderAll();
     setStatus(`${rows.length} securities geladen.`, 'ok');
   } catch (e) {
-    document.getElementById('body').innerHTML = `<tr><td colspan="12">Error: ${e.message}</td></tr>`;
+    document.getElementById('body').innerHTML = `<tr><td colspan="13">Error: ${e.message}</td></tr>`;
   }
 }
 
@@ -275,7 +277,7 @@ document.querySelectorAll('#headerRow th[data-sort]').forEach(th => {
 });
 
 document.getElementById('addBtn').addEventListener('click', () => {
-  rows.push({SecurityID: suggestNextSecurityId(), SecurityName:'', Currency:'CHF', Ticker:'', ID_ISIN:'', ID_Valor:'', Collector:null, DashboardGrouping:null, Instrument:null, Sector:null, PortfolioGrouping:null, _dirty:true, _new:true});
+  rows.push({SecurityID: suggestNextSecurityId(), SecurityName:'', Currency:'CHF', Ticker:'', ID_ISIN:'', ID_Valor:'', Collector:null, price_freq_days:null, DashboardGrouping:null, Instrument:null, Sector:null, PortfolioGrouping:null, _dirty:true, _new:true});
   document.getElementById('search').value = '';
   sortField = null;
   renderAll('');
@@ -308,12 +310,12 @@ async function saveRows(onlyIdx) {
     const r = rows[i];
     if (!r._dirty) return;
     if (r._new) {
-      stmts.push({ sql: `INSERT INTO security_master (SecurityID, SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, DashboardGrouping, Instrument, Sector, PortfolioGrouping) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-        args: [Number(r.SecurityID), r.SecurityName, r.Currency, r.Ticker, r.ID_ISIN, r.ID_Valor||null, r.Collector||null, r.DashboardGrouping||null, r.Instrument||null, r.Sector||null, r.PortfolioGrouping||null] });
+      stmts.push({ sql: `INSERT INTO security_master (SecurityID, SecurityName, Currency, Ticker, ID_ISIN, ID_Valor, Collector, price_freq_days, DashboardGrouping, Instrument, Sector, PortfolioGrouping) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        args: [Number(r.SecurityID), r.SecurityName, r.Currency, r.Ticker, r.ID_ISIN, r.ID_Valor||null, r.Collector||null, parseFreq(r.price_freq_days), r.DashboardGrouping||null, r.Instrument||null, r.Sector||null, r.PortfolioGrouping||null] });
       newRowIdxs.push(i);
     } else {
-      stmts.push({ sql: `UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, DashboardGrouping=?, Instrument=?, Sector=?, PortfolioGrouping=? WHERE SecurityID=?`,
-        args: [r.SecurityName, r.Currency, r.Ticker, r.ID_ISIN, r.ID_Valor||null, r.Collector||null, r.DashboardGrouping||null, r.Instrument||null, r.Sector||null, r.PortfolioGrouping||null, r.SecurityID] });
+      stmts.push({ sql: `UPDATE security_master SET SecurityName=?, Currency=?, Ticker=?, ID_ISIN=?, ID_Valor=?, Collector=?, price_freq_days=?, DashboardGrouping=?, Instrument=?, Sector=?, PortfolioGrouping=? WHERE SecurityID=?`,
+        args: [r.SecurityName, r.Currency, r.Ticker, r.ID_ISIN, r.ID_Valor||null, r.Collector||null, parseFreq(r.price_freq_days), r.DashboardGrouping||null, r.Instrument||null, r.Sector||null, r.PortfolioGrouping||null, r.SecurityID] });
     }
   });
   if (!onlyOne) for (const id of deleteQueue) stmts.push({ sql: `DELETE FROM security_master WHERE SecurityID=?`, args: [id] });
