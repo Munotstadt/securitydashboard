@@ -18,11 +18,13 @@ test('Hauptwährungen bleiben unverändert', () => {
   assert.equal(toMasterCurrency({ price: 117.4, currency: 'GBP' }, 'GBP'), 117.4);
   assert.equal(toMasterCurrency({ price: 144.3, currency: 'USD' }, 'usd'), 144.3);
   assert.equal(toMasterCurrency({ price: 10, currency: 'CHF' }, null), 10);
+  // MSCI-Indizes: Yahoo liefert keine Währung -> unverändert
+  assert.equal(toMasterCurrency({ price: 4862.72, currency: undefined }, 'USD'), 4862.72);
+  assert.equal(toMasterCurrency({ price: 4862.72, currency: null }, 'USD'), 4862.72);
 });
 
 test('Währung passt nicht zum Master -> Fehler (z.B. GBp-Linie eines USD-ETF)', () => {
   assert.throws(() => toMasterCurrency({ price: 7736, currency: 'GBp' }, 'USD'), /Währung passt nicht/);
-  assert.throws(() => toMasterCurrency({ price: 1, currency: undefined }, 'GBP'), /keine Währung/);
 });
 
 test('Sprung-Check und Median', () => {

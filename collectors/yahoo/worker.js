@@ -117,7 +117,10 @@ export async function runCollector(env) {
 export function toMasterCurrency(quote, masterCurrency) {
 	const yahooCcy = quote.currency;
 	if (!yahooCcy) {
-		throw new Error("Yahoo liefert keine Währung (meta.currency)");
+		// Bei manchen Tickern (z.B. MSCI-Indizes ^990100-USD-STRD) liefert Yahoo keine
+		// Währung. Dann unverändert übernehmen wie bisher; Untereinheiten (GBp usw.)
+		// kommen immer mit Währungsangabe, und der Sprung-Check greift weiterhin.
+		return quote.price;
 	}
 	const minor = MINOR_UNIT_CURRENCIES[yahooCcy];
 	const isoCcy = minor ? minor[0] : String(yahooCcy).toUpperCase();
