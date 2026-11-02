@@ -15,7 +15,7 @@ export const MINOR_UNIT_CURRENCIES = {
 	"ILA": ["ILS", 100]
 };
 
-// Preissprung gegenüber dem letzten gespeicherten Collector-Preis, ab dem nicht
+// Preissprung gegenüber dem Referenzpreis (siehe fetchLastPrices), ab dem nicht
 // gespeichert wird (fängt Yahoos gelegentliche GBp/GBP-Wechsel ab). Gleiche
 // Schwelle wie der Import-Check in admin.html (docs/currency-magnitude-check.md).
 export const MAX_JUMP_FACTOR = 40;
@@ -142,14 +142,16 @@ async function fetchSecurities(env) {
 	return response.results;
 }
 
-// Referenzpreis je Security für checkJump: Median der letzten 5 Preise dieses
-// Collectors. Der Median sorgt dafür, dass ein einzelner Ausreisser die Security
-// nicht dauerhaft blockiert.
+// Referenzpreis je Security für checkJump: Median der letzten 5 Preise der letzten
+// 60 Tage, über alle Quellen (Collector, UBS Quotes, Uploads). Dass alle Quellen
+// zählen, ist wichtig: Steht von diesem Collector nur ein einziger falscher Wert in
+// der DB, wäre er sonst die Referenz und würde jeden korrekten Preis blockieren.
+// Der Median sorgt dafür, dass ein einzelner Ausreisser nicht durchschlägt.
 async function fetchLastPrices(env) {
-	const query = 'SELECT "SecurityID", "Price" FROM (SELECT "SecurityID", "Price", ROW_NUMBER() OVER (PARTITION BY "SecurityID" ORDER BY "Price_date" DESC) AS rn FROM "security_prices" WHERE "source" = ?) WHERE rn <= 5';
+	const query = 'SELECT "SecurityID", "Price" FROM (SELECT p."SecurityID", p."Price", ROW_NUMBER() OVER (PARTITION BY p."SecurityID" ORDER BY p."Price_date" DESC) AS rn FROM "security_prices" p JOIN "security_master" m ON m."SecurityID" = p."SecurityID" WHERE m."Collector" = ? AND p."Price_date" >= date(\'now\', \'-60 days\') AND p."Price" > 0) WHERE rn <= 5';
 	const map = new Map();
 	try {
-		const response = await env.DB.prepare(query).bind(SOURCE_NAME).all();
+		const response = await env.DB.prepare(query).bind(COLLECTOR_ID).all();
 		const bySec = new Map();
 		for (const r of response.results) {
 			if (!bySec.has(r.SecurityID)) bySec.set(r.SecurityID, []);

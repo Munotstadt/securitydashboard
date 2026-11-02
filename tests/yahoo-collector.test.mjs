@@ -41,16 +41,22 @@ test('runCollector speichert GBP und lässt Mismatch/Sprünge weg', async () => 
     CREATE TABLE security_prices (SecurityID integer, Price real, Price_adjusted real, Price_date text, source text, created_at text, modified_at text);
     CREATE UNIQUE INDEX u ON security_prices (SecurityID, Price_date, source);
     INSERT INTO security_master VALUES (1,'BLND.L','GBP',4),(2,'IWRD.L','USD',4),(3,'VUSD.L','USD',4),(4,'CUKX.L','GBP',4);
+    INSERT INTO security_master VALUES (5,'GLCH.L','GBP',4);
+    -- Realfall CUKX 2026-11-02: nur ein (falscher) Collector-Preis, daneben UBS-Kurse.
     INSERT INTO security_prices VALUES
-      (4,221.0,221.0,'2026-11-01 10:00:00','${SOURCE}','',''),
-      (4,22120,22120,'2026-11-01 11:00:00','${SOURCE}','',''),
-      (4,221.5,221.5,'2026-11-01 12:00:00','${SOURCE}','','');
+      (4,220.0,220.0,datetime('now','-20 days'),'UBS Quotes Import (Uploader)','',''),
+      (4,218.85,218.85,datetime('now','-10 days'),'UBS Quotes Import (Uploader)','',''),
+      (4,221.0,221.0,datetime('now','-3 days'),'UBS Quotes','',''),
+      (4,22110,22110,datetime('now','-1 hours'),'${SOURCE}','',''),
+      (4,99999,99999,datetime('now','-200 days'),'${SOURCE}','',''),
+      (5,221.0,221.0,datetime('now','-3 days'),'UBS Quotes','','');
   `);
   const quotes = {
     'BLND.L': { regularMarketPrice: 425, currency: 'GBp' },
     'IWRD.L': { regularMarketPrice: 7736, currency: 'GBp' },
     'VUSD.L': { regularMarketPrice: 144.31, currency: 'USD' },
     'CUKX.L': { regularMarketPrice: 22150, currency: 'GBp' },
+    'GLCH.L': { regularMarketPrice: 22110, currency: 'GBP' }, // Pence-Wert mit falschem Währungslabel
   };
   const realFetch = globalThis.fetch;
   globalThis.fetch = async (url) => {
@@ -60,13 +66,15 @@ test('runCollector speichert GBP und lässt Mismatch/Sprünge weg', async () => 
   try {
     const r = await runCollector({ DB: makeD1(db) });
     assert.equal(r.added, 3);
-    assert.equal(r.fetchErrors, 1);
+    assert.equal(r.fetchErrors, 2);
     assert.match(r.errorDetails[0].error, /Währung passt nicht/);
+    assert.match(r.errorDetails[1].error, /Preissprung/);
     const latest = (id) => db.prepare('SELECT Price FROM security_prices WHERE SecurityID=? ORDER BY Price_date DESC LIMIT 1').get(id)?.Price;
     assert.equal(latest(1), 4.25);
     assert.equal(latest(2), undefined);
     assert.equal(latest(3), 144.31);
-    assert.equal(latest(4), 221.5); // Median ignoriert den 22120-Ausreisser
+    assert.equal(latest(4), 221.5); // Referenz = Median über alle Quellen (220), nicht 22110
+    assert.equal(latest(5), 221.0); // 22110 mit Label GBP wird nicht gespeichert
   } finally {
     globalThis.fetch = realFetch;
   }
