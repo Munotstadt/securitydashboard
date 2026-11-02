@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/e2e.test.mjs",
+    "test": "node --test tests/e2e.test.mjs tests/yahoo-collector.test.mjs",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
   },
