@@ -5,7 +5,8 @@
   "scripts": {
     "test": "node --test tests/e2e.test.mjs tests/yahoo-collector.test.mjs",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "deploy:collectors": "node collectors/deploy.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { makeD1 } from './helpers.mjs';
-import { toMasterCurrency, checkJump, median, runCollector } from '../collectors/yahoo/worker.js';
+import { toMasterCurrency, checkJump, median, runCollector, collectorConfig } from '../collectors/yahoo/worker.js';
 
 const SOURCE = 'Collector_Worker_YahooWeekday_0600-2000_UTC';
 
@@ -64,7 +64,7 @@ test('runCollector speichert GBP und lässt Mismatch/Sprünge weg', async () => 
     return new Response(JSON.stringify({ chart: { result: [{ meta: quotes[t] }] } }));
   };
   try {
-    const r = await runCollector({ DB: makeD1(db) });
+    const r = await runCollector({ DB: makeD1(db), COLLECTOR_ID: '4', SOURCE_NAME: SOURCE });
     assert.equal(r.added, 3);
     assert.equal(r.fetchErrors, 2);
     assert.match(r.errorDetails[0].error, /Währung passt nicht/);
@@ -78,4 +78,9 @@ test('runCollector speichert GBP und lässt Mismatch/Sprünge weg', async () => 
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+test('fehlende Worker-Variablen -> klarer Fehler', () => {
+  assert.throws(() => collectorConfig({}), /COLLECTOR_ID\/SOURCE_NAME fehlen/);
+  assert.deepEqual(collectorConfig({ COLLECTOR_ID: '43', SOURCE_NAME: 'X' }), { collectorId: 43, sourceName: 'X' });
 });

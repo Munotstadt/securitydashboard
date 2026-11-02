@@ -1,7 +1,6 @@
-// Yahoo-Collector-Worker (gemeinsame Vorlage für alle collector-worker-yahoo*).
-// Pro Worker nur COLLECTOR_ID und SOURCE_NAME anpassen, siehe collectors/README.md.
-const COLLECTOR_ID = 4; // ParameterID in security_parameter: Collector_YahooWeekday_0600-2000_UTC
-const SOURCE_NAME = "Collector_Worker_YahooWeekday_0600-2000_UTC";
+// Yahoo-Collector-Worker: ein Code für alle collector-worker-yahoo*.
+// COLLECTOR_ID (ParameterID in security_parameter) und SOURCE_NAME kommen pro Worker
+// als Variablen aus collectors/yahoo/wrangler.jsonc (Environments), siehe collectors/README.md.
 const MAX_RETRIES = 2;
 
 // Yahoo notiert manche Börsen in der Untereinheit der Währung (LSE: Pence "GBp"/"GBX",
@@ -39,7 +38,17 @@ export default {
 	}
 };
 
+export function collectorConfig(env) {
+	const collectorId = Number(env.COLLECTOR_ID);
+	const sourceName = env.SOURCE_NAME;
+	if (!Number.isInteger(collectorId) || collectorId <= 0 || !sourceName) {
+		throw new Error("Variablen COLLECTOR_ID/SOURCE_NAME fehlen (wrangler.jsonc, Environment des Workers)");
+	}
+	return { collectorId: collectorId, sourceName: sourceName };
+}
+
 export async function runCollector(env) {
+	const cfg = collectorConfig(env);
 	const securities = await fetchSecurities(env);
 	const lastPrices = await fetchLastPrices(env);
 	const priceDate = nowInZurich();
@@ -87,7 +96,7 @@ export async function runCollector(env) {
 	if (errorDetails.length) {
 		detail += ": " + errorDetails.map(function (d) { return (d.ticker || "") + " " + d.error; }).join("; ");
 	}
-	await logRun(env, SOURCE_NAME, status, added, detail.slice(0, 2000));
+	await logRun(env, cfg.sourceName, status, added, detail.slice(0, 2000));
 
 	return {
 		added: added,
@@ -137,7 +146,7 @@ export function median(values) {
 
 async function fetchSecurities(env) {
 	const query = 'SELECT "SecurityID", "Ticker", "Currency" FROM "security_master" WHERE "Collector" = ? AND "Ticker" IS NOT NULL AND "Ticker" != \'\'';
-	const stmt = env.DB.prepare(query).bind(COLLECTOR_ID);
+	const stmt = env.DB.prepare(query).bind(collectorConfig(env).collectorId);
 	const response = await stmt.all();
 	return response.results;
 }
@@ -151,7 +160,7 @@ async function fetchLastPrices(env) {
 	const query = 'SELECT "SecurityID", "Price" FROM (SELECT p."SecurityID", p."Price", ROW_NUMBER() OVER (PARTITION BY p."SecurityID" ORDER BY p."Price_date" DESC) AS rn FROM "security_prices" p JOIN "security_master" m ON m."SecurityID" = p."SecurityID" WHERE m."Collector" = ? AND p."Price_date" >= date(\'now\', \'-60 days\') AND p."Price" > 0) WHERE rn <= 5';
 	const map = new Map();
 	try {
-		const response = await env.DB.prepare(query).bind(COLLECTOR_ID).all();
+		const response = await env.DB.prepare(query).bind(collectorConfig(env).collectorId).all();
 		const bySec = new Map();
 		for (const r of response.results) {
 			if (!bySec.has(r.SecurityID)) bySec.set(r.SecurityID, []);
@@ -226,8 +235,9 @@ function nowInZurich() {
 async function insertPricesBatch(env, priceRecords) {
 	const query = 'INSERT INTO "security_prices" ("SecurityID", "Price", "Price_adjusted", "Price_date", "source", "created_at", "modified_at") VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT("SecurityID", "Price_date", "source") DO UPDATE SET "Price" = excluded."Price", "Price_adjusted" = excluded."Price_adjusted", "modified_at" = excluded."modified_at"';
 
+	const sourceName = collectorConfig(env).sourceName;
 	const statements = priceRecords.map(function (r) {
-		return env.DB.prepare(query).bind(r.securityId, r.price, r.price, r.priceDate, SOURCE_NAME, r.priceDate, r.priceDate);
+		return env.DB.prepare(query).bind(r.securityId, r.price, r.price, r.priceDate, sourceName, r.priceDate, r.priceDate);
 	});
 
 	const results = await env.DB.batch(statements);

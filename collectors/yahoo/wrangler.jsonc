@@ -1,0 +1,44 @@
+// Ein Code (worker.js), fünf Cloudflare-Worker: je ein Environment pro Worker.
+// Deploy aller Worker:   npm run deploy:collectors
+// Einzeln:               npx wrangler deploy -c collectors/yahoo/wrangler.jsonc --env yahoo-2135
+//
+// Bewusst NICHT gesetzt:
+//  - "triggers": ohne Angabe lässt wrangler die bestehenden Cron-Trigger der Worker
+//    unverändert (im Dashboard gepflegt). Wer sie hier einträgt, überschreibt sie.
+// "keep_vars": im Dashboard gesetzte Variablen bleiben beim Deploy erhalten.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "collector-worker-yahoo-template",
+  "main": "worker.js",
+  "compatibility_date": "2026-08-27",
+  "keep_vars": true,
+  "observability": { "enabled": true },
+
+  "env": {
+    "yahoo-daily": {
+      "name": "collector-worker-yahoodaily-0001-2359-utc",
+      "vars": { "COLLECTOR_ID": "2", "SOURCE_NAME": "Collector_Worker_YahooDaily_0001-2359_UTC" },
+      "d1_databases": [{ "binding": "DB", "database_name": "securities", "database_id": "07edce2c-f7e2-48a5-a219-e48005579333" }]
+    },
+    "yahoo-0600-2000": {
+      "name": "collector-worker-yahooweekday-0600-2000-utc",
+      "vars": { "COLLECTOR_ID": "4", "SOURCE_NAME": "Collector_Worker_YahooWeekday_0600-2000_UTC" },
+      "d1_databases": [{ "binding": "DB", "database_name": "securities", "database_id": "07edce2c-f7e2-48a5-a219-e48005579333" }]
+    },
+    "yahoo-1200-2259": {
+      "name": "collector-worker-yahooweekday-1200-2259-utc",
+      "vars": { "COLLECTOR_ID": "5", "SOURCE_NAME": "Collector_Worker_YahooWeekday_1200-2259_UTC" },
+      "d1_databases": [{ "binding": "DB", "database_name": "securities", "database_id": "07edce2c-f7e2-48a5-a219-e48005579333" }]
+    },
+    "yahoo-0300-2259": {
+      "name": "collector-worker-yahooweekday-0300-2259-utc",
+      "vars": { "COLLECTOR_ID": "6", "SOURCE_NAME": "Collector_Worker_YahooWeekday_0300-2259_UTC" },
+      "d1_databases": [{ "binding": "DB", "database_name": "securities", "database_id": "07edce2c-f7e2-48a5-a219-e48005579333" }]
+    },
+    "yahoo-2135": {
+      "name": "collector-worker-yahooweekday-2135-utc",
+      "vars": { "COLLECTOR_ID": "43", "SOURCE_NAME": "Collector_Worker_YahooWeekday_2135_UTC" },
+      "d1_databases": [{ "binding": "DB", "database_name": "securities", "database_id": "07edce2c-f7e2-48a5-a219-e48005579333" }]
+    }
+  }
+}
