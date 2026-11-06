@@ -115,39 +115,32 @@ async function handleImprovement(request, env) {
 //   ?mode=close&asof=DATE   closing price as of DATE: last price on or before the end of that day
 //                           (DATE = YYYY-MM-DD or DD.MM.YYYY). If a security has no price on that
 //                           day, its previous price is used - the PriceDate column shows the real date.
-// In scope: net Quantity (Buy/Sell) != 0 (as of DATE in close mode) OR security_master.DashboardGrouping set.
-// Same scope logic as portfolio.html's "Valuation CSV" button - keep both in sync.
-// security_transactions.DateTrx is TEXT in the form DD.MM.YYYY (ISO also tolerated).
+// In scope: security is Active/Pending (Status not Inactive/Terminated and DateTerminated not before
+// the reference day - today, or DATE in close mode) OR security_master.DashboardGrouping set.
+// Same scope logic as aa.html's "in scope" flag - keep both in sync.
 async function handleValuationCsv(env, url) {
   const mode = (url.searchParams.get('mode') || 'latest').toLowerCase();
   if (mode !== 'latest' && mode !== 'close') return json({ error: "mode must be 'latest' or 'close'" }, 400);
 
   let priceLimit = null;   // exclusive upper bound for Price_date (ISO text compare)
-  let trxLimit = null;     // inclusive upper bound for DateTrx (ISO yyyy-mm-dd)
+  let refDay = new Date().toISOString().slice(0, 10);   // reference day for DateTerminated (ISO yyyy-mm-dd)
   if (mode === 'close') {
     const iso = parseAsOf(url.searchParams.get('asof'));
     if (!iso) return json({ error: 'asof required for mode=close (YYYY-MM-DD or DD.MM.YYYY)' }, 400);
     const next = new Date(iso + 'T00:00:00Z');
     next.setUTCDate(next.getUTCDate() + 1);
     priceLimit = next.toISOString().slice(0, 10);   // Price_date < next day 00:00
-    trxLimit = iso;
+    refDay = iso;
   }
 
-  const trxIso = `CASE WHEN t.DateTrx LIKE '__.__.____' THEN substr(t.DateTrx,7,4)||'-'||substr(t.DateTrx,4,2)||'-'||substr(t.DateTrx,1,2) ELSE t.DateTrx END`;
   const { results } = await env.DB.prepare(`
-    WITH net AS (
-      SELECT t.SecurityID AS SecurityID, SUM(t.Quantity) AS Qty
-        FROM security_transactions t
-        JOIN security_parameter ta ON ta.ParameterID = t.TrxArt
-       WHERE ta.ParameterName IN ('Buy', 'Sell')
-         AND (?1 IS NULL OR substr(${trxIso}, 1, 10) <= ?1)
-       GROUP BY t.SecurityID
-    ),
-    scope AS (
+    WITH scope AS (
       SELECT m.SecurityID
         FROM security_master m
-        LEFT JOIN net n ON n.SecurityID = m.SecurityID
-       WHERE m.DashboardGrouping IS NOT NULL OR ABS(COALESCE(n.Qty, 0)) >= 1e-9
+        LEFT JOIN security_parameter sp ON sp.ParameterID = m.Status
+       WHERE m.DashboardGrouping IS NOT NULL
+          OR (LOWER(TRIM(COALESCE(sp.ParameterName, ''))) NOT IN ('inactive', 'terminated')
+              AND (m.DateTerminated IS NULL OR TRIM(m.DateTerminated) = '' OR substr(m.DateTerminated, 1, 10) >= ?1))
     ),
     latest AS (
       SELECT p.SecurityID, p.Price_date, p.Price, p.source,
@@ -157,7 +150,7 @@ async function handleValuationCsv(env, url) {
        WHERE (?2 IS NULL OR p.Price_date < ?2)
     )
     SELECT SecurityID, Price_date, Price, source FROM latest WHERE rn = 1 ORDER BY SecurityID
-  `).bind(trxLimit, priceLimit).all();
+  `).bind(refDay, priceLimit).all();
 
   const lines = ['SecurityID,PriceDate,Price,Source'];
   for (const r of results || []) {

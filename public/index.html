@@ -18,14 +18,6 @@
   .status{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
   .section-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;margin:32px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--line);}
 
-  .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:14px 0;}
-  .summary-box{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:12px 14px;}
-  .summary-label{font-family:'IBM Plex Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
-  .summary-value{font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600;margin-top:4px;}
-  .summary-pct{font-family:'IBM Plex Mono',monospace;font-size:11px;margin-top:2px;}
-  .summary-value.up, .summary-pct.up{color:var(--gain);}
-  .summary-value.down, .summary-pct.down{color:var(--loss);}
-  .summary-value.flat, .summary-pct.flat{color:var(--muted);}
 
   table{width:100%;border-collapse:collapse;margin-top:4px;}
   thead th{text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:12px 8px 8px;border-bottom:1px solid var(--line);}
@@ -102,9 +94,6 @@
     <div class="status" id="statusText">lädt…</div>
   </div>
 
-  <div class="section-title">Portfolio</div>
-  <div class="summary" id="summaryBoxes"><div class="empty">Loading…</div></div>
-
   <div class="section-title">Markets</div>
   <table id="boardTable">
     <thead><tr>
@@ -123,13 +112,9 @@
       <h2>📊 Dashboard</h2>
       <p>Price changes by DashboardGrouping</p>
     </a>
-    <a class="card" href="portfolio.html">
-      <h2>💼 Portfolio</h2>
-      <p>Absolute performance (CHF) by PortfolioGrouping</p>
-    </a>
     <a class="card" href="analyser.html">
       <h2>🔬 Analyser</h2>
-      <p>FX exposure, risk &amp; market group performance</p>
+      <p>FX risk &amp; market group performance</p>
     </a>
     <a class="card" href="master_editor.html">
       <h2>🗂 Master Data</h2>
@@ -138,10 +123,6 @@
     <a class="card" href="price_editor.html">
       <h2>✏️ Prices</h2>
       <p>security_prices (D1)</p>
-    </a>
-    <a class="card" href="transactions_editor.html">
-      <h2>📋 Transactions</h2>
-      <p>security_transactions (D1)</p>
     </a>
     <a class="card" href="distribution_editor.html">
       <h2>💰 Distributions</h2>
@@ -174,65 +155,6 @@ function fmtPct(v){
   const r = Math.round(v*100)/100;
   const dir = r>0?'up':(r<0?'down':'flat');
   return {text:`${r>0?'+':''}${r.toFixed(2)}%`, dir};
-}
-function fmtChf(v){ return v===null||v===undefined||isNaN(v) ? '—' : v.toLocaleString('de-CH',{maximumFractionDigits:0}); }
-function fmtChfDelta(v){ if(v===null||v===undefined||isNaN(v)) return {text:'—',dir:'flat'}; const r=Math.round(v); const dir=r>0?'up':(r<0?'down':'flat'); return {text:`${r>0?'+':''}${fmtChf(r)}`, dir}; }
-
-// ============ Portfolio summary (7 tiles) — same computation as portfolio.html ============
-function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); return d; }
-function computeAllPeriods(rowsForSecurity, today){
-  const closes = dailyCloses(rowsForSecurity);
-  if(!closes.length) return {last:null, day:null, wtd:null, ten:null, mtd:null, ninety:null, threeSixty:null};
-  const last = closes[closes.length-1];
-  const day = closes.length>1 ? closes[closes.length-2] : null;
-  const dow = today.getDay();
-  const lastSunday = new Date(today.getFullYear(), today.getMonth(), today.getDate()-dow);
-  const wtdCutoff = new Date(lastSunday.getFullYear(), lastSunday.getMonth(), lastSunday.getDate()-1, 23,59,59);
-  const mtdCutoff = new Date(today.getFullYear(), today.getMonth(), 0, 23,59,59);
-  return {
-    last, day,
-    wtd: latestOnOrBefore(closes, wtdCutoff),
-    mtd: latestOnOrBefore(closes, mtdCutoff),
-    ten: latestOnOrBefore(closes, daysAgo(today,10)),
-    ninety: latestOnOrBefore(closes, daysAgo(today,90)),
-    threeSixty: latestOnOrBefore(closes, daysAgo(today,360)),
-  };
-}
-function netQuantity(secId, txnRows){
-  return txnRows.filter(t => t.SecurityID === secId && (t.TrxArtName === 'Buy' || t.TrxArtName === 'Sell'))
-    .reduce((s,t) => s + (Number(t.Quantity)||0), 0);
-}
-function pairedSums(positions, refField){
-  let curSum=0, refSum=0, n=0;
-  for(const p of positions){ if(p.valChf!==null && p[refField]!==null){ curSum+=p.valChf; refSum+=p[refField]; n++; } }
-  return { curSum, refSum, n };
-}
-function deltaFromPaired(positions, refField){
-  const { curSum, refSum, n } = pairedSums(positions, refField);
-  if(n===0) return { delta:null, pct:null };
-  const delta = curSum-refSum;
-  return { delta, pct: refSum ? (delta/refSum)*100 : null };
-}
-function summaryTile(label, positions, refField, fxImpact, totalChf){
-  const { delta, pct } = deltaFromPaired(positions, refField);
-  const f = fmtPct(pct);
-  const dir = delta===null ? 'flat' : f.dir;
-  return `<div class="summary-box">
-    <div class="summary-label">${label}</div>
-    <div class="summary-value ${dir}">${delta!==null?fmtChf(delta):'n/a'}</div>
-    <div class="summary-pct ${dir}">${f.text}</div>
-  </div>`;
-}
-function renderPortfolioSummary(total, positions){
-  document.getElementById('summaryBoxes').innerHTML = `
-    <div class="summary-box"><div class="summary-label">Portfolio Value</div><div class="summary-value">${fmtChf(total)} CHF</div></div>
-    ${summaryTile('Δ Day', positions, 'valDayChf')}
-    ${summaryTile('WTD', positions, 'valWtdChf')}
-    ${summaryTile('10D', positions, 'valTenChf')}
-    ${summaryTile('MTD', positions, 'valMtdChf')}
-    ${summaryTile('90D', positions, 'valNinetyChf')}
-    ${summaryTile('360D', positions, 'val360Chf')}
-  `;
 }
 
 // ============ Curated Markets table ============
@@ -306,13 +228,8 @@ function renderBoard(groups){
 
 async function load(){
   try{
-    const [master, txns, prices, factors] = await Promise.all([
-      dbQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, pg.ParameterName AS PortfolioGroupName
-                  FROM security_master sm
-                  LEFT JOIN security_parameter pg ON pg.ParameterID = sm.PortfolioGrouping`, [], 3600000),
-      dbQuery(`SELECT t.SecurityID, t.Quantity, ta.ParameterName AS TrxArtName
-                  FROM security_transactions t
-                  LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt`),
+    const [master, prices, factors] = await Promise.all([
+      dbQuery(`SELECT SecurityID, SecurityName, Currency FROM security_master`, [], 3600000),
       dbRecentDailyPrices(420),
       currencyFactors(),
     ]);
@@ -321,45 +238,6 @@ async function load(){
     const pricesBySecId = new Map();
     for(const p of prices){ if(!pricesBySecId.has(p.SecurityID)) pricesBySecId.set(p.SecurityID, []); pricesBySecId.get(p.SecurityID).push(p); }
     const today = new Date();
-    const periodsBySecId = new Map();
-    for(const m of master) periodsBySecId.set(m.SecurityID, computeAllPeriods(pricesBySecId.get(m.SecurityID) || [], today));
-
-    // ---- Portfolio 7-tile summary (FX-aware, same logic as portfolio.html) ----
-    const fxByCurrency = {};
-    for(const m of master){
-      const match = (m.SecurityName||'').trim().match(/^([A-Za-z]{3})\/CHF$/i);
-      if(match) fxByCurrency[match[1].toUpperCase()] = periodsBySecId.get(m.SecurityID);
-    }
-    function fxRate(currency, periodKey){
-      if(!currency || currency.toUpperCase()==='CHF') return 1;
-      const fx = fxByCurrency[currency.toUpperCase()];
-      return (fx && fx[periodKey]) ? fx[periodKey].Price : null;
-    }
-    function valueAt(qty, periods, periodKey, currency){
-      if(!periods || !periods[periodKey]) return null;
-      const rate = fxRate(currency, periodKey);
-      return rate!==null ? qty*periods[periodKey].Price*rate : null;
-    }
-    const positions = [];
-    let totalChf = 0;
-    for(const m of master){
-      const qty = netQuantity(m.SecurityID, txns);
-      if(Math.abs(qty) < 1e-9) continue;
-      const periods = periodsBySecId.get(m.SecurityID);
-      if(!periods || !periods.last) continue;
-      const valChf = valueAt(qty, periods, 'last', m.Currency);
-      if(valChf!==null) totalChf += valChf;
-      positions.push({
-        valChf,
-        valDayChf: valueAt(qty, periods, 'day', m.Currency),
-        valWtdChf: valueAt(qty, periods, 'wtd', m.Currency),
-        valTenChf: valueAt(qty, periods, 'ten', m.Currency),
-        valMtdChf: valueAt(qty, periods, 'mtd', m.Currency),
-        valNinetyChf: valueAt(qty, periods, 'ninety', m.Currency),
-        val360Chf: valueAt(qty, periods, 'threeSixty', m.Currency),
-      });
-    }
-    renderPortfolioSummary(totalChf, positions);
     secListForTasks = master;
     loadTaskTeaser();
 
@@ -379,7 +257,6 @@ async function load(){
     document.getElementById('lastSynced').textContent = `Geladen: ${nowZurichString()}`;
   }catch(e){
     document.getElementById('boardBody').innerHTML = `<tr><td colspan="7" class="error">Fehler: ${e.message}</td></tr>`;
-    document.getElementById('summaryBoxes').innerHTML = `<div class="error">Fehler: ${e.message}</div>`;
     document.getElementById('statusText').textContent = 'Fehler';
   }
 }
