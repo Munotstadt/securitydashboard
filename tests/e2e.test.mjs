@@ -15,13 +15,14 @@ d1db.exec(D1_SCHEMA);
 d1db.exec(`
 INSERT INTO security_parameter (ParameterID, ParameterName, ParaTable, ParaField, modified_at) VALUES
  (1,'Buy','security_transactions','TrxArt','2026-08-28 00:00:00'),(2,'Sell','security_transactions','TrxArt','2026-08-28 00:00:00'),
- (3,'Dashboard','security_master','DashboardGrouping','2026-08-28 00:00:00'),(4,'Collector A','security_master','Collector','2026-08-28 00:00:00');
-INSERT INTO security_master (SecurityID, SecurityName, Collector, Ticker, Currency, DashboardGrouping, modified_at) VALUES
- (10,'Held Stock',4,'HLD','USD',NULL,'2026-08-30 00:00:00'),
- (11,'Pinned FX',4,'USDCHF=X','CHF',3,'2026-08-30 00:00:00'),
- (12,'Sold Out',4,'OLD','CHF',NULL,'2026-08-30 00:00:00'),
- (13,'Unused',4,'UNU','CHF',NULL,'2026-08-30 00:00:00');
-INSERT INTO security_transactions (SecurityID, TrxArt, Quantity, DateTrx) VALUES (10,1,100,'01.01.2026'),(12,1,50,'01.01.2026'),(12,2,-50,'01.02.2026');
+ (3,'Dashboard','security_master','DashboardGrouping','2026-08-28 00:00:00'),(4,'Collector A','security_master','Collector','2026-08-28 00:00:00'),
+ (136,'Active','security_master','Status','2026-08-28 00:00:00'),(137,'Inactive','security_master','Status','2026-08-28 00:00:00'),
+ (138,'Terminated','security_master','Status','2026-08-28 00:00:00');
+INSERT INTO security_master (SecurityID, SecurityName, Collector, Ticker, Currency, DashboardGrouping, Status, DateTerminated, modified_at) VALUES
+ (10,'Held Stock',4,'HLD','USD',NULL,136,NULL,'2026-08-30 00:00:00'),
+ (11,'Pinned FX',4,'USDCHF=X','CHF',3,137,NULL,'2026-08-30 00:00:00'),
+ (12,'Sold Out',4,'OLD','CHF',NULL,NULL,'2026-02-01','2026-08-30 00:00:00'),
+ (13,'Unused',4,'UNU','CHF',NULL,137,NULL,'2026-08-30 00:00:00');
 INSERT INTO security_prices (SecurityID, Price, Price_adjusted, Price_date, source) VALUES
  (10,100,100,'2026-10-15 12:00:00','C'),(10,101,101,'2026-10-16 12:00:00','C'),(10,102,102,'2026-10-16 18:00:00','C'),
  (12,4,4,'2026-01-15','C'),(11,0.9,0.9,'2026-10-16 18:00:00','C'),(12,5,5,'2026-10-16 18:00:00','C'),(13,1,1,'2026-10-16 18:00:00','C');
@@ -109,15 +110,15 @@ test('/api/improvements: writes into the shared improvement_tasks table, validat
   assert.equal((await call('/api/improvements')).status, 404); // GET not offered
 });
 
-test('/api/securityprices.csv: holdings + pinned securities only, latest price, sorted', async () => {
+test('/api/securityprices.csv: active + pinned securities only, latest price, sorted', async () => {
   const r = await call('/api/securityprices.csv');
   assert.equal(r.status, 200);
   assert.equal(await r.text(), [
     'SecurityID,PriceDate,Price,Source',
-    '10,2026-10-16 18:00:00,102,C',   // net qty 100, latest of 3 rows
-    '11,2026-10-16 18:00:00,0.9,C',   // DashboardGrouping set, no position
+    '10,2026-10-16 18:00:00,102,C',   // Active, latest of 3 rows
+    '11,2026-10-16 18:00:00,0.9,C',   // Inactive, but DashboardGrouping set
     '',
-  ].join('\n'));                       // 12 (net 0) and 13 (unused) are out of scope
+  ].join('\n'));                       // 12 (terminated 01.02.2026) and 13 (inactive) are out of scope
 });
 
 test('service tokens (no e-mail) may only read the valuation CSV', async () => {
@@ -129,14 +130,14 @@ test('service tokens (no e-mail) may only read the valuation CSV', async () => {
   assert.equal((await db([{ sql: 'SELECT 1' }])).status, 200); // normal user unaffected
 });
 
-test('/api/securityprices.csv?mode=close: closing price as of a date, holdings as of that date', async () => {
+test('/api/securityprices.csv?mode=close: closing price as of a date, terminations as of that date', async () => {
   const csv = async (q) => { const r = await call('/api/securityprices.csv' + q); return [r.status, await r.text()]; };
   const H = 'SecurityID,PriceDate,Price,Source\n';
   // 15.10.2026: only security 10 has a price up to that day; 11 has none yet
   assert.deepEqual(await csv('?mode=close&asof=15.10.2026'), [200, H + '10,2026-10-15 12:00:00,100,C\n']);
   // 16.10.2026 (ISO input): last price of that day
   assert.deepEqual(await csv('?mode=close&asof=2026-10-16'), [200, H + '10,2026-10-16 18:00:00,102,C\n11,2026-10-16 18:00:00,0.9,C\n']);
-  // 20.01.2026: security 12 was still held (sold 01.02.2026) -> in scope with its price of 15.01.2026; 10 has no price yet
+  // 20.01.2026: security 12 was not yet terminated (01.02.2026) -> in scope with its price of 15.01.2026; 10 has no price yet
   assert.deepEqual(await csv('?mode=close&asof=20.01.2026'), [200, H + '12,2026-01-15,4,C\n']);
   // default mode = latest
   assert.equal((await csv('?mode=latest'))[1], (await csv(''))[1]);
@@ -182,10 +183,7 @@ test('client db-data.js: coercion, session-expiry handling, chunked IN queries (
   assert.equal(px.length, 3);
 
   // task renewal: only Active/Pending securities need a follow-up task
-  d1db.exec(`INSERT INTO security_parameter (ParameterID, ParameterName, ParaTable, ParaField, modified_at) VALUES
-    (136,'Active','security_master','Status','2026-08-28 00:00:00'),(137,'Inactive','security_master','Status','2026-08-28 00:00:00'),
-    (138,'Terminated','security_master','Status','2026-08-28 00:00:00');
-  INSERT INTO security_master (SecurityID, SecurityName, Status, DateTerminated) VALUES
+  d1db.exec(`INSERT INTO security_master (SecurityID, SecurityName, Status, DateTerminated) VALUES
     (20,'Active Sec',136,NULL),(21,'Inactive Sec',137,NULL),(22,'Terminated Sec',138,NULL),(23,'Pending Sec',NULL,NULL),(24,'Gone By Date',136,'2020-01-01');`);
   assert.equal(await api.dbSecurityIsInactiveOrTerminated(20), false);
   assert.equal(await api.dbSecurityIsInactiveOrTerminated(21), true);

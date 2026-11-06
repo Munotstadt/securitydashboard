@@ -1,5 +1,9 @@
 # Portfolio valuation CSV automation (data/securityprices.csv)
 
+> **Historisch.** Der Export läuft heute über den Worker-Endpunkt `/api/securityprices.csv`
+> (siehe `tools/access-import/README.md`). `portfolio.html` und `transactions_editor.html` wurden entfernt;
+> der Scope ist jetzt *Active/Pending oder DashboardGrouping* statt Nettobestand aus `security_transactions`.
+
 ## Status: fully working end-to-end as of 2026-08-22
 
 GitHub Actions → data/securityprices.csv → local download script → Access linked table →

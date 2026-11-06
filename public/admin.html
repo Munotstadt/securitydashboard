@@ -178,11 +178,10 @@ function showTooltip(evt, wrap, tooltip, html){
 
 async function load(){
   try{
-    const [masterCount, priceCount, distCount, txnCount, recentPrices] = await Promise.all([
+    const [masterCount, priceCount, distCount, recentPrices] = await Promise.all([
       dbQuery('SELECT COUNT(*) AS n FROM security_master'),
       dbQuery('SELECT COUNT(*) AS n FROM security_prices'),
       dbQuery('SELECT COUNT(*) AS n FROM security_distributions'),
-      dbQuery('SELECT COUNT(*) AS n FROM security_transactions'),
       dbQuery("SELECT substr(created_at,1,10) || ' 12:00:00' AS created_at, source AS Source, COUNT(*) AS n FROM security_prices WHERE created_at >= date('now','-32 days') GROUP BY substr(created_at,1,10), source"),
     ]);
 
@@ -190,7 +189,6 @@ async function load(){
       <div class="summary-box"><div class="summary-label">Securities</div><div class="summary-value">${masterCount[0].n}</div></div>
       <div class="summary-box"><div class="summary-label">Price Rows</div><div class="summary-value">${priceCount[0].n}</div></div>
       <div class="summary-box"><div class="summary-label">Distribution Rows</div><div class="summary-value">${distCount[0].n}</div></div>
-      <div class="summary-box"><div class="summary-label">Transaction Rows</div><div class="summary-value">${txnCount[0].n}</div></div>
       <div class="summary-box"><div class="summary-label">Cached Queries (this tab)</div><div class="summary-value">${dbCacheCount()}</div></div>
     `;
 
