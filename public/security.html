@@ -50,13 +50,13 @@
   .return-value{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;}
   .return-value.up{color:var(--gain);} .return-value.down{color:var(--loss);} .return-value.flat{color:var(--muted);} .return-value.neutral-black{color:var(--text);}
 
-  .range52w-wrap{position:relative;margin:24px 0 4px;padding:30px 4px 0;}
-  .range52w-current{position:absolute;top:0;transform:translateX(-50%);font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:15px;color:var(--text);white-space:nowrap;}
-  .range52w-bar{position:relative;height:6px;border-radius:3px;background:linear-gradient(to right, #C7DEE0, #1F5F63);}
-  .range52w-marker{position:absolute;top:-2px;transform:translate(-50%,-100%);font-size:11px;line-height:1;color:#1A3D40;}
-  .range52w-labels{display:flex;justify-content:space-between;margin-top:12px;}
-  .range52w-value{font-family:'IBM Plex Mono',monospace;font-size:15px;color:var(--text);display:block;}
-  .range52w-date{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);display:block;margin-top:2px;}
+  /* 52W Low/High as a compact tile in the header tile row */
+  .tile-group{display:contents;}
+  .range52w-box{flex:1 1 200px;max-width:280px;min-width:180px;}
+  .range52w-wrap{position:relative;padding-top:12px;margin-top:2px;}
+  .range52w-bar{position:relative;height:5px;border-radius:3px;background:linear-gradient(to right, #C7DEE0, #1F5F63);}
+  .range52w-marker{position:absolute;top:-2px;transform:translate(-50%,-100%);font-size:10px;line-height:1;color:#1A3D40;}
+  .range52w-labels{display:flex;justify-content:space-between;margin-top:5px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:var(--text);}
 
   .section-title{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;margin:28px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--line);}
   .section-title-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin:28px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--line);}
@@ -206,14 +206,6 @@
   .task-status-badge.tasks-overdue{background:var(--loss);}
   .task-status-badge.tasks-due-soon{background:#B5793A;}
 
-  /* ---- security2: 52-week range shrunk to half width + description ---- */
-  .range52w-flex{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap;margin-top:24px;}
-  .range52w-flex .range52w-wrap{flex:0 1 380px;max-width:100%;margin:0;padding:30px 4px 0;}
-  .range52w-desc{flex:1 1 260px;font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.6;color:var(--muted);padding-top:30px;}
-
-  /* ---- security2: secondary tile row (Yield, Market Cap/Total Assets) ---- */
-  .secondary-tiles{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;}
-
   /* ---- security2: subnav tab bar + panels ---- */
   .subnav-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-top:22px;padding-bottom:8px;border-bottom:1px solid var(--line);}
   .subnav-tab{background:none;border:1px solid transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:7px 12px;border-radius:3px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px;}
@@ -222,6 +214,18 @@
   .subnav-tab .tab-count{font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;background:var(--loss);color:#fff;}
   .tab-panel{display:none;}
   .tab-panel.active{display:block;}
+
+  /* Price tab: chart left, returns table right (stacked on narrow screens) */
+  .price-layout{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:24px;align-items:start;}
+  .price-layout .section-title-row{margin-top:20px;}
+  @media (max-width:1000px){ .price-layout{grid-template-columns:minmax(0,1fr);gap:0;} }
+  .overlay-row{margin:8px 0 0;}
+  .overlay-row .toggle-btn{display:inline-flex;align-items:center;gap:6px;}
+  .ov-swatch{display:inline-block;width:12px;height:3px;border-radius:2px;}
+  .ov-swatch.ov-dash{background:repeating-linear-gradient(to right,#767E8A 0 3px,transparent 3px 5px);}
+  .toggle-btn.active .ov-swatch.ov-dash{background:repeating-linear-gradient(to right,#fff 0 3px,transparent 3px 5px);}
+
+  .secdata-frame{display:block;width:100%;min-height:400px;border:0;margin-top:8px;}
 </style>
 <link rel="stylesheet" href="assets/layout.css">
 </head>
@@ -243,16 +247,16 @@
       <span class="ccy" id="detailCcy"></span>
     </div>
     <div class="detail-meta" id="detailMeta"></div>
-    <div class="returns" id="returnsBoxes"></div>
-
-    <div class="range52w-flex">
-      <div class="range52w-wrap" id="range52wWrap"></div>
-      <div class="range52w-desc">Die Markierung (▼) zeigt den aktuellen Kurs im Verhältnis zum 52-Wochen-Tief (links) und -Hoch (rechts). Je weiter rechts die Markierung steht, desto näher notiert der Kurs am 52-Wochen-Hoch.</div>
+    <!-- One tile row: period returns + Yield/Market Cap + 52W Low/High. The two
+         inner groups use display:contents so all tiles wrap as a single row. -->
+    <div class="returns" id="headerTiles">
+      <div class="tile-group" id="returnsBoxes"></div>
+      <div class="tile-group" id="secondaryTiles"></div>
+      <div class="return-box range52w-box hidden" id="range52wBox">
+        <span class="return-label">52W Low / High</span>
+        <div class="range52w-wrap" id="range52wWrap"></div>
+      </div>
     </div>
-
-    <div class="secondary-tiles" id="secondaryTiles"></div>
-
-    <a class="toggle-btn" id="linkSecurityData" href="security_data.html" style="margin-top:14px;display:inline-block;">🔎 View Security Data</a>
   </div>
 
   <div class="subnav-tabs" id="subnavTabs">
@@ -260,40 +264,54 @@
     <button type="button" class="subnav-tab" data-tab="returns">Returns</button>
     <button type="button" class="subnav-tab" data-tab="dividends">Distributions</button>
     <button type="button" class="subnav-tab" data-tab="risk">Risk</button>
+    <button type="button" class="subnav-tab" data-tab="securitydata">Security Data</button>
     <button type="button" class="subnav-tab" data-tab="fundamentals">Fundamentals</button>
-    <button type="button" class="subnav-tab" data-tab="notes">Notes</button>
     <button type="button" class="subnav-tab" data-tab="allocation">Asset Allocation</button>
     <button type="button" class="subnav-tab" data-tab="tasks">Tasks<span class="tab-count hidden" id="tasksTabCount"></span></button>
     <button type="button" class="subnav-tab" data-tab="masterdata">Masterdata</button>
   </div>
 
   <div class="tab-panel active" data-tab="price" id="tabPanelPrice">
-  <div class="section-title-row"><span class="section-title-text">Price Chart</span></div>
-  <div class="chart-wrap" id="priceChartWrap"><div class="chart-empty">Loading chart…</div></div>
-  <div class="chart-controls-row">
-    <div class="toggle-row" id="priceRangeRow">
-      <button type="button" class="toggle-btn" data-range="10D">10 Days</button>
-      <button type="button" class="toggle-btn" data-range="30D">30 Days</button>
-      <button type="button" class="toggle-btn active" data-range="90D">90 Days</button>
-      <button type="button" class="toggle-btn" data-range="YTD">YTD</button>
-      <button type="button" class="toggle-btn" data-range="12M">12 Months</button>
-      <button type="button" class="toggle-btn" data-range="ALL">All</button>
+  <div class="price-layout">
+    <div class="price-layout-chart">
+      <div class="section-title-row"><span class="section-title-text">Price Chart</span></div>
+      <div class="chart-wrap" id="priceChartWrap"><div class="chart-empty">Loading chart…</div></div>
+      <div class="chart-controls-row">
+        <div class="toggle-row" id="priceRangeRow">
+          <button type="button" class="toggle-btn" data-range="10D">10D</button>
+          <button type="button" class="toggle-btn" data-range="30D">30D</button>
+          <button type="button" class="toggle-btn active" data-range="90D">90D</button>
+          <button type="button" class="toggle-btn" data-range="YTD">YTD</button>
+          <button type="button" class="toggle-btn" data-range="12M">12M</button>
+          <button type="button" class="toggle-btn" data-range="3Y">3Y</button>
+          <button type="button" class="toggle-btn" data-range="5Y">5Y</button>
+          <button type="button" class="toggle-btn" data-range="ALL">All</button>
+        </div>
+        <div class="chart-actions-inline">
+          <a class="chart-icon-btn" id="linkPriceHistory" href="price_editor.html" title="View Price History">👁</a>
+          <a class="chart-icon-btn" id="linkPriceAdd" href="price_editor.html" title="Add Price">+</a>
+        </div>
+      </div>
+      <div class="toggle-row overlay-row" id="priceOverlayRow">
+        <button type="button" class="toggle-btn" data-overlay="ma30" title="Gleitender Durchschnitt der letzten 30 Schlusskurse"><span class="ov-swatch" style="background:#2C6FBB"></span>MA 30</button>
+        <button type="button" class="toggle-btn" data-overlay="ma60" title="Gleitender Durchschnitt der letzten 60 Schlusskurse"><span class="ov-swatch" style="background:#D98E04"></span>MA 60</button>
+        <button type="button" class="toggle-btn" data-overlay="ma90" title="Gleitender Durchschnitt der letzten 90 Schlusskurse"><span class="ov-swatch" style="background:#7A5FC0"></span>MA 90</button>
+        <button type="button" class="toggle-btn" data-overlay="hilo" title="Höchst- und Tiefstkurs im angezeigten Zeitraum"><span class="ov-swatch ov-dash"></span>High / Low</button>
+      </div>
     </div>
-    <div class="chart-actions-inline">
-      <a class="chart-icon-btn" id="linkPriceHistory" href="price_editor.html" title="View Price History">👁</a>
-      <a class="chart-icon-btn" id="linkPriceAdd" href="price_editor.html" title="Add Price">+</a>
-    </div>
-  </div>
 
-  <div class="section-title">Returns</div>
-  <div class="table-wrap">
-  <table id="perfTablePrice" class="returns-table">
-    <thead><tr>
-      <th>Period</th><th class="num" id="thPriceLcPrice">Price Return LC</th><th class="num" id="thTotalLcPrice">Total Return LC</th>
-      <th class="num">Cry</th><th class="num">Price Return CHF</th><th class="num">Total Return CHF</th>
-    </tr></thead>
-    <tbody id="perfBodyPrice"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
-  </table>
+    <div class="price-layout-returns">
+      <div class="section-title-row"><span class="section-title-text">Returns</span></div>
+      <div class="table-wrap">
+      <table id="perfTablePrice" class="returns-table">
+        <thead><tr>
+          <th>Period</th><th class="num" id="thPriceLcPrice">Price LC</th><th class="num" id="thTotalLcPrice">Total LC</th>
+          <th class="num">Cry</th><th class="num">Price CHF</th><th class="num">Total CHF</th>
+        </tr></thead>
+        <tbody id="perfBodyPrice"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+      </div>
+    </div>
   </div>
 
   </div>
@@ -477,12 +495,10 @@
   </div>
   </div>
 
-  <div class="tab-panel" data-tab="notes" id="tabPanelNotes">
-  <div class="section-title-row"><span class="section-title-text">Notes Log</span></div>
-  <div id="notesLogEmbedWrap" class="table-wrap">
-    <div class="detail-meta" style="margin-bottom:10px;">Notes zu dieser Security aus dem Notes Log (notes.munot.app). Öffnet in einem eigenen Tab (separates Login), damit Erstellen/Bearbeiten dort direkt funktioniert.</div>
-    <a class="toggle-btn" id="linkNotesLog" href="#" target="_blank" rel="noopener" style="display:inline-block;">📝 Notes Log für diese Security öffnen</a>
-  </div>
+  <!-- Security Data: security_data.html embedded (embed=1 hides its own nav/switcher/footer).
+       Loaded lazily on first activation and re-pointed on security switch. -->
+  <div class="tab-panel" data-tab="securitydata" id="tabPanelSecurityData">
+  <iframe id="securityDataFrame" class="secdata-frame" title="Security Data"></iframe>
   </div>
 
   <div class="tab-panel" data-tab="tasks" id="tabPanelTasks">
@@ -629,6 +645,20 @@ let sectorOpts = [];
 let statusOpts = [];
 let currentPriceRange = '90D';
 let currentDistRange = '24M';
+// Price chart overlays (MA 30/60/90, High/Low) - selection is remembered per browser.
+const PRICE_MA_DEFS = [
+  { key:'ma30', n:30, color:'#2C6FBB' },
+  { key:'ma60', n:60, color:'#D98E04' },
+  { key:'ma90', n:90, color:'#7A5FC0' },
+];
+const PRICE_OVERLAY_STORAGE_KEY = 'security.priceOverlays';
+let priceOverlays = (() => {
+  try { const v = JSON.parse(localStorage.getItem(PRICE_OVERLAY_STORAGE_KEY) || '[]'); return new Set(Array.isArray(v) ? v : []); }
+  catch(e) { return new Set(); }
+})();
+function savePriceOverlays(){
+  try { localStorage.setItem(PRICE_OVERLAY_STORAGE_KEY, JSON.stringify([...priceOverlays])); } catch(e) { /* storage unavailable */ }
+}
 let priceHistoryTiered = false; // true when the loaded history uses the daily/monthly tiering below (long-history securities)
 
 // ---- Tiered price-history loading (security2.html-only optimization) ----
@@ -862,41 +892,108 @@ function renderRiskSection(daily, today, decimals){
   const rollingVol = rollingVolFull.filter(p => p.dt >= daysAgo(today, 365));
   const tooltip = document.createElement('div'); tooltip.className='chart-tooltip';
   if(rollingVol.length < 2){ volChartWrap.innerHTML = '<div class="chart-empty">Zu wenig Datenpunkte für rollierende Volatilität (min. ~30 Tage Historie nötig).</div>'; }
-  else drawLineChart(volChartWrap, tooltip, rollingVol, 2, '%');
+  else drawLineChart(volChartWrap, tooltip, rollingVol, 2, '%', { height:220, ariaLabel:'Rolling volatility' });
 }
 
-function drawLineChart(container, tooltip, points, decimals, currency){
-  const width=800, height=240;
-  if(points.length < 2){ container.innerHTML = '<div class="chart-empty">Zu wenig Datenpunkte für einen Chart.</div>'; return; }
+// ---- Chart sizing: SVGs are drawn at the container's real pixel width (1 SVG unit = 1 CSS px),
+// so axis fonts stay at their nominal size instead of being scaled up on wide screens.
+// Each chart stores a _redraw closure; charts are re-drawn on resize and when their tab becomes visible.
+function chartInnerWidth(container){
+  const cs = getComputedStyle(container);
+  const w = container.clientWidth - parseFloat(cs.paddingLeft||0) - parseFloat(cs.paddingRight||0);
+  return w > 50 ? Math.round(w) : 0;
+}
+function redrawVisibleCharts(root){
+  (root || document).querySelectorAll('.chart-wrap').forEach(c => {
+    if(!c._redraw || c.offsetParent === null) return;
+    if(chartInnerWidth(c) !== c._drawnWidth) c._redraw();
+  });
+}
+let chartResizeTimer = null;
+window.addEventListener('resize', () => { clearTimeout(chartResizeTimer); chartResizeTimer = setTimeout(() => redrawVisibleCharts(), 150); });
+
+// Simple moving average over the last n closes. Points whose window spans more than 2n calendar days are
+// skipped: that only happens where the history is month-end sampled (tiered loading) or has large gaps,
+// where an n-close average would not mean "n days" any more.
+function movingAverage(daily, n){
+  const out = [];
+  let sum = 0;
+  for(let i=0;i<daily.length;i++){
+    sum += daily[i].Price;
+    if(i >= n) sum -= daily[i-n].Price;
+    if(i >= n-1){
+      const spanDays = (daily[i].dt - daily[i-n+1].dt) / 86400000;
+      if(spanDays <= n*2) out.push({ dt: daily[i].dt, Price: sum/n });
+    }
+  }
+  return out;
+}
+
+// opts: { overlays:[{label,color,points}], hiLo:bool, showChange:bool, height:number, ariaLabel:string }
+function drawLineChart(container, tooltip, points, decimals, currency, opts = {}){
+  container._redraw = () => drawLineChart(container, tooltip, points, decimals, currency, opts);
+  if(points.length < 2){ container._drawnWidth = chartInnerWidth(container); container.innerHTML = '<div class="chart-empty">Zu wenig Datenpunkte für einen Chart.</div>'; return; }
+  const measured = chartInnerWidth(container);
+  container._drawnWidth = measured;
+  const width = measured || 800, height = opts.height || 260;
+  const overlays = (opts.overlays || []).filter(o => o.points && o.points.length >= 2);
   const amounts = points.map(p=>p.Price);
-  const minY = Math.min(...amounts), maxY = Math.max(...amounts);
+  const allVals = amounts.concat(...overlays.map(o => o.points.map(p => p.Price)));
+  const minY = Math.min(...allVals), maxY = Math.max(...allVals);
   const yPad = (maxY-minY)*0.08 || maxY*0.01 || 1;
   const yMin = minY-yPad, yMax = maxY+yPad;
   const axisDecimals = decideAxisDecimals(maxY);
   const widestLabel = fmtDecimal(Math.max(Math.abs(yMin),Math.abs(yMax)), axisDecimals);
-  const leftPad = Math.max(56, widestLabel.length*7+16);
-  const pad = {top:14, right:14, bottom:26, left:leftPad};
+  const leftPad = Math.max(44, widestLabel.length*7+12);
+  const pad = {top:12, right:12, bottom:24, left:leftPad};
   const innerW = width-pad.left-pad.right, innerH = height-pad.top-pad.bottom;
   const minX = points[0].dt.getTime(), maxX = points[points.length-1].dt.getTime();
   const xSpan = (maxX-minX) || 1;
   const xScale = t => pad.left + ((t-minX)/xSpan)*innerW;
   const yScale = v => pad.top + innerH - ((v-yMin)/(yMax-yMin))*innerH;
   const lineColor = amounts[amounts.length-1] >= amounts[0] ? '#1F8A6E' : '#C0293D';
-  let d = '';
-  points.forEach((p,i) => { const x=xScale(p.dt.getTime()), y=yScale(p.Price); d += (i===0?'M':'L')+x.toFixed(1)+','+y.toFixed(1)+' '; });
-  const areaD = d + `L${xScale(maxX).toFixed(1)},${(pad.top+innerH).toFixed(1)} L${xScale(minX).toFixed(1)},${(pad.top+innerH).toFixed(1)} Z`;
+  const pathOf = pts => pts.map((p,i) => (i===0?'M':'L') + xScale(p.dt.getTime()).toFixed(1) + ',' + yScale(p.Price).toFixed(1)).join(' ');
+  const d = pathOf(points);
+  const areaD = d + ` L${xScale(maxX).toFixed(1)},${(pad.top+innerH).toFixed(1)} L${xScale(minX).toFixed(1)},${(pad.top+innerH).toFixed(1)} Z`;
+  const FONT = 'font-family="IBM Plex Mono, monospace" font-size="11"';
   let grid = '';
-  for(let i=0;i<=4;i++){
-    const v = yMin + (i/4)*(yMax-yMin), y = yScale(v);
+  const yTicks = innerH > 200 ? 5 : 4;
+  for(let i=0;i<=yTicks;i++){
+    const v = yMin + (i/yTicks)*(yMax-yMin), y = yScale(v);
     grid += `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${width-pad.right}" y2="${y.toFixed(1)}" stroke="#E3E6EA" stroke-width="1"/>`;
-    grid += `<text x="${pad.left-8}" y="${(y+3).toFixed(1)}" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="10" fill="#767E8A">${fmtDecimal(v,axisDecimals)}</text>`;
+    grid += `<text x="${pad.left-6}" y="${(y+4).toFixed(1)}" text-anchor="end" ${FONT} fill="#767E8A">${fmtDecimal(v,axisDecimals)}</text>`;
   }
-  const mid = points[Math.floor(points.length/2)];
-  const xLabels = [{p:points[0],anchor:'start'},{p:mid,anchor:'middle'},{p:points[points.length-1],anchor:'end'}]
-    .map(({p,anchor}) => `<text x="${xScale(p.dt.getTime()).toFixed(1)}" y="${height-8}" text-anchor="${anchor}" font-family="IBM Plex Mono, monospace" font-size="10" fill="#767E8A">${fmtMonthYear(p.dt)}</text>`).join('');
+  // X labels: as many as fit (~1 per 110px), dd.mm. for short ranges, MM/YY otherwise.
+  const shortRange = xSpan < 120*86400000;
+  const fmtX = shortRange ? fmtDateOnly : fmtMonthYear;
+  const nLabels = Math.max(2, Math.min(8, Math.floor(innerW/110)));
+  let xLabels = '', lastTxt = null;
+  for(let i=0;i<nLabels;i++){
+    const t = minX + (i/(nLabels-1))*xSpan;
+    const txt = fmtX(new Date(t));
+    if(txt === lastTxt) continue;
+    lastTxt = txt;
+    const anchor = i===0 ? 'start' : (i===nLabels-1 ? 'end' : 'middle');
+    xLabels += `<text x="${xScale(t).toFixed(1)}" y="${height-6}" text-anchor="${anchor}" ${FONT} fill="#767E8A">${txt}</text>`;
+  }
+  const overlayPaths = overlays.map(o => `<path d="${pathOf(o.points)}" fill="none" stroke="${o.color}" stroke-width="1.5" opacity="0.95"/>`).join('');
+  let hiLoSvg = '';
+  if(opts.hiLo){
+    const hi = points.reduce((a,b) => b.Price > a.Price ? b : a), lo = points.reduce((a,b) => b.Price < a.Price ? b : a);
+    const line = (p, label, above) => {
+      const y = yScale(p.Price), x = xScale(p.dt.getTime());
+      const ty = above ? y-5 : y+14;
+      return `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${width-pad.right}" y2="${y.toFixed(1)}" stroke="#767E8A" stroke-width="1" stroke-dasharray="4 3"/>
+        <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3" fill="#fff" stroke="#767E8A" stroke-width="1.5"/>
+        <text x="${width-pad.right-4}" y="${ty.toFixed(1)}" text-anchor="end" ${FONT} fill="#4A515C" paint-order="stroke" stroke="#F7F8FA" stroke-width="3">${label} ${fmtDecimal(p.Price,decimals)} · ${fmtDateDDMM(p.dt)}</text>`;
+    };
+    hiLoSvg = line(hi, 'High', true) + line(lo, 'Low', false);
+  }
 
-  container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Price chart">
-    ${grid}<path d="${areaD}" fill="${lineColor}" opacity="0.08" stroke="none"/><path d="${d.trim()}" fill="none" stroke="${lineColor}" stroke-width="2"/>
+  container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="${opts.ariaLabel || 'Chart'}">
+    ${grid}<path d="${areaD}" fill="${lineColor}" opacity="0.08" stroke="none"/>${overlayPaths}<path d="${d}" fill="none" stroke="${lineColor}" stroke-width="2"/>
+    ${hiLoSvg}
+    <line id="cursorLine" x1="0" y1="${pad.top}" x2="0" y2="${pad.top+innerH}" stroke="#A3A9B0" stroke-width="1" style="display:none"/>
     <circle id="cursorDot" cx="0" cy="0" r="4" fill="${lineColor}" style="display:none"/>
     <rect id="hitRect" x="${pad.left}" y="${pad.top}" width="${innerW}" height="${innerH}" fill="transparent"/>${xLabels}
   </svg>`;
@@ -905,6 +1002,9 @@ function drawLineChart(container, tooltip, points, decimals, currency){
   const svgEl = container.querySelector('svg');
   const hitRect = svgEl.querySelector('#hitRect');
   const cursorDot = svgEl.querySelector('#cursorDot');
+  const cursorLine = svgEl.querySelector('#cursorLine');
+  const overlayMaps = overlays.map(o => ({ label:o.label, map: new Map(o.points.map(p => [toIsoDate(p.dt), p.Price])) }));
+  const startPrice = points[0].Price;
   function nearestPoint(clientX){
     const svgRect = svgEl.getBoundingClientRect();
     const relX = (clientX - svgRect.left) * (width / svgRect.width);
@@ -918,14 +1018,20 @@ function drawLineChart(container, tooltip, points, decimals, currency){
     const p = nearestPoint(clientX);
     const x = xScale(p.dt.getTime()), y = yScale(p.Price);
     cursorDot.setAttribute('cx', x.toFixed(1)); cursorDot.setAttribute('cy', y.toFixed(1)); cursorDot.style.display='block';
-    showTooltip(evt, container, tooltip, `${fmtDateOnly(p.dt)}: ${fmtDecimal(p.Price,decimals)} ${currency||''}`);
+    cursorLine.setAttribute('x1', x.toFixed(1)); cursorLine.setAttribute('x2', x.toFixed(1)); cursorLine.style.display='block';
+    let html = `${fmtDateDDMM(p.dt)}: ${fmtDecimal(p.Price,decimals)} ${currency||''}`;
+    if(opts.showChange && startPrice){ const ch = fmtPct(pctChange(p.Price, startPrice)); html += ` (${ch.text})`; }
+    const key = toIsoDate(p.dt);
+    for(const o of overlayMaps){ const v = o.map.get(key); if(v !== undefined) html += `<br>${o.label}: ${fmtDecimal(v,decimals)}`; }
+    showTooltip(evt, container, tooltip, html);
   }
+  const hide = () => { tooltip.style.display='none'; cursorDot.style.display='none'; cursorLine.style.display='none'; };
   hitRect.addEventListener('mousemove', handleMove);
   hitRect.addEventListener('mouseenter', handleMove);
   hitRect.addEventListener('touchstart', handleMove, {passive:false});
   hitRect.addEventListener('touchmove', handleMove, {passive:false});
-  hitRect.addEventListener('mouseleave', () => { tooltip.style.display='none'; cursorDot.style.display='none'; });
-  svgEl.addEventListener('touchend', () => setTimeout(()=>{ tooltip.style.display='none'; cursorDot.style.display='none'; }, 1200));
+  hitRect.addEventListener('mouseleave', hide);
+  svgEl.addEventListener('touchend', () => setTimeout(hide, 1200));
 }
 function showTooltip(evt, wrap, tooltip, html){
   const rect = wrap.getBoundingClientRect();
@@ -947,8 +1053,10 @@ function computeRolling12m(sorted, allDist){
   return points;
 }
 function drawDistributionChart(container, tooltip, displayDist, allDist, currency){
+  container._redraw = () => drawDistributionChart(container, tooltip, displayDist, allDist, currency);
+  container._drawnWidth = chartInnerWidth(container);
   if(!displayDist.length){ container.innerHTML = '<div class="chart-empty">Keine Distributions für diesen Zeitraum.</div>'; return; }
-  const width=800, height=240;
+  const width = container._drawnWidth || 800, height = 240;
   const sorted = [...displayDist].sort((a,b)=>a.exDate-b.exDate);
   const maxBar = Math.max(...sorted.map(d=>d.amount))*1.15 || 1;
   const rolling = computeRolling12m(sorted, allDist);
@@ -1002,7 +1110,7 @@ function drawDistributionChart(container, tooltip, displayDist, allDist, currenc
     return `<text x="${x.toFixed(1)}" y="${height-8}" text-anchor="${anchor}" font-family="IBM Plex Mono, monospace" font-size="10" fill="#767E8A">${fmtMY(qd)}</text>`;
   }).join('');
 
-  container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Distribution chart">${grid}${bars}${rollLine}${rightLabels}${xLabels}</svg>
+  container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Distribution chart">${grid}${bars}${rollLine}${rightLabels}${xLabels}</svg>
     <div class="chart-legend">Balken: Distribution pro Ex-Date (linke Achse)${hasCapitalBars ? ' · Blau: Capital' : ''}${hasTaxBars ? ' · Grau: Swiss Tax Income (nicht in Total Return/Yield)' : ''} · Gestrichelt: rollierende 12-Monats-Summe Dividends + Capital (rechte Achse)</div>`;
   container.appendChild(tooltip);
   const svgEl = container.querySelector('svg');
@@ -1023,6 +1131,8 @@ function filterByRange(dailyAsc, rawAsc, range){
   else if(range==='90D') cutoff = daysAgo(now,90);
   else if(range==='YTD') cutoff = new Date(now.getFullYear(),0,1);
   else if(range==='12M') cutoff = daysAgo(now,365);
+  else if(range==='3Y') cutoff = daysAgo(now,365*3);
+  else if(range==='5Y') cutoff = daysAgo(now,365*5);
   else return dailyAsc;
   return dailyAsc.filter(p => p.dt >= cutoff);
 }
@@ -1037,18 +1147,17 @@ function filterDistByRange(dist, range){
 // current all come from the same raw per-1 rate) - the position % is
 // unaffected since it's a ratio between values sharing the same factor.
 function renderRange52w(highRow, lowRow, last, decimals, factor = 1){
+  const box = document.getElementById('range52wBox');
   const el = document.getElementById('range52wWrap');
-  if(!highRow || !lowRow || !last){ el.innerHTML = ''; return; }
+  if(!highRow || !lowRow || !last){ el.innerHTML = ''; box.classList.add('hidden'); return; }
   const lowVal = lowRow.Price, highVal = highRow.Price;
   let pct = highVal > lowVal ? ((last.Price-lowVal)/(highVal-lowVal))*100 : 50;
   pct = Math.max(0, Math.min(100, pct));
+  box.title = `52W Tief ${fmtDecimal(lowVal*factor,decimals)} am ${fmtDateDDMM(lowRow.dt)} · 52W Hoch ${fmtDecimal(highVal*factor,decimals)} am ${fmtDateDDMM(highRow.dt)} · aktuell ${fmtDecimal(last.Price*factor,decimals)}`;
   el.innerHTML = `
-    <div class="range52w-current" style="left:${pct.toFixed(1)}%">${fmtDecimal(last.Price*factor,decimals)}</div>
     <div class="range52w-bar"><div class="range52w-marker" style="left:${pct.toFixed(1)}%">▼</div></div>
-    <div class="range52w-labels">
-      <div><span class="range52w-value">${fmtDecimal(lowVal*factor,decimals)}</span><span class="range52w-date">${fmtDateDDMM(lowRow.dt)}</span></div>
-      <div style="text-align:right"><span class="range52w-value">${fmtDecimal(highVal*factor,decimals)}</span><span class="range52w-date">${fmtDateDDMM(highRow.dt)}</span></div>
-    </div>`;
+    <div class="range52w-labels"><span>${fmtDecimal(lowVal*factor,decimals)}</span><span>${fmtDecimal(highVal*factor,decimals)}</span></div>`;
+  box.classList.remove('hidden');
 }
 
 let CURRENCY_OPTS = ['CHF','EUR','USD','GBP','JPY','INR','CNY','SEK','CAD']; // fallback until dbCurrencyOptions() resolves in load()
@@ -1135,13 +1244,12 @@ async function loadSecurity(secId){
   document.getElementById('linkDividendAdd').href = `distribution_editor.html?id=${secId}&add=1`;
   document.getElementById('linkTransactionHistory').href = `transactions_editor.html?id=${secId}`;
   document.getElementById('linkTransactionAdd').href = `transactions_editor.html?id=${secId}&add=1`;
-  document.getElementById('linkSecurityData').href = `security_data.html?id=${secId}`;
   document.getElementById('linkOtherFundamentalsEdit').href = `security_data.html?id=${secId}`;
-  document.getElementById('linkNotesLog').href = `https://notes.munot.app/?securityId=${secId}`;
   document.getElementById('linkFundOverviewEdit').href = `security_data.html?id=${secId}`;
   document.getElementById('linkFundOperationsEdit').href = `security_data.html?id=${secId}`;
   document.getElementById('linkFundPortfolioEdit').href = `security_data.html?id=${secId}`;
   document.getElementById('linkManualAA').href = `aa.html?securityId=${secId}`;
+  syncSecurityDataFrame(secId);
   loadManualAllocation(secId).catch(e => console.error('Manual allocation load error:', e));
 
   const badge = document.getElementById('statusBadge');
@@ -1200,6 +1308,7 @@ async function loadSecurity(secId){
     document.getElementById('perfBodyPrice').innerHTML = '<tr><td colspan="6" class="empty">Keine Daten.</td></tr>';
     document.getElementById('returnsBoxes').innerHTML = '';
     document.getElementById('secondaryTiles').innerHTML = '';
+    renderRange52w(null, null, null, 2);
     document.getElementById('annualBody').innerHTML = '<tr><td colspan="6" class="empty">Keine Daten.</td></tr>';
     document.getElementById('annualToggleWrap').innerHTML = '';
     document.getElementById('irrValue').textContent = '—';
@@ -1318,8 +1427,8 @@ async function loadSecurity(secId){
 
   document.getElementById('thPriceLc').textContent = `Price Return ${master.Currency||''}`;
   document.getElementById('thTotalLc').textContent = `Total Return ${master.Currency||''}`;
-  document.getElementById('thPriceLcPrice').textContent = `Price Return ${master.Currency||''}`;
-  document.getElementById('thTotalLcPrice').textContent = `Total Return ${master.Currency||''}`;
+  document.getElementById('thPriceLcPrice').textContent = `Price ${master.Currency||''}`;
+  document.getElementById('thTotalLcPrice').textContent = `Total ${master.Currency||''}`;
 
   // FX securities ("XXX/CHF") price history, daily-collapsed, ascending.
   // Batched into a single query instead of one per currency (this runs on every security switch).
@@ -1400,6 +1509,7 @@ async function loadSecurity(secId){
   const periods = [
     {label:'Day', ref:prev, cutoff:cutoffDay}, {label:'WTD', ref:refWtd, cutoff:cutoffWtd},
     {label:'10 Days', ref:refTen, cutoff:cutoffTen}, {label:'MTD', ref:refMtd, cutoff:cutoffMtd},
+    {label:'YTD', ref:refYtd, cutoff:cutoffYtd},
     {label:'3 Months', ref:ref3M, cutoff:cutoff3M}, {label:'6 Months', ref:ref6M, cutoff:cutoff6M},
     {label:'1 Year', ref:ref1Y, cutoff:cutoff1Y}, {label:'3 Years', ref:ref3Y, cutoff:cutoff3Y},
     {label:'5 Years', ref:ref5Y, cutoff:cutoff5Y},
@@ -1434,11 +1544,21 @@ async function loadSecurity(secId){
   const priceChartWrap = document.getElementById('priceChartWrap');
   const distChartWrap = document.getElementById('distChartWrap');
   const fxFactor = currencyFactorFor(factorMap, fxBaseCurrency(master.SecurityName));
+  // Moving averages are computed on the full daily series (not the visible range), so they are
+  // already "warmed up" at the left edge of the chart.
+  const maSeries = {};
+  for(const def of PRICE_MA_DEFS) maSeries[def.key] = movingAverage(daily, def.n);
+  const scale = pts => fxFactor === 1 ? pts : pts.map(p => ({ ...p, Price: p.Price * fxFactor }));
   function renderPriceChart(){
     const tooltip = document.createElement('div'); tooltip.className='chart-tooltip';
     const pts = filterByRange(daily, withDt, currentPriceRange);
-    const scaledPts = fxFactor === 1 ? pts : pts.map(p => ({ ...p, Price: p.Price * fxFactor }));
-    drawLineChart(priceChartWrap, tooltip, scaledPts, decimals, detailFx.suffix ? detailFx.suffix : master.Currency);
+    const from = pts.length ? pts[0].dt : null, to = pts.length ? pts[pts.length-1].dt : null;
+    const overlays = PRICE_MA_DEFS.filter(def => priceOverlays.has(def.key)).map(def => ({
+      label: `MA ${def.n}`, color: def.color,
+      points: from ? scale(maSeries[def.key].filter(p => p.dt >= from && p.dt <= to)) : [],
+    }));
+    drawLineChart(priceChartWrap, tooltip, scale(pts), decimals, detailFx.suffix ? detailFx.suffix : master.Currency,
+      { overlays, hiLo: priceOverlays.has('hilo'), showChange: true, height: 300, ariaLabel: 'Price chart' });
   }
   function renderDistChart(){
     const tooltip = document.createElement('div'); tooltip.className='chart-tooltip';
@@ -1449,7 +1569,18 @@ async function loadSecurity(secId){
   renderDistChart();
 
   document.querySelectorAll('#priceRangeRow .toggle-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.range === currentPriceRange);
     btn.onclick = () => { currentPriceRange = btn.dataset.range; document.querySelectorAll('#priceRangeRow .toggle-btn').forEach(b=>b.classList.toggle('active', b===btn)); renderPriceChart(); };
+  });
+  document.querySelectorAll('#priceOverlayRow .toggle-btn').forEach(btn => {
+    btn.classList.toggle('active', priceOverlays.has(btn.dataset.overlay));
+    btn.onclick = () => {
+      const k = btn.dataset.overlay;
+      if(priceOverlays.has(k)) priceOverlays.delete(k); else priceOverlays.add(k);
+      btn.classList.toggle('active', priceOverlays.has(k));
+      savePriceOverlays();
+      renderPriceChart();
+    };
   });
   document.querySelectorAll('#distRangeRow .toggle-btn').forEach(btn => {
     btn.onclick = () => { currentDistRange = btn.dataset.range; document.querySelectorAll('#distRangeRow .toggle-btn').forEach(b=>b.classList.toggle('active', b===btn)); renderDistChart(); };
@@ -1457,6 +1588,46 @@ async function loadSecurity(secId){
 
   const url = new URL(location.href); url.searchParams.set('id', secId); history.replaceState(null,'',url);
 }
+
+// ============ Security Data tab (embedded security_data.html) ============
+// Loaded lazily: the iframe only gets a src once the tab is visible, and is re-pointed when the
+// security changes. Same origin, so the Access cookie applies and the height can be read directly.
+let securityDataFrameObserver = null;
+function syncSecurityDataFrame(secId){
+  const frame = document.getElementById('securityDataFrame');
+  const panel = document.getElementById('tabPanelSecurityData');
+  if(!frame || !secId) return;
+  const target = `security_data.html?id=${encodeURIComponent(secId)}&embed=1`;
+  if(!panel.classList.contains('active')){
+    // Not visible: drop a stale document so the tab never shows another security's data.
+    if(frame.dataset.src && frame.dataset.src !== target){ frame.removeAttribute('src'); delete frame.dataset.src; }
+    return;
+  }
+  if(frame.dataset.src === target) return;
+  frame.dataset.src = target;
+  frame.src = target;
+}
+document.getElementById('securityDataFrame').addEventListener('load', () => {
+  const frame = document.getElementById('securityDataFrame');
+  if(securityDataFrameObserver){ securityDataFrameObserver.disconnect(); securityDataFrameObserver = null; }
+  let doc;
+  try { doc = frame.contentDocument; } catch(e) { return; }
+  if(!doc || !doc.body) return;
+  const fit = () => { frame.style.height = Math.max(400, doc.documentElement.scrollHeight) + 'px'; };
+  fit();
+  if(typeof ResizeObserver === 'function'){
+    securityDataFrameObserver = new ResizeObserver(fit);
+    securityDataFrameObserver.observe(doc.body);
+  }
+});
+
+// security_data changed inside the embedded tab -> refresh this page's data (Fundamentals, Market Cap tile).
+window.addEventListener('message', (e) => {
+  if(e.origin !== location.origin || !e.data || e.data.type !== 'security-data-changed') return;
+  if(String(e.data.securityId) !== String(curSecId)) return;
+  dbClearCache();
+  loadSecurity(curSecId).catch(err => console.error('Reload after security data change failed:', err));
+});
 
 function setQuickStatus(id, msg, cls){ const el = document.getElementById(id); el.textContent = msg; el.className = 'quick-status ' + (cls||''); }
 
@@ -2447,14 +2618,38 @@ document.getElementById('statusBadge').addEventListener('keydown', (e) => {
 });
 
 
-// ============ Subnav tabs (Price / Returns / Dividenden / Risk / Fundamentals / Asset Allocation / Tasks / Masterdata) ============
+// ============ Subnav tabs (Price / Returns / Distributions / Risk / Security Data / Fundamentals / Asset Allocation / Tasks / Masterdata) ============
 function activateTab(tabName){
+  if(!document.querySelector(`.subnav-tab[data-tab="${tabName}"]`)) tabName = 'price';
   document.querySelectorAll('.subnav-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.tab === tabName));
+  // Charts in a tab that was hidden were drawn without a measurable width - redraw at the real size.
+  const panel = document.querySelector(`.tab-panel[data-tab="${tabName}"]`);
+  if(panel) redrawVisibleCharts(panel);
+  if(tabName === 'securitydata') syncSecurityDataFrame(curSecId);
+  // Keep the active tab in the URL so reloads / shared links open the same tab.
+  const url = new URL(location.href);
+  if(tabName === 'price') url.searchParams.delete('tab'); else url.searchParams.set('tab', tabName);
+  history.replaceState(null, '', url);
 }
 document.querySelectorAll('.subnav-tab').forEach(btn => {
   btn.addEventListener('click', () => activateTab(btn.dataset.tab));
 });
+// Fundamentals' ✏️ links open the Security Data tab instead of navigating away
+// (href stays as fallback for middle-click / open in new tab).
+['linkOtherFundamentalsEdit','linkFundOverviewEdit','linkFundOperationsEdit','linkFundPortfolioEdit'].forEach(id => {
+  const a = document.getElementById(id);
+  if(a) a.addEventListener('click', (e) => {
+    if(e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    e.preventDefault();
+    activateTab('securitydata');
+    document.getElementById('subnavTabs').scrollIntoView({ behavior:'smooth', block:'start' });
+  });
+});
+{
+  const startTab = new URLSearchParams(location.search).get('tab');
+  if(startTab) activateTab(startTab);
+}
 // Jump straight to the Tasks tab from the header's pending-task badge.
 document.getElementById('taskStatusBadge').addEventListener('click', () => activateTab('tasks'));
 document.getElementById('taskStatusBadge').addEventListener('keydown', (e) => {

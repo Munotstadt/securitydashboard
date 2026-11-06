@@ -1,6 +1,8 @@
 // Shared top bar (brand + navigation) for all pages. Include with a plain <script src="assets/layout.js">
 // where the old <nav class="topnav"> used to be; it renders the bar in place, synchronously (no flash).
 (function () {
+  // Embedded (e.g. security_data.html inside the Security Data tab of security.html): no top bar.
+  if (/[?&]embed=1(&|$)/.test(location.search)) { document.documentElement.classList.add('sd-embed'); return; }
   var MAIN = [
     ['index.html', 'Home'], ['dashboard.html', 'Dashboard'], ['listing.html', 'Listing'], ['portfolio.html', 'Portfolio'],
     ['analyser.html', 'Analyser'], ['asset_comparison.html', 'Comparison'], ['tasks.html', 'Tasks']

@@ -83,6 +83,15 @@
   .row-actions a:hover{color:var(--accent);}
 </style>
 <link rel="stylesheet" href="assets/layout.css">
+<style>
+  /* Embedded in security.html (Security Data tab, ?embed=1): the host page provides
+     header, security switcher, navigation and footer. */
+  html.sd-embed body{padding:0 !important;}
+  html.sd-embed .board{padding:0 !important;}
+  html.sd-embed #securitySwitcher, html.sd-embed #linkBackToSecurity, html.sd-embed #detailName, html.sd-embed .footer{display:none !important;}
+  html.sd-embed .toprow{justify-content:flex-end;}
+  html.sd-embed .detail-header{border-bottom:0;padding-bottom:0;}
+</style>
 </head>
 <body>
 <script src="assets/layout.js"></script>
@@ -162,6 +171,12 @@ function isoToday(){
 }
 let curSecId = null;
 let curData = [];
+const IS_EMBED = /[?&]embed=1(&|$)/.test(location.search);
+// When embedded in security.html, tell the host page that security_data changed (same origin).
+function notifyHostDataChanged(){
+  if(!IS_EMBED || window.parent === window) return;
+  try { window.parent.postMessage({ type:'security-data-changed', securityId: curSecId }, location.origin); } catch(e) { /* ignore */ }
+}
 
 // DataTypes rendered in this order, each as its own section.
 const SECTION_DEFS = [
@@ -505,6 +520,7 @@ async function deleteRow(rowId){
       const paramName = row.ParameterName || row.FieldName || '—';
       await logChange(curSecId, row.DataType, paramName, 'Delete', fmtLogValue(row.FieldValue, row.NumericValue, row.Unit), null);
     }
+    notifyHostDataChanged();
     await loadSecurity(curSecId);
   } catch(e) {
     alert('Fehler beim Löschen: ' + e.message);
@@ -598,6 +614,7 @@ document.getElementById('mfSave').addEventListener('click', async () => {
     }
     dbClearCache();
     resetManualForm();
+    notifyHostDataChanged();
     await loadSecurity(curSecId);
   } catch (e) {
     msg.textContent = 'Fehler: ' + e.message; msg.className = 'msg error';
