@@ -17,7 +17,7 @@ node.exe  C:\MunotstadtTools\AccessERP\download-securityprices-csv.js --mode=…
 Cloudflare Access  (prüft den Service Token, Policy "Service Auth")
    ▼
 Cloudflare Worker "securitydashboard"  (prüft zusätzlich das Access-JWT)
-   │  4. SQL auf D1 "securities"  (security_master, security_transactions, security_prices)
+   │  4. SQL auf D1 "securities"  (security_master, security_parameter, security_prices)
    ▼
 CSV  SecurityID,PriceDate,Price,Source
    │  5. Skript schreibt C:\Users\phili\OneDrive\1_Finance\Data Management\securityprices.csv
@@ -100,13 +100,14 @@ Exit-Codes: `0` = OK · `1` = Fehler (Netz, Token, Server, leere Antwort) · `2`
 | `mode=latest` (Standard) | je Wertschrift der Kurs mit dem jüngsten `Price_date` |
 | `mode=close&asof=DATUM` | je Wertschrift der letzte Kurs **bis und mit Ende des Stichtags** (`Price_date` < Stichtag + 1 Tag). `DATUM` = `YYYY-MM-DD` oder `DD.MM.YYYY` |
 
-* **Welche Wertschriften** (Scope): Nettobestand (Buy/Sell aus `security_transactions`) ≠ 0 **oder** `security_master.DashboardGrouping` gesetzt.
-  Im Modus `close` zählen nur Transaktionen **bis und mit Stichtag** (`DateTrx`, Format `TT.MM.JJJJ`). Eine inzwischen verkaufte Position ist also per Stichtag noch enthalten.
+* **Welche Wertschriften** (Scope): Security ist **Active oder Pending** (Status weder *Inactive* noch *Terminated* und
+  `DateTerminated` leer oder nicht vor dem Referenztag) **oder** `security_master.DashboardGrouping` gesetzt.
+  Referenztag ist heute bzw. im Modus `close` der Stichtag: Eine Security mit späterem `DateTerminated` ist per Stichtag also noch enthalten.
 * **Gleicher Tag mehrere Kurse**: der jüngste (`Price_date`, dann höchste `id`).
 * **Kein Kurs am Stichtag** (Wochenende, Feiertag): der letzte frühere Kurs wird verwendet. Die Spalte `PriceDate` zeigt das tatsächliche Datum des Kurses.
 * **Spalten**: `SecurityID,PriceDate,Price,Source` (`PriceDate` im Format der Datenbank: `YYYY-MM-DD HH:MM:SS` oder `YYYY-MM-DD`, `Source` = Kursquelle).
 * **Schutz**: Cloudflare Access am Rand (Service Token); der Worker prüft zusätzlich das Access-JWT (Signatur, Aussteller, Audience, Ablauf). Nur lesender Zugriff: Der Worker lässt Service Tokens (JWT ohne E-Mail) ausschliesslich diesen Endpunkt abrufen; `/api/db`, `/api/improvements` usw. antworten ihnen mit 403.
-* Dieselbe Scope-Logik wie der Button „⬇ Valuation CSV" in `portfolio.html` (dieser exportiert nur die aktuellen Werte).
+* Dieselbe Scope-Logik wie der Filter „Im Scope (Active / Dashboard)" in `aa.html`.
 
 ### 5.3 Access-Teil
 

@@ -545,22 +545,6 @@
   </div>
 
   <div class="tab-panel" data-tab="masterdata" id="tabPanelMasterdata">
-  <div id="transactionsSection">
-    <div class="section-title-row">
-      <span class="section-title-text">Recent Transactions</span>
-      <div class="chart-actions-inline">
-        <a class="chart-icon-btn" id="linkTransactionHistory" href="transactions_editor.html" title="View All Transactions">👁</a>
-        <a class="chart-icon-btn" id="linkTransactionAdd" href="transactions_editor.html" title="Add Transaction">+</a>
-      </div>
-    </div>
-    <div class="table-wrap">
-    <table id="txnTable">
-      <thead><tr><th>DateTrx</th><th>Art</th><th class="num">Quantity</th><th class="num">AmtCHF</th><th class="num">AmtLC</th><th>Source</th></tr></thead>
-      <tbody id="txnBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
-    </table>
-    </div>
-  </div>
-
   <div class="section-title" id="masterDataTitle" style="margin-top:20px;">Master Data</div>
   <div class="quick-form">
     <div class="master-form" id="masterForm"></div>
@@ -1133,8 +1117,6 @@ async function loadSecurity(secId){
   document.getElementById('linkPriceAdd').href = `price_editor.html?id=${secId}&add=1`;
   document.getElementById('linkDividendHistory').href = `distribution_editor.html?id=${secId}`;
   document.getElementById('linkDividendAdd').href = `distribution_editor.html?id=${secId}&add=1`;
-  document.getElementById('linkTransactionHistory').href = `transactions_editor.html?id=${secId}`;
-  document.getElementById('linkTransactionAdd').href = `transactions_editor.html?id=${secId}&add=1`;
   document.getElementById('linkSecurityData').href = `security_data.html?id=${secId}`;
   document.getElementById('linkOtherFundamentalsEdit').href = `security_data.html?id=${secId}`;
   document.getElementById('linkNotesLog').href = `https://notes.munot.app/?securityId=${secId}`;
@@ -1158,31 +1140,17 @@ async function loadSecurity(secId){
   // Price history uses tiered loading (see loadTieredPriceHistory) instead of
   // always pulling the full daily series - safe to run in parallel with the
   // other two since it resolves to its own query/queries independently.
-  const [prices, dists, txns] = await Promise.all([
+  const [prices, dists] = await Promise.all([
     loadTieredPriceHistory(secId),
     dbQuery(`SELECT d.id, d.SecurityID, d.DistributionAmount, d.Currency, d.ExDate, d.PayDate, d.Source, d.distribution_type, p.ParameterName AS TypeName
                 FROM security_distributions d LEFT JOIN security_parameter p ON p.ParameterID = d.distribution_type
                 WHERE d.SecurityID = ?`, [secId], 300000),
-    dbQuery(`SELECT t.DateTrx, t.Quantity, t.AmtCHF, t.AmtLC, t.Source, ta.ParameterName AS TrxArtName
-                FROM security_transactions t LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt
-                WHERE t.SecurityID = ?`, [secId], 300000),
   ]);
   priceRows = prices;
   distRowsAll = dists.map(d => ({ exDate: parseSwissDate(d.ExDate), payDate: parseSwissDate(d.PayDate), amount: parseFloat(d.DistributionAmount), currency: d.Currency || master.Currency, source: d.Source||'', typeName: d.TypeName||'' }))
     .filter(d => d.exDate && !isNaN(d.amount)).sort((a,b) => a.exDate-b.exDate);
   distRows = distRowsAll.filter(d => d.typeName !== DIST_EXCLUDED_TYPE);
 
-  const txnSorted = [...txns].sort((a,b) => (parseSwissDate(b.DateTrx)||0) - (parseSwissDate(a.DateTrx)||0)).slice(0,10);
-  document.getElementById('txnBody').innerHTML = txnSorted.length
-    ? txnSorted.map(t => `<tr>
-        <td>${t.DateTrx||'—'}</td><td>${t.TrxArtName||'—'}</td>
-        <td class="num">${t.Quantity!=null?fmtDecimal(t.Quantity,4):'—'}</td>
-        <td class="num">${t.AmtCHF!=null?fmtDecimal(t.AmtCHF,2):'—'}</td>
-        <td class="num">${t.AmtLC!=null?fmtDecimal(t.AmtLC,2):'—'}</td>
-        <td>${t.Source||''}</td>
-      </tr>`).join('')
-    : '<tr><td colspan="6" class="empty">No transactions for this security.</td></tr>';
-  document.getElementById('transactionsSection').style.display = txnSorted.length ? '' : 'none';
   document.getElementById('dividendSection').style.display = distRowsAll.length ? '' : 'none';
 
   document.getElementById('detailName').textContent = master.SecurityName;

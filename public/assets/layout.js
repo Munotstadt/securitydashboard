@@ -2,11 +2,11 @@
 // where the old <nav class="topnav"> used to be; it renders the bar in place, synchronously (no flash).
 (function () {
   var MAIN = [
-    ['index.html', 'Home'], ['dashboard.html', 'Dashboard'], ['listing.html', 'Listing'], ['portfolio.html', 'Portfolio'],
+    ['index.html', 'Home'], ['dashboard.html', 'Dashboard'], ['listing.html', 'Listing'],
     ['analyser.html', 'Analyser'], ['asset_comparison.html', 'Comparison'], ['tasks.html', 'Tasks']
   ];
   var EDITORS = [
-    ['master_editor.html', 'Master Data'], ['price_editor.html', 'Prices'], ['transactions_editor.html', 'Transactions'],
+    ['master_editor.html', 'Master Data'], ['price_editor.html', 'Prices'],
     ['distribution_editor.html', 'Distributions'], ['parameters_editor.html', 'Parameters'], ['security_data.html', 'Security Data'],
     ['aa.html', 'Asset Allocation'], ['admin.html', 'Admin']
   ];

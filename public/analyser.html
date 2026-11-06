@@ -49,7 +49,6 @@
   .error{color:var(--loss);}
   .note{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-top:10px;}
   .table-wrap{overflow-x:auto;}
-  #fxTable{min-width:960px;}
   .risk-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:10px;}
   @media (max-width:760px){ .risk-grid{grid-template-columns:1fr;} }
   .risk-card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;}
@@ -89,22 +88,9 @@
     <div class="status" id="statusText">loading…</div>
   </div>
 
-  <div class="section-title">FX</div>
-  <div class="table-wrap">
-  <table id="fxTable">
-    <thead><tr>
-      <th>Currency</th><th class="num">Value CHF</th><th class="num">PF %</th>
-      <th class="num">Δ Day</th><th class="num">10D</th><th class="num">30D</th>
-      <th class="num">90D</th><th class="num">360D</th>
-    </tr></thead>
-    <tbody id="fxBody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
-  </table>
-  </div>
-  <p class="note">Value CHF / PF % entsprechen der Währungsaufteilung aus dem Portfolio-Dashboard. FX-Performance je Periode ist die reine Wechselkursbewegung, CHF-Impact = Value CHF × FX-%. CHF/OTH haben keine eindeutige FX-Bewegung. FX Result = Summe des USD/EUR-FX-Impacts. Total = tatsächliches Portfolio-Ergebnis. LC Result = Total − FX Result.</p>
-
   <div class="section-title">FX Risks</div>
   <div class="risk-grid" id="riskGrid"><div class="empty">Loading…</div></div>
-  <p class="note">Volatilität = Standardabweichung der täglichen FX-Kursänderungen über die letzten 180 Tage, annualisiert mit √252. Impact-Zeilen zeigen Anteil am Portfoliowert plus CHF-Betrag. Oberer Chart: FX-Kurs 360 Tage + MA30. Unterer Chart: rollierende annualisierte Volatilität.</p>
+  <p class="note">Volatilität = Standardabweichung der täglichen FX-Kursänderungen über die letzten 180 Tage, annualisiert mit √252. Bandbreiten zeigen den FX-Kurs bei ± 1 % / ± 5 %. Oberer Chart: FX-Kurs 360 Tage + MA30. Unterer Chart: rollierende annualisierte Volatilität.</p>
 
   <div class="section-title">Switzerland</div>
   <div id="marketGroupSectionsCH"></div>
@@ -126,9 +112,7 @@
 <script src="assets/db-data.js"></script>
 <script>
 function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); return d; }
-function fmtChf(v){ return v===null||v===undefined||isNaN(v) ? '—' : v.toLocaleString('de-CH',{maximumFractionDigits:0}); }
 function fmtPct(v){ if(v===null||v===undefined||isNaN(v)) return {text:'—',dir:'flat'}; const r=Math.round(v*100)/100; const dir=r>0?'up':(r<0?'down':'flat'); return {text:`${r>0?'+':''}${r.toFixed(2)}%`, dir}; }
-function fmtChfSigned(v){ if(v===null||v===undefined||isNaN(v)) return {text:'—',dir:'flat'}; const r=Math.round(v); const dir=r>0?'up':(r<0?'down':'flat'); return {text:`${r>0?'+':''}${fmtChf(r)}`, dir}; }
 
 const PERIODS = [
   { key:'day', label:'Δ Day' }, { key:'ten', label:'10D' }, { key:'thirty', label:'30D' },
@@ -148,24 +132,12 @@ function computeAnalyserPeriods(rowsForSecurity, today){
     threeSixty: latestOnOrBefore(closes, daysAgo(today,360)),
   };
 }
-function pairedDelta(positions, refKey){
-  let curSum=0, refSum=0, n=0;
-  for(const p of positions){ if(p.valChf!==null && p[refKey]!==null){ curSum+=p.valChf; refSum+=p[refKey]; n++; } }
-  return n===0 ? null : curSum-refSum;
-}
-function netQuantity(secId, txnRows){
-  return txnRows.filter(t => t.SecurityID === secId && (t.TrxArtName === 'Buy' || t.TrxArtName === 'Sell'))
-    .reduce((s,t) => s + (Number(t.Quantity)||0), 0);
-}
-
 async function load(){
   try{
-    const [master, txns, prices, distRows] = await Promise.all([
+    const [master, prices, distRows] = await Promise.all([
       dbQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.PortfolioGrouping, pg.ParameterName AS PortfolioGroupingName
                   FROM security_master sm
                   LEFT JOIN security_parameter pg ON pg.ParameterID = sm.PortfolioGrouping`, [], 3600000),
-      dbQuery(`SELECT t.SecurityID, t.Quantity, ta.ParameterName AS TrxArtName
-                  FROM security_transactions t LEFT JOIN security_parameter ta ON ta.ParameterID = t.TrxArt`),
       dbRecentDailyPrices(600),
       dbQuery(`SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions WHERE (distribution_type IS NULL OR distribution_type NOT IN (SELECT ParameterID FROM security_parameter WHERE ParaTable='security_distributions' AND ParaField='distribution_type' AND ParameterName='Swiss Tax Income (CHF)'))`, [], 3600000),
     ]);
@@ -191,23 +163,8 @@ async function load(){
       const periods = periodsBySecId.get(m.SecurityID);
       if(periods && periods.last){ fxByCurrency[match[1].toUpperCase()] = periods; fxSecurityId[match[1].toUpperCase()] = m.SecurityID; }
     }
-    function fxRate(currency, periodKey){
-      if(!currency || currency.toUpperCase()==='CHF') return 1;
-      const fx = fxByCurrency[currency.toUpperCase()];
-      return (fx && fx[periodKey]) ? fx[periodKey].Price : null;
-    }
-    function valueAt(qty, periods, periodKey, currency){
-      if(!periods || !periods[periodKey]) return null;
-      const rate = fxRate(currency, periodKey);
-      return rate!==null ? qty*periods[periodKey].Price*rate : null;
-    }
-
-    const byCurrency = {};
-    const positions = [];
     const swissCandidates = [];
-    let totalChf = 0;
     for(const m of master){
-      const qty = netQuantity(m.SecurityID, txns);
       const periods = periodsBySecId.get(m.SecurityID);
       const parts = (m.PortfolioGroupingName || '').split(' - ').map(s=>s.trim());
 
@@ -221,104 +178,28 @@ async function load(){
       } else if(pgId === 42){
         swissCandidates.push({ name:m.SecurityName, secId:m.SecurityID, currency:m.Currency, country:'Europe', subGroup:'Index', periods });
       }
-
-      if(Math.abs(qty) < 1e-9 || !periods || !periods.last) continue;
-      const valChf = valueAt(qty, periods, 'last', m.Currency);
-      if(valChf===null) continue;
-      totalChf += valChf;
-      const ccy = (m.Currency||'').toUpperCase();
-      const bucket = ['CHF','USD','EUR'].includes(ccy) ? ccy : 'OTH';
-      byCurrency[bucket] = (byCurrency[bucket]||0) + valChf;
-
-      positions.push({
-        valChf,
-        day: valueAt(qty, periods, 'day', m.Currency), ten: valueAt(qty, periods, 'ten', m.Currency),
-        thirty: valueAt(qty, periods, 'thirty', m.Currency), ninety: valueAt(qty, periods, 'ninety', m.Currency),
-        threeSixty: valueAt(qty, periods, 'threeSixty', m.Currency),
-      });
     }
 
-    window.__lastByCurrency = byCurrency; window.__lastTotalChf = totalChf; window.__lastFxSecurityId = fxSecurityId; window.__lastPricesBySecId = pricesBySecId;
+    window.__lastFxSecurityId = fxSecurityId; window.__lastPricesBySecId = pricesBySecId;
 
-    renderFxTable(byCurrency, totalChf, fxByCurrency, positions, fxSecurityId);
     renderMarketGroupsFor('marketGroupSectionsCH', swissCandidates.filter(c=>c.country==='Switzerland'), distBySecId, fxByCurrency);
     renderMarketGroupsFor('marketGroupSectionsUSA', swissCandidates.filter(c=>c.country==='USA'), distBySecId, fxByCurrency);
     renderMarketGroupsFor('marketGroupSectionsEU', swissCandidates.filter(c=>c.country==='Europe'), distBySecId, fxByCurrency);
     document.getElementById('statusText').textContent = 'live · ' + nowZurichString();
   }catch(e){
-    document.getElementById('fxBody').innerHTML = `<tr><td colspan="8" class="error">Error: ${e.message}</td></tr>`;
+    document.getElementById('marketGroupSectionsCH').innerHTML = `<div class="error">Error: ${e.message}</div>`;
     document.getElementById('statusText').textContent = 'Error';
     console.error('Analyser load() failed:', e);
   }
 
   try{
-    const byCurrencyForRisks = window.__lastByCurrency, totalForRisks = window.__lastTotalChf, fxIdsForRisks = window.__lastFxSecurityId, pricesForRisks = window.__lastPricesBySecId;
-    if (byCurrencyForRisks) await loadFxRisks(byCurrencyForRisks, totalForRisks, fxIdsForRisks, pricesForRisks);
+    const fxIdsForRisks = window.__lastFxSecurityId, pricesForRisks = window.__lastPricesBySecId;
+    if (fxIdsForRisks) await loadFxRisks(fxIdsForRisks, pricesForRisks);
     else document.getElementById('riskGrid').innerHTML = '<div class="empty">FX data not available (see error above).</div>';
   } catch(e) {
     document.getElementById('riskGrid').innerHTML = `<div class="error">Error: ${e.message}</div>`;
     console.error('FX Risks failed:', e);
   }
-}
-
-function fxPctChange(fx, periodKey){
-  const nowRate = fx && fx.last ? fx.last.Price : null;
-  const refRate = fx && fx[periodKey] ? fx[periodKey].Price : null;
-  if(nowRate===null || refRate===null || !refRate) return null;
-  return (nowRate-refRate)/refRate;
-}
-function emptyCell(){ return `<td class="chg flat">—</td>`; }
-function fxPeriodCell(currency, valueChf, fxByCurrency, periodKey){
-  const fx = fxByCurrency[currency];
-  const pct = fxPctChange(fx, periodKey);
-  if(pct===null) return `<td class="chg flat">—<span class="abs">n/a</span></td>`;
-  const impact = valueChf * pct;
-  const f = fmtPct(pct*100), imp = fmtChfSigned(impact);
-  const refRate = fx[periodKey].Price;
-  return `<td class="chg ${f.dir}">${f.text}<span class="abs">${imp.text} CHF</span><span class="abs">@ ${fmtDecimal(refRate,4)}</span></td>`;
-}
-function resultRow(label, valuesByPeriod, totalChf, valueChfDisplay){
-  const cells = PERIODS.map(p => {
-    const v = valuesByPeriod[p.key];
-    if(v===null || v===undefined) return `<td class="chg flat">—<span class="abs">n/a</span></td>`;
-    const pctOfTotal = totalChf ? (v/totalChf)*100 : null;
-    const f = fmtPct(pctOfTotal), imp = fmtChfSigned(v);
-    return `<td class="chg ${imp.dir}">${f.text}<span class="abs">${imp.text} CHF</span></td>`;
-  }).join('');
-  const valCell = valueChfDisplay!==undefined ? `<td class="price">${fmtChf(valueChfDisplay)}</td>` : `<td></td>`;
-  return `<tr class="total-row"><td class="name">${label}</td>${valCell}<td></td>${cells}</tr>`;
-}
-function renderFxTable(byCurrency, totalChf, fxByCurrency, positions, fxSecurityId){
-  const body = document.getElementById('fxBody');
-  if(!totalChf){ body.innerHTML = '<tr><td colspan="8" class="empty">No data.</td></tr>'; return; }
-  const order = ['USD','EUR','CHF','OTH'];
-  let html = '';
-  for(const ccy of order){
-    const valueChf = byCurrency[ccy] || 0;
-    const pctPf = totalChf ? (valueChf/totalChf)*100 : null;
-    const isFx = (ccy==='USD' || ccy==='EUR');
-    const periodCells = isFx ? PERIODS.map(p => fxPeriodCell(ccy, valueChf, fxByCurrency, p.key)).join('') : PERIODS.map(()=>emptyCell()).join('');
-    const currentRate = (isFx && fxByCurrency[ccy] && fxByCurrency[ccy].last) ? fxByCurrency[ccy].last.Price : null;
-    const rateSub = currentRate!==null ? `<span class="sub">@ ${fmtDecimal(currentRate,4)}</span>` : '';
-    const secId = fxSecurityId && fxSecurityId[ccy];
-    const nameLabel = (isFx && secId) ? `<a href="security.html?id=${encodeURIComponent(secId)}">${ccy}</a>` : `${ccy}${ccy==='OTH'?' (Residual)':''}`;
-    html += `<tr><td class="name">${nameLabel}</td><td class="price">${fmtChf(valueChf)}${rateSub}</td>
-      <td class="price">${pctPf!==null?pctPf.toFixed(1)+'%':'—'}</td>${periodCells}</tr>`;
-  }
-  const fxResultByPeriod = {};
-  for(const p of PERIODS){
-    let sum=0, any=false;
-    for(const ccy of ['USD','EUR']){ const pct = fxPctChange(fxByCurrency[ccy], p.key); if(pct===null) continue; sum += (byCurrency[ccy]||0)*pct; any=true; }
-    fxResultByPeriod[p.key] = any ? sum : null;
-  }
-  const totalResultByPeriod = {};
-  for(const p of PERIODS) totalResultByPeriod[p.key] = pairedDelta(positions, p.key);
-  const lcResultByPeriod = {};
-  for(const p of PERIODS){ const t=totalResultByPeriod[p.key], f=fxResultByPeriod[p.key]; lcResultByPeriod[p.key] = (t===null||f===null) ? null : t-f; }
-  html += resultRow('FX Result', fxResultByPeriod, totalChf);
-  html += resultRow('LC Result', lcResultByPeriod, totalChf);
-  html += resultRow('Total', totalResultByPeriod, totalChf, totalChf);
-  body.innerHTML = html;
 }
 
 function dailyReturns(dailyPoints){ const rets=[]; for(let i=1;i<dailyPoints.length;i++){ const prev=dailyPoints[i-1].Price, cur=dailyPoints[i].Price; if(prev) rets.push((cur-prev)/prev); } return rets; }
@@ -329,23 +210,17 @@ const VOL_WINDOW_DAYS = 180;
 function movingAverage(points, window){ const out=[]; for(let i=0;i<points.length;i++){ if(i+1<window){ out.push(null); continue; } let sum=0; for(let j=i-window+1;j<=i;j++) sum+=points[j].Price; out.push(sum/window); } return out; }
 function rollingVolatility(dailyAll, window){ const out=[]; for(let i=window;i<dailyAll.length;i++){ const slice=dailyAll.slice(i-window,i+1); const sd=annualize(stdDev(dailyReturns(slice))); out.push({dt:slice[slice.length-1].dt, Price: sd===null?null:sd*100}); } return out.filter(p=>p.Price!==null); }
 
-function riskCard(ccy, secId, valueChf, totalChf, sdAnnual, lastRate){
+function riskCard(ccy, secId, sdAnnual, lastRate){
   const link = secId ? `<a href="security.html?id=${encodeURIComponent(secId)}">${ccy}/CHF</a>` : `${ccy}/CHF`;
   if(sdAnnual===null || lastRate===null) return `<div class="risk-card"><div class="risk-card-title">${link}</div><div class="empty" style="padding:10px 0;">Not enough data.</div></div>`;
   const range1 = [lastRate*0.99, lastRate*1.01], range5 = [lastRate*0.95, lastRate*1.05];
   const rangeText = ([lo,hi]) => `${fmtDecimal(lo,4)} – ${fmtDecimal(hi,4)}`;
-  function impactLine(pctMove){
-    const impact = valueChf*pctMove;
-    const pctOfPf = totalChf ? (Math.abs(impact)/totalChf)*100 : null;
-    return `${pctOfPf!==null ? `± ${pctOfPf.toFixed(2)}%` : '± —'} (CHF ${fmtChf(Math.abs(impact))})`;
-  }
   return `<div class="risk-card">
     <div class="risk-card-title">${link}</div>
     <table class="risk-info">
       <tr><td>Volatility (ann., 180d)</td><td>${(sdAnnual*100).toFixed(2)}%</td></tr>
-      <tr><td>Impact ± 1 Std.Dev.</td><td>${impactLine(sdAnnual)}</td></tr>
-      <tr><td>Impact ± 1%</td><td>${impactLine(0.01)}<span class="sub2">${rangeText(range1)}</span></td></tr>
-      <tr><td>Impact ± 5%</td><td>${impactLine(0.05)}<span class="sub2">${rangeText(range5)}</span></td></tr>
+      <tr><td>Range ± 1%</td><td>${rangeText(range1)}</td></tr>
+      <tr><td>Range ± 5%</td><td>${rangeText(range5)}</td></tr>
     </table>
     <div class="fx-chart-box" id="priceChart-${ccy}"></div>
     <div class="fx-chart-box" id="volChart-${ccy}"></div>
@@ -382,7 +257,7 @@ function drawMiniChart(container, title, points, maPoints, opts={}){
   container.innerHTML = `<div class="fx-chart-title"><span>${title} · 360 days</span><span class="fx-chart-legend"><span class="sw" style="background:var(--fxline)"></span>${chartLabel} (${fmtDecimal(last,yDecimals)}${unit})${maLegend}</span></div>${svg}`;
 }
 
-async function loadFxRisks(byCurrency, totalChf, fxSecurityId, pricesBySecId){
+async function loadFxRisks(fxSecurityId, pricesBySecId){
   const grid = document.getElementById('riskGrid');
   const ids = Object.values(fxSecurityId).filter(Boolean);
   if(!ids.length){ grid.innerHTML = '<div class="empty">No FX securities found (no security named "USD/CHF" or "EUR/CHF" with price data).</div>'; return; }
@@ -404,7 +279,7 @@ async function loadFxRisks(byCurrency, totalChf, fxSecurityId, pricesBySecId){
       const daily180 = dailyAll.filter(p => p.dt >= daysAgo(now, VOL_WINDOW_DAYS));
       const sdAnnual = annualize(stdDev(dailyReturns(daily180)));
       const lastRate = daily360.length ? daily360[daily360.length-1].Price : null;
-      cardsHtml += riskCard(ccy, secId, byCurrency[ccy]||0, totalChf, sdAnnual, lastRate);
+      cardsHtml += riskCard(ccy, secId, sdAnnual, lastRate);
       perCcyData[ccy] = { dailyAll, daily360 };
     } catch(e) {
       console.error(`FX Risks (${ccy}) failed:`, e);
