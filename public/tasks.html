@@ -528,7 +528,10 @@ async function toggleComplete(taskId){
         'INSERT INTO security_task_completions (TaskID, TaskName, SecurityID, DateDue, CompletedAt) VALUES (?,?,?,?,?)',
         [task.TaskID, task.TaskName, task.SecurityID, task.DateDue, now]
       );
-      if(task.Recurring && task.Recurring !== 'n/a'){
+      if(nextDueDateForTask(task).rollsForward && await dbSecurityIsInactiveOrTerminated(task.SecurityID)){
+        // Inactive/Terminated security: no follow-up needed - complete for good.
+        await dbCompleteTaskFinal(task, now);
+      } else if(task.Recurring && task.Recurring !== 'n/a'){
         // Recurring task: roll the due date forward instead of leaving it marked done.
         const next = nextDueDate(task.DateDue, task.Recurring);
         await dbRun('UPDATE security_tasks SET DateDue = ?, Completed = 0, CompletedAt = ? WHERE TaskID = ?', [next, now, taskId]);

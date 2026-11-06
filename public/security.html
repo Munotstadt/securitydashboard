@@ -2384,7 +2384,10 @@ document.getElementById('securityTasksWrap').addEventListener('change', async (e
         [task.TaskID, task.TaskName, task.SecurityID, task.DateDue, nowIso]
       );
       const next = taskNextDueDateForTask(task);
-      if(next){
+      if(next && await dbSecurityIsInactiveOrTerminated(task.SecurityID)){
+        // Inactive/Terminated security: no follow-up needed - complete for good.
+        await dbCompleteTaskFinal(task, nowIso);
+      } else if(next){
         // Recurring (or Security Quality Check) task: roll the due date
         // forward instead of leaving it marked permanently done.
         await dbRun('UPDATE security_tasks SET DateDue = ?, Completed = 0, CompletedAt = ? WHERE TaskID = ?', [next, nowIso, taskId]);

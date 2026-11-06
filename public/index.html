@@ -430,7 +430,7 @@ document.getElementById('taskTeaserWrap').addEventListener('change', async (e) =
   const nowIso = (typeof nowZurichString === 'function') ? nowZurichString() : new Date().toISOString();
   cb.disabled = true;
   try {
-    const [task] = await dbQuery('SELECT TaskID, TaskName, SecurityID, DateDue, Recurring, TaskTypeID FROM security_tasks WHERE TaskID = ?', [taskId], 0);
+    const [task] = await dbQuery('SELECT TaskID, TaskName, TaskDescription, SecurityID, DateDue, Recurring, TaskTypeID FROM security_tasks WHERE TaskID = ?', [taskId], 0);
     if(!task) return;
     await dbRun(
       'INSERT INTO security_task_completions (TaskID, TaskName, SecurityID, DateDue, CompletedAt) VALUES (?,?,?,?,?)',
@@ -438,7 +438,11 @@ document.getElementById('taskTeaserWrap').addEventListener('change', async (e) =
     );
     const QC_TASKTYPE_ID = 139;
     const isQualityCheck = String(task.TaskTypeID) === String(QC_TASKTYPE_ID);
-    if(task.Recurring && task.Recurring !== 'n/a'){
+    const wouldRenew = (task.Recurring && task.Recurring !== 'n/a') || isQualityCheck;
+    if(wouldRenew && await dbSecurityIsInactiveOrTerminated(task.SecurityID)){
+      // Inactive/Terminated security: no follow-up needed - complete for good.
+      await dbCompleteTaskFinal(task, nowIso);
+    } else if(task.Recurring && task.Recurring !== 'n/a'){
       const d = task.DateDue ? new Date(task.DateDue + 'T00:00:00') : new Date();
       if(task.Recurring === 'Bi-Annual'){ const t2 = new Date(); t2.setFullYear(t2.getFullYear()+2); await dbRun('UPDATE security_tasks SET DateDue=?, Completed=0, CompletedAt=? WHERE TaskID=?', [t2.toISOString().slice(0,10), nowIso, taskId]); }
       else if(task.Recurring === 'Annually'){ d.setFullYear(d.getFullYear()+1); await dbRun('UPDATE security_tasks SET DateDue=?, Completed=0, CompletedAt=? WHERE TaskID=?', [d.toISOString().slice(0,10), nowIso, taskId]); }
