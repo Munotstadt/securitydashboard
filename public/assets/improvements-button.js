@@ -7,6 +7,7 @@
 //   optional: data-position="right"   (default: left)
 (function () {
   if (window.__improvementsButton) return;
+  if (/[?&]embed=1(&|$)/.test(location.search)) return; // embedded page: the host page has its own button
   window.__improvementsButton = true;
 
   var script = document.currentScript;
