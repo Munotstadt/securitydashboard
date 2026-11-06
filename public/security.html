@@ -1900,13 +1900,17 @@ function fmtFundValue(r){
     ? `${fmtDecimal(r.NumericValue,2)}${r.Unit?` ${r.Unit}`:''}`
     : (r.FieldValue || '—');
 }
-// Percent-style fields (Payout Ratio, Dividend Yield). Values are stored
-// already as the percent number itself (e.g. 1.17 means 1.17%, not a 0-1
-// fraction) - no rescaling, just format with the given decimal precision.
-function fmtFundPercent(r, dec){
+// Percent-style fields. Yahoo delivers them in different scales:
+//  - Dividend Yield: already the percent number (4.14 means 4.14%)
+//  - Payout Ratio:   a 0-1 fraction (0.6744 means 67.44%, >1 = over 100%)
+// Pass fraction=true for fraction-based fields so they get scaled by 100.
+// A stored Unit of '%' always means the value is already in percent.
+function fmtFundPercent(r, dec, fraction){
   if(!r) return '—';
   if(r.NumericValue === null || r.NumericValue === undefined) return r.FieldValue || '—';
-  return `${fmtDecimal(r.NumericValue, dec===undefined?2:dec)}%`;
+  const isPctUnit = (r.Unit||'').trim() === '%';
+  const v = (fraction && !isPctUnit) ? Number(r.NumericValue) * 100 : Number(r.NumericValue);
+  return `${fmtDecimal(v, dec===undefined?2:dec)}%`;
 }
 function recommendationLabel(v){
   if(v==null||isNaN(v)) return {en:'—', de:'—'};
@@ -2006,7 +2010,7 @@ function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52
 
   row4.innerHTML = [
     dividendRate ? fundStat('Dividend Rate', fmtFundValue(dividendRate)) : '',
-    payoutRatio ? fundStat('Payout Ratio', fmtFundPercent(payoutRatio, 0)) : '',
+    payoutRatio ? fundStat('Payout Ratio', fmtFundPercent(payoutRatio, 1, true)) : '',
     dividendYieldF ? fundStat('Dividend Yield', fmtFundPercent(dividendYieldF, 2)) : '',
   ].join('');
 
