@@ -225,6 +225,12 @@
   .ov-swatch.ov-dash{background:repeating-linear-gradient(to right,#767E8A 0 3px,transparent 3px 5px);}
   .toggle-btn.active .ov-swatch.ov-dash{background:repeating-linear-gradient(to right,#fff 0 3px,transparent 3px 5px);}
 
+  .ov-tri{font-size:9px;color:#2F6FB5;line-height:1;}
+  .toggle-btn.active .ov-tri{color:#fff;}
+  .compare-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);}
+  .compare-row select{background:var(--bg);border:1px solid var(--line);color:var(--text);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 10px;border-radius:3px;max-width:100%;min-width:220px;}
+  .compare-row select.active{border-color:#C2185B;color:#C2185B;}
+
   .secdata-frame{display:block;width:100%;min-height:400px;border:0;margin-top:8px;}
 </style>
 <link rel="stylesheet" href="assets/layout.css">
@@ -297,6 +303,15 @@
         <button type="button" class="toggle-btn" data-overlay="ma60" title="Gleitender Durchschnitt der letzten 60 Schlusskurse"><span class="ov-swatch" style="background:#D98E04"></span>MA 60</button>
         <button type="button" class="toggle-btn" data-overlay="ma90" title="Gleitender Durchschnitt der letzten 90 Schlusskurse"><span class="ov-swatch" style="background:#7A5FC0"></span>MA 90</button>
         <button type="button" class="toggle-btn" data-overlay="hilo" title="Höchst- und Tiefstkurs im angezeigten Zeitraum"><span class="ov-swatch ov-dash"></span>High / Low</button>
+        <button type="button" class="toggle-btn" data-overlay="tr" data-needs-dist="1" title="Total Return: Kurs inkl. reinvestierter Ausschüttungen (Dividends + Capital), am Periodenbeginn auf den Kurs gelegt"><span class="ov-swatch" style="background:#B5793A"></span>Total Return</button>
+        <button type="button" class="toggle-btn" data-overlay="div" data-needs-dist="1" title="Ex-Dates der Ausschüttungen auf der Zeitachse"><span class="ov-tri">▲</span>Dividends</button>
+        <button type="button" class="toggle-btn" data-overlay="dd" title="Drawdown: Abstand zum bisherigen Höchstkurs (unter dem Chart)"><span class="ov-swatch" style="background:#C0293D"></span>Drawdown</button>
+        <button type="button" class="toggle-btn" data-overlay="log" title="Logarithmische Y-Achse: gleiche prozentuale Bewegung = gleiche Höhe">Log</button>
+      </div>
+      <div class="compare-row">
+        <label for="benchmarkSelect">Vergleich</label>
+        <select id="benchmarkSelect" title="Zweite Security zum Vergleich - beide auf 100 normiert"><option value="">— keiner —</option></select>
+        <span class="quick-status" id="benchmarkStatus"></span>
       </div>
     </div>
 
@@ -659,6 +674,19 @@ let priceOverlays = (() => {
 function savePriceOverlays(){
   try { localStorage.setItem(PRICE_OVERLAY_STORAGE_KEY, JSON.stringify([...priceOverlays])); } catch(e) { /* storage unavailable */ }
 }
+// Benchmark comparison: selected SecurityID (remembered per browser) + loaded daily closes per id.
+const BENCHMARK_STORAGE_KEY = 'security.benchmarkId';
+const BENCHMARK_COLOR = '#C2185B';
+const TR_COLOR = '#B5793A';
+let benchmarkId = (() => { try { return localStorage.getItem(BENCHMARK_STORAGE_KEY) || ''; } catch(e) { return ''; } })();
+const benchmarkCache = new Map();
+function saveBenchmarkId(){
+  try { if(benchmarkId) localStorage.setItem(BENCHMARK_STORAGE_KEY, benchmarkId); else localStorage.removeItem(BENCHMARK_STORAGE_KEY); } catch(e) { /* storage unavailable */ }
+}
+async function loadBenchmarkDaily(id){
+  if(!benchmarkCache.has(id)) benchmarkCache.set(id, queryTieredPrices(id).then(rows => dailyCloses(rows)));
+  return benchmarkCache.get(id);
+}
 let priceHistoryTiered = false; // true when the loaded history uses the daily/monthly tiering below (long-history securities)
 
 // ---- Tiered price-history loading (security2.html-only optimization) ----
@@ -686,6 +714,11 @@ let priceHistoryTiered = false; // true when the loaded history uses the daily/m
 const PRICE_TIER_SMALL_HISTORY_THRESHOLD = 1500;
 const PRICE_TIER_DAILY_YEARS = 5;
 async function loadTieredPriceHistory(secId){
+  const rows = await queryTieredPrices(secId);
+  priceHistoryTiered = rows.length ? Number(rows[0].total) > PRICE_TIER_SMALL_HISTORY_THRESHOLD : false;
+  return rows;
+}
+async function queryTieredPrices(secId){
   // One round trip, decided in SQL (Price_date is ISO in D1, so string comparison is safe):
   // small histories -> all rows; otherwise daily rows for the last ~5y + last row of each older
   // calendar month + the very first row. `total` carries the full row count so the caller flag
@@ -701,8 +734,6 @@ async function loadTieredPriceHistory(secId){
      ) WHERE total <= ? OR PriceDate >= ? OR rn_month = 1 OR rn_first = 1`,
     [secId, PRICE_TIER_SMALL_HISTORY_THRESHOLD, dailyCutoff], 600000
   );
-  if(!rows.length) { priceHistoryTiered = false; return []; }
-  priceHistoryTiered = Number(rows[0].total) > PRICE_TIER_SMALL_HISTORY_THRESHOLD;
   return rows;
 }
 
@@ -929,40 +960,58 @@ function movingAverage(daily, n){
   return out;
 }
 
-// opts: { overlays:[{label,color,points}], hiLo:bool, showChange:bool, height:number, ariaLabel:string }
+// opts:
+//   overlays:[{label,color,points,dashed}]  extra lines (MA, Total Return, benchmark)
+//   hiLo:bool          dashed High/Low lines of the main series
+//   logScale:bool      logarithmic y axis (ignored if any value <= 0)
+//   markers:[{dt,label}] ex-date markers (▲) on the time axis, also listed in the tooltip
+//   drawdown:[{dt,dd}] drawdown (fraction <= 0) drawn as a separate panel below the chart
+//   showChange:bool    tooltip shows % change vs. the first visible point
+//   height, ariaLabel, legend (text below the chart)
 function drawLineChart(container, tooltip, points, decimals, currency, opts = {}){
   container._redraw = () => drawLineChart(container, tooltip, points, decimals, currency, opts);
   if(points.length < 2){ container._drawnWidth = chartInnerWidth(container); container.innerHTML = '<div class="chart-empty">Zu wenig Datenpunkte für einen Chart.</div>'; return; }
   const measured = chartInnerWidth(container);
   container._drawnWidth = measured;
-  const width = measured || 800, height = opts.height || 260;
+  const width = measured || 800, mainH = opts.height || 260;
   const overlays = (opts.overlays || []).filter(o => o.points && o.points.length >= 2);
   const amounts = points.map(p=>p.Price);
   const allVals = amounts.concat(...overlays.map(o => o.points.map(p => p.Price)));
   const minY = Math.min(...allVals), maxY = Math.max(...allVals);
-  const yPad = (maxY-minY)*0.08 || maxY*0.01 || 1;
-  const yMin = minY-yPad, yMax = maxY+yPad;
+  const useLog = !!opts.logScale && minY > 0;
+  const tf = useLog ? Math.log : (v => v);      // value -> axis space
+  const itf = useLog ? Math.exp : (v => v);     // axis space -> value
+  const tMin = tf(minY), tMax = tf(maxY);
+  const tPad = (tMax-tMin)*0.08 || Math.abs(tMax)*0.01 || 1;
+  const yMin = tMin-tPad, yMax = tMax+tPad;     // in axis space
   const axisDecimals = decideAxisDecimals(maxY);
-  const widestLabel = fmtDecimal(Math.max(Math.abs(yMin),Math.abs(yMax)), axisDecimals);
+  const widestLabel = fmtDecimal(Math.max(Math.abs(itf(yMin)),Math.abs(itf(yMax))), axisDecimals);
   const leftPad = Math.max(44, widestLabel.length*7+12);
   const pad = {top:12, right:12, bottom:24, left:leftPad};
-  const innerW = width-pad.left-pad.right, innerH = height-pad.top-pad.bottom;
+  const innerW = width-pad.left-pad.right, innerH = mainH-pad.top-pad.bottom;
+  const mainBottom = pad.top + innerH;
+  const dd = (opts.drawdown && opts.drawdown.length >= 2) ? opts.drawdown : null;
+  const ddGap = 16, ddH = 80;
+  const ddTop = mainBottom + ddGap, ddBottom = ddTop + ddH;
+  const plotBottom = dd ? ddBottom : mainBottom;
+  const height = plotBottom + pad.bottom;
   const minX = points[0].dt.getTime(), maxX = points[points.length-1].dt.getTime();
   const xSpan = (maxX-minX) || 1;
   const xScale = t => pad.left + ((t-minX)/xSpan)*innerW;
-  const yScale = v => pad.top + innerH - ((v-yMin)/(yMax-yMin))*innerH;
+  const yScale = v => pad.top + innerH - ((tf(v)-yMin)/(yMax-yMin))*innerH;
   const lineColor = amounts[amounts.length-1] >= amounts[0] ? '#1F8A6E' : '#C0293D';
   const pathOf = pts => pts.map((p,i) => (i===0?'M':'L') + xScale(p.dt.getTime()).toFixed(1) + ',' + yScale(p.Price).toFixed(1)).join(' ');
   const d = pathOf(points);
-  const areaD = d + ` L${xScale(maxX).toFixed(1)},${(pad.top+innerH).toFixed(1)} L${xScale(minX).toFixed(1)},${(pad.top+innerH).toFixed(1)} Z`;
+  const areaD = d + ` L${xScale(maxX).toFixed(1)},${mainBottom.toFixed(1)} L${xScale(minX).toFixed(1)},${mainBottom.toFixed(1)} Z`;
   const FONT = 'font-family="IBM Plex Mono, monospace" font-size="11"';
   let grid = '';
   const yTicks = innerH > 200 ? 5 : 4;
   for(let i=0;i<=yTicks;i++){
-    const v = yMin + (i/yTicks)*(yMax-yMin), y = yScale(v);
+    const tv = yMin + (i/yTicks)*(yMax-yMin), v = itf(tv), y = pad.top + innerH - (i/yTicks)*innerH;
     grid += `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${width-pad.right}" y2="${y.toFixed(1)}" stroke="#E3E6EA" stroke-width="1"/>`;
     grid += `<text x="${pad.left-6}" y="${(y+4).toFixed(1)}" text-anchor="end" ${FONT} fill="#767E8A">${fmtDecimal(v,axisDecimals)}</text>`;
   }
+  if(useLog) grid += `<text x="${pad.left+4}" y="${pad.top+10}" ${FONT} fill="#A3A9B0">log</text>`;
   // X labels: as many as fit (~1 per 110px), dd.mm. for short ranges, MM/YY otherwise.
   const shortRange = xSpan < 120*86400000;
   const fmtX = shortRange ? fmtDateOnly : fmtMonthYear;
@@ -976,7 +1025,7 @@ function drawLineChart(container, tooltip, points, decimals, currency, opts = {}
     const anchor = i===0 ? 'start' : (i===nLabels-1 ? 'end' : 'middle');
     xLabels += `<text x="${xScale(t).toFixed(1)}" y="${height-6}" text-anchor="${anchor}" ${FONT} fill="#767E8A">${txt}</text>`;
   }
-  const overlayPaths = overlays.map(o => `<path d="${pathOf(o.points)}" fill="none" stroke="${o.color}" stroke-width="1.5" opacity="0.95"/>`).join('');
+  const overlayPaths = overlays.map(o => `<path d="${pathOf(o.points)}" fill="none" stroke="${o.color}" stroke-width="1.5" opacity="0.95"${o.dashed ? ' stroke-dasharray="5 3"' : ''}/>`).join('');
   let hiLoSvg = '';
   if(opts.hiLo){
     const hi = points.reduce((a,b) => b.Price > a.Price ? b : a), lo = points.reduce((a,b) => b.Price < a.Price ? b : a);
@@ -989,33 +1038,66 @@ function drawLineChart(container, tooltip, points, decimals, currency, opts = {}
     };
     hiLoSvg = line(hi, 'High', true) + line(lo, 'Low', false);
   }
+  // Ex-date markers: ▲ on the bottom edge of the main plot. Each marker is attached to the first
+  // visible point on/after its date, so the tooltip can list it when hovering that day.
+  const markerByIdx = new Map();
+  let markerSvg = '';
+  for(const m of (opts.markers || [])){
+    const t = m.dt.getTime();
+    if(t < minX - 86400000 || t > maxX + 86400000) continue;
+    const x = xScale(Math.min(Math.max(t, minX), maxX));
+    markerSvg += `<path d="M${(x-4.5).toFixed(1)},${(mainBottom-1).toFixed(1)} L${(x+4.5).toFixed(1)},${(mainBottom-1).toFixed(1)} L${x.toFixed(1)},${(mainBottom-9).toFixed(1)} Z" fill="#2F6FB5" opacity="0.85"/>`;
+    const dayKey = toIsoDate(m.dt);
+    let idx = points.findIndex(p => toIsoDate(p.dt) >= dayKey);
+    if(idx < 0) idx = points.length-1;
+    if(!markerByIdx.has(idx)) markerByIdx.set(idx, []);
+    markerByIdx.get(idx).push(m.label);
+  }
+  // Drawdown panel
+  let ddSvg = '', ddScale = null;
+  const ddByKey = new Map();
+  if(dd){
+    const minDd = Math.min(-0.0001, ...dd.map(p => p.dd));
+    ddScale = v => ddTop + (v/minDd)*ddH;
+    const ddPath = dd.map((p,i) => (i===0?'M':'L') + xScale(p.dt.getTime()).toFixed(1) + ',' + ddScale(p.dd).toFixed(1)).join(' ');
+    const ddArea = ddPath + ` L${xScale(dd[dd.length-1].dt.getTime()).toFixed(1)},${ddTop} L${xScale(dd[0].dt.getTime()).toFixed(1)},${ddTop} Z`;
+    ddSvg = `<line x1="${pad.left}" y1="${ddTop}" x2="${width-pad.right}" y2="${ddTop}" stroke="#E3E6EA" stroke-width="1"/>
+      <line x1="${pad.left}" y1="${ddBottom}" x2="${width-pad.right}" y2="${ddBottom}" stroke="#E3E6EA" stroke-width="1"/>
+      <text x="${pad.left-6}" y="${ddTop+4}" text-anchor="end" ${FONT} fill="#767E8A">0%</text>
+      <text x="${pad.left-6}" y="${ddBottom+4}" text-anchor="end" ${FONT} fill="#C0293D">${(minDd*100).toFixed(1)}%</text>
+      <text x="${pad.left+4}" y="${ddTop+12}" ${FONT} fill="#A3A9B0">Drawdown</text>
+      <path d="${ddArea}" fill="#C0293D" opacity="0.15" stroke="none"/><path d="${ddPath}" fill="none" stroke="#C0293D" stroke-width="1.2"/>`;
+    for(const p of dd) ddByKey.set(p.dt.getTime(), p.dd);
+  }
 
   container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="${opts.ariaLabel || 'Chart'}">
     ${grid}<path d="${areaD}" fill="${lineColor}" opacity="0.08" stroke="none"/>${overlayPaths}<path d="${d}" fill="none" stroke="${lineColor}" stroke-width="2"/>
-    ${hiLoSvg}
-    <line id="cursorLine" x1="0" y1="${pad.top}" x2="0" y2="${pad.top+innerH}" stroke="#A3A9B0" stroke-width="1" style="display:none"/>
+    ${hiLoSvg}${markerSvg}${ddSvg}
+    <line id="cursorLine" x1="0" y1="${pad.top}" x2="0" y2="${plotBottom}" stroke="#A3A9B0" stroke-width="1" style="display:none"/>
     <circle id="cursorDot" cx="0" cy="0" r="4" fill="${lineColor}" style="display:none"/>
-    <rect id="hitRect" x="${pad.left}" y="${pad.top}" width="${innerW}" height="${innerH}" fill="transparent"/>${xLabels}
-  </svg>`;
+    <circle id="cursorDdDot" cx="0" cy="0" r="3" fill="#C0293D" style="display:none"/>
+    <rect id="hitRect" x="${pad.left}" y="${pad.top}" width="${innerW}" height="${plotBottom-pad.top}" fill="transparent"/>${xLabels}
+  </svg>${opts.legend ? `<div class="chart-legend">${opts.legend}</div>` : ''}`;
   container.appendChild(tooltip);
 
   const svgEl = container.querySelector('svg');
   const hitRect = svgEl.querySelector('#hitRect');
   const cursorDot = svgEl.querySelector('#cursorDot');
+  const cursorDdDot = svgEl.querySelector('#cursorDdDot');
   const cursorLine = svgEl.querySelector('#cursorLine');
   const overlayMaps = overlays.map(o => ({ label:o.label, map: new Map(o.points.map(p => [toIsoDate(p.dt), p.Price])) }));
   const startPrice = points[0].Price;
-  function nearestPoint(clientX){
+  function nearestIdx(clientX){
     const svgRect = svgEl.getBoundingClientRect();
     const relX = (clientX - svgRect.left) * (width / svgRect.width);
-    let best = points[0], bestDist = Infinity;
-    for(const p of points){ const px = xScale(p.dt.getTime()); const dist = Math.abs(px-relX); if(dist < bestDist){ bestDist=dist; best=p; } }
+    let best = 0, bestDist = Infinity;
+    for(let i=0;i<points.length;i++){ const dist = Math.abs(xScale(points[i].dt.getTime())-relX); if(dist < bestDist){ bestDist=dist; best=i; } }
     return best;
   }
   function handleMove(evt){
     evt.preventDefault();
     const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-    const p = nearestPoint(clientX);
+    const idx = nearestIdx(clientX), p = points[idx];
     const x = xScale(p.dt.getTime()), y = yScale(p.Price);
     cursorDot.setAttribute('cx', x.toFixed(1)); cursorDot.setAttribute('cy', y.toFixed(1)); cursorDot.style.display='block';
     cursorLine.setAttribute('x1', x.toFixed(1)); cursorLine.setAttribute('x2', x.toFixed(1)); cursorLine.style.display='block';
@@ -1023,9 +1105,15 @@ function drawLineChart(container, tooltip, points, decimals, currency, opts = {}
     if(opts.showChange && startPrice){ const ch = fmtPct(pctChange(p.Price, startPrice)); html += ` (${ch.text})`; }
     const key = toIsoDate(p.dt);
     for(const o of overlayMaps){ const v = o.map.get(key); if(v !== undefined) html += `<br>${o.label}: ${fmtDecimal(v,decimals)}`; }
+    const ddv = ddByKey.get(p.dt.getTime());
+    if(ddv !== undefined){
+      html += `<br>Drawdown: ${(ddv*100).toFixed(2)}%`;
+      cursorDdDot.setAttribute('cx', x.toFixed(1)); cursorDdDot.setAttribute('cy', ddScale(ddv).toFixed(1)); cursorDdDot.style.display='block';
+    } else cursorDdDot.style.display='none';
+    for(const label of (markerByIdx.get(idx) || [])) html += `<br>▲ ${label}`;
     showTooltip(evt, container, tooltip, html);
   }
-  const hide = () => { tooltip.style.display='none'; cursorDot.style.display='none'; cursorLine.style.display='none'; };
+  const hide = () => { tooltip.style.display='none'; cursorDot.style.display='none'; cursorLine.style.display='none'; cursorDdDot.style.display='none'; };
   hitRect.addEventListener('mousemove', handleMove);
   hitRect.addEventListener('mouseenter', handleMove);
   hitRect.addEventListener('touchstart', handleMove, {passive:false});
@@ -1033,6 +1121,35 @@ function drawLineChart(container, tooltip, points, decimals, currency, opts = {}
   hitRect.addEventListener('mouseleave', hide);
   svgEl.addEventListener('touchend', () => setTimeout(hide, 1200));
 }
+
+// Total-return index aligned with `daily`: each step applies (P_i + D_i) / P_{i-1}, where D_i is the sum of
+// distributions with ex-date in (t_{i-1}, t_i] (i.e. reinvested at the ex-date close). Starts at daily[0].Price.
+function totalReturnIndex(daily, dists){
+  const out = [];
+  if(!daily.length) return out;
+  const sorted = [...dists].sort((a,b) => a.exDate - b.exDate);
+  let j = 0, idx = daily[0].Price;
+  while(j < sorted.length && sorted[j].exDate <= daily[0].dt) j++;
+  out.push(idx);
+  for(let i=1;i<daily.length;i++){
+    let dsum = 0;
+    while(j < sorted.length && sorted[j].exDate <= daily[i].dt){ dsum += sorted[j].amount; j++; }
+    const prev = daily[i-1].Price;
+    idx = prev ? idx * (daily[i].Price + dsum) / prev : idx;
+    out.push(idx);
+  }
+  return out;
+}
+// Drawdown of the visible points vs. the running peak, where the peak also includes all history
+// before the visible range (so it is the real drawdown, not one that restarts at the range start).
+function drawdownSeries(points, daily){
+  if(!points.length) return [];
+  const from = points[0].dt;
+  let peak = -Infinity;
+  for(const p of daily){ if(p.dt >= from) break; if(p.Price > peak) peak = p.Price; }
+  return points.map(p => { if(p.Price > peak) peak = p.Price; return { dt: p.dt, dd: peak > 0 ? p.Price/peak - 1 : 0 }; });
+}
+
 function showTooltip(evt, wrap, tooltip, html){
   const rect = wrap.getBoundingClientRect();
   const x = (evt.touches ? evt.touches[0].clientX : evt.clientX) - rect.left;
@@ -1549,16 +1666,103 @@ async function loadSecurity(secId){
   const maSeries = {};
   for(const def of PRICE_MA_DEFS) maSeries[def.key] = movingAverage(daily, def.n);
   const scale = pts => fxFactor === 1 ? pts : pts.map(p => ({ ...p, Price: p.Price * fxFactor }));
+  // Total-return index (Dividends + Capital reinvested) on the full daily series.
+  const trIndex = totalReturnIndex(daily, distRows);
+  const hasDist = distRows.length > 0;
+  document.querySelectorAll('#priceOverlayRow [data-needs-dist]').forEach(b => b.classList.toggle('hidden', !hasDist));
+  const benchSel = document.getElementById('benchmarkSelect');
+  const benchStatus = document.getElementById('benchmarkStatus');
+  if(String(benchmarkId) === String(secId)) { benchmarkId = ''; saveBenchmarkId(); }
+  benchSel.innerHTML = '<option value="">— keiner —</option>' + masterAll
+    .filter(m => String(m.SecurityID) !== String(secId))
+    .map(m => `<option value="${m.SecurityID}">${securityStatusInfo(m, todayIso) === 'active' ? '🟢 ' : ''}${m.SecurityName} · ${m.SecurityID}</option>`).join('');
+  benchSel.value = masterAll.some(m => String(m.SecurityID) === String(benchmarkId)) ? String(benchmarkId) : '';
+  if(!benchSel.value) benchmarkId = '';
+  benchSel.classList.toggle('active', !!benchmarkId);
+  benchStatus.textContent = '';
+
   function renderPriceChart(){
     const tooltip = document.createElement('div'); tooltip.className='chart-tooltip';
-    const pts = filterByRange(daily, withDt, currentPriceRange);
-    const from = pts.length ? pts[0].dt : null, to = pts.length ? pts[pts.length-1].dt : null;
-    const overlays = PRICE_MA_DEFS.filter(def => priceOverlays.has(def.key)).map(def => ({
-      label: `MA ${def.n}`, color: def.color,
-      points: from ? scale(maSeries[def.key].filter(p => p.dt >= from && p.dt <= to)) : [],
+    const ptsRaw = filterByRange(daily, withDt, currentPriceRange);
+    if(ptsRaw.length < 2){ drawLineChart(priceChartWrap, tooltip, scale(ptsRaw), decimals, ''); return; }
+    const from = ptsRaw[0].dt, to = ptsRaw[ptsRaw.length-1].dt;
+    const inRange = p => p.dt >= from && p.dt <= to;
+    let pts = scale(ptsRaw);
+    let overlays = PRICE_MA_DEFS.filter(def => priceOverlays.has(def.key)).map(def => ({
+      label: `MA ${def.n}`, color: def.color, points: scale(maSeries[def.key].filter(inRange)),
     }));
-    drawLineChart(priceChartWrap, tooltip, scale(pts), decimals, detailFx.suffix ? detailFx.suffix : master.Currency,
-      { overlays, hiLo: priceOverlays.has('hilo'), showChange: true, height: 300, ariaLabel: 'Price chart' });
+    if(hasDist && priceOverlays.has('tr')){
+      // Rescale the TR index so it starts at the price of the first visible trading day.
+      const i0 = daily.findIndex(p => p.dt >= from);
+      if(i0 >= 0 && trIndex[i0]){
+        const k = daily[i0].Price / trIndex[i0];
+        const trPts = [];
+        for(let i=i0;i<daily.length && daily[i].dt <= to;i++) trPts.push({ dt: daily[i].dt, Price: trIndex[i]*k });
+        overlays.push({ label:'Total Return', color: TR_COLOR, points: scale(trPts) });
+      }
+    }
+    const markers = (hasDist && priceOverlays.has('div'))
+      ? distRowsAll.filter(d => d.exDate >= daysAgo(from,1) && d.exDate <= to)
+          .map(d => ({ dt: d.exDate, label: `Ex ${fmtIsoDateDDMM(toIsoDate(d.exDate))}: ${fmtDecimal(d.amount,2)} ${d.currency||''}${d.typeName ? ' · '+d.typeName : ''}` }))
+      : [];
+    const drawdown = priceOverlays.has('dd') ? drawdownSeries(ptsRaw, daily) : null;
+
+    // Benchmark: both series rebased to 100 at the start of the visible range (each in its own currency).
+    let unit = detailFx.suffix ? detailFx.suffix : master.Currency, valDecimals = decimals, legend = '';
+    const bench = benchmarkId ? benchmarkCache.get(benchmarkId) : null;
+    const benchDaily = bench && bench.resolved ? bench.resolved : null;
+    if(benchmarkId && benchDaily){
+      const base = pts[0].Price;
+      const rebase = arr => arr.map(p => ({ ...p, Price: p.Price / base * 100 }));
+      pts = rebase(pts);
+      overlays = overlays.map(o => ({ ...o, points: rebase(o.points) }));
+      const bm = masterAll.find(m => String(m.SecurityID) === String(benchmarkId));
+      const bName = bm ? bm.SecurityName : benchmarkId;
+      const bBefore = latestOnOrBefore(benchDaily, endOfDay(from));
+      const bPts = benchDaily.filter(p => p.dt >= from && p.dt <= to);
+      if(bBefore && bBefore.dt < from) bPts.unshift({ dt: from, Price: bBefore.Price });
+      if(bPts.length >= 2 && bPts[0].Price){
+        // Starts at 100 together with the main series; if the benchmark history begins later, it starts
+        // at the main series' (rebased) level on that day, so the two lines stay comparable from there.
+        const startLevel = bBefore ? 100 : ((latestOnOrBefore(pts, endOfDay(bPts[0].dt)) || pts[0]).Price);
+        const bBase = bPts[0].Price;
+        overlays.push({ label: bName, color: BENCHMARK_COLOR, dashed: true, points: bPts.map(p => ({ dt: p.dt, Price: p.Price / bBase * startLevel })) });
+        const bChg = fmtPct((bPts[bPts.length-1].Price / bBase - 1) * 100);
+        const mainChg = fmtPct((pts[pts.length-1].Price / 100 - 1) * 100);
+        legend = `Normiert auf 100 am ${fmtDateDDMM(from)} · Kurse in der jeweiligen Handelswährung (ohne FX, ohne Ausschüttungen)`
+          + `<br>${master.SecurityName}: ${mainChg.text} · <span style="color:${BENCHMARK_COLOR}">- - ${bName}: ${bChg.text}${bBefore ? '' : ` (Kurse erst ab ${fmtDateDDMM(bPts[0].dt)})`}</span>`;
+      } else {
+        legend = `Keine Kurse von ${bName} im angezeigten Zeitraum.`;
+      }
+      unit = ''; valDecimals = 2;
+    }
+    drawLineChart(priceChartWrap, tooltip, pts, valDecimals, unit, {
+      overlays, markers, drawdown, legend,
+      hiLo: priceOverlays.has('hilo'), logScale: priceOverlays.has('log'),
+      showChange: true, height: 300, ariaLabel: 'Price chart',
+    });
+  }
+  benchSel.onchange = async () => {
+    benchmarkId = benchSel.value;
+    saveBenchmarkId();
+    benchSel.classList.toggle('active', !!benchmarkId);
+    if(!benchmarkId){ benchStatus.textContent = ''; renderPriceChart(); return; }
+    await ensureBenchmark(benchmarkId);
+  };
+  async function ensureBenchmark(id){
+    const entry = benchmarkCache.get(id);
+    if(entry && entry.resolved){ renderPriceChart(); return; }
+    benchStatus.textContent = 'Lade…';
+    try {
+      const data = await loadBenchmarkDaily(id);
+      benchmarkCache.get(id).resolved = data;
+      if(benchmarkId !== id || curSecId !== secId) return; // selection or security changed meanwhile
+      benchStatus.textContent = data.length ? '' : 'Keine Kurse';
+      renderPriceChart();
+    } catch(e) {
+      benchmarkCache.delete(id);
+      if(benchmarkId === id) benchStatus.textContent = 'Fehler: ' + e.message;
+    }
   }
   function renderDistChart(){
     const tooltip = document.createElement('div'); tooltip.className='chart-tooltip';
@@ -1567,6 +1771,7 @@ async function loadSecurity(secId){
   }
   renderPriceChart();
   renderDistChart();
+  if(benchmarkId) ensureBenchmark(benchmarkId);
 
   document.querySelectorAll('#priceRangeRow .toggle-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.range === currentPriceRange);
