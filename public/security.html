@@ -2010,7 +2010,7 @@ function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52
 
   row4.innerHTML = [
     dividendRate ? fundStat('Dividend Rate', fmtFundValue(dividendRate)) : '',
-    payoutRatio ? fundStat('Payout Ratio', fmtFundPercent(payoutRatio, 1, true)) : '',
+    payoutRatio ? fundStat('Payout Ratio', fmtFundPercent(payoutRatio, 0, true)) : '',
     dividendYieldF ? fundStat('Dividend Yield', fmtFundPercent(dividendYieldF, 2)) : '',
   ].join('');
 
