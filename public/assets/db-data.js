@@ -381,3 +381,28 @@ function periodReferences(rowsForSecurity, today = new Date()) {
     ytd: latestOnOrBefore(closes, ytdCutoff),
   };
 }
+
+// ---- Security status for task completion ----
+// Recurring tasks (and Security Quality Checks) roll forward on completion -
+// but only active/pending securities need a follow-up. For Inactive (no longer
+// monitored) or Terminated (no longer exists) securities a completed task is
+// final. Same status rules as listing.html / security.html.
+async function dbSecurityIsInactiveOrTerminated(securityId) {
+  if (securityId === null || securityId === undefined || securityId === '') return false;
+  const rows = await dbQuery(
+    `SELECT sm.DateTerminated, sp.ParameterName AS StatusName
+     FROM security_master sm
+     LEFT JOIN security_parameter sp ON sp.ParameterID = sm.Status
+     WHERE sm.SecurityID = ?`, [securityId], 0);
+  if (!rows.length) return false;
+  const statusName = (rows[0].StatusName || '').trim().toLowerCase();
+  const todayIso = nowZurichIsoDateString();
+  const terminatedByDate = !!(rows[0].DateTerminated && rows[0].DateTerminated < todayIso);
+  return statusName === 'inactive' || statusName === 'terminated' || terminatedByDate;
+}
+// Marks a task permanently completed and appends a note why it was not renewed.
+async function dbCompleteTaskFinal(task, nowIso) {
+  const note = 'Comment: inactive/terminated security - not renewed';
+  const desc = task.TaskDescription ? `${task.TaskDescription} · ${note}` : note;
+  await dbRun('UPDATE security_tasks SET Completed = 1, CompletedAt = ?, TaskDescription = ? WHERE TaskID = ?', [nowIso, desc, task.TaskID]);
+}

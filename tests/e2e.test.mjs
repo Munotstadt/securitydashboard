@@ -160,7 +160,7 @@ test('client db-data.js: coercion, session-expiry handling, chunked IN queries (
   };
   vm.createContext(sandbox);
   vm.runInContext(fs.readFileSync(new URL('../public/assets/db-data.js', import.meta.url), 'utf8') +
-    '\nthis.api = { dbQuery, dbRun, dbBatch, dbQueryIn, dbClearCache, dbCacheCount };', sandbox);
+    '\nthis.api = { dbQuery, dbRun, dbBatch, dbQueryIn, dbClearCache, dbCacheCount, dbSecurityIsInactiveOrTerminated };', sandbox);
   const { api } = sandbox;
 
   // "10" from a <select> must match the INTEGER SecurityID
@@ -180,6 +180,19 @@ test('client db-data.js: coercion, session-expiry handling, chunked IN queries (
   // head args + chunking (security.html tiered price history pattern)
   const px = await api.dbQueryIn((ph) => `SELECT id FROM security_prices WHERE SecurityID = ? AND id IN (${ph})`, Array.from({ length: 250 }, (_, i) => i + 1), [10]);
   assert.equal(px.length, 3);
+
+  // task renewal: only Active/Pending securities need a follow-up task
+  d1db.exec(`INSERT INTO security_parameter (ParameterID, ParameterName, ParaTable, ParaField, modified_at) VALUES
+    (136,'Active','security_master','Status','2026-08-28 00:00:00'),(137,'Inactive','security_master','Status','2026-08-28 00:00:00'),
+    (138,'Terminated','security_master','Status','2026-08-28 00:00:00');
+  INSERT INTO security_master (SecurityID, SecurityName, Status, DateTerminated) VALUES
+    (20,'Active Sec',136,NULL),(21,'Inactive Sec',137,NULL),(22,'Terminated Sec',138,NULL),(23,'Pending Sec',NULL,NULL),(24,'Gone By Date',136,'2020-01-01');`);
+  assert.equal(await api.dbSecurityIsInactiveOrTerminated(20), false);
+  assert.equal(await api.dbSecurityIsInactiveOrTerminated(21), true);
+  assert.equal(await api.dbSecurityIsInactiveOrTerminated('22'), true);
+  assert.equal(await api.dbSecurityIsInactiveOrTerminated(23), false);
+  assert.equal(await api.dbSecurityIsInactiveOrTerminated(24), true);
+  assert.equal(await api.dbSecurityIsInactiveOrTerminated(null), false);
 
   // expired Access session -> one automatic reload, readable error
   sandbox.__expired = true;
