@@ -64,6 +64,12 @@
   .fx-chart-title{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;display:flex;justify-content:space-between;}
   .fx-chart-legend{font-size:10px;color:var(--muted);}
   .fx-chart-legend .sw{display:inline-block;width:10px;height:2px;vertical-align:middle;margin-right:4px;}
+  .subnav-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-top:22px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  .subnav-tab{background:none;border:1px solid transparent;color:var(--muted);font-family:'IBM Plex Mono',monospace;font-size:12px;padding:7px 12px;border-radius:3px;cursor:pointer;white-space:nowrap;}
+  .subnav-tab:hover{color:var(--text);border-color:var(--line);}
+  .subnav-tab.active{color:#fff;background:var(--text);font-weight:600;}
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
   .mg-block{margin-bottom:28px;}
   .mg-title{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:16px 0 4px;}
   .mg-table{min-width:760px;table-layout:fixed;}
@@ -88,19 +94,28 @@
     <div class="status" id="statusText">loading…</div>
   </div>
 
-  <div class="section-title">FX Risks</div>
-  <div class="risk-grid" id="riskGrid"><div class="empty">Loading…</div></div>
-  <p class="note">Volatilität = Standardabweichung der täglichen FX-Kursänderungen über die letzten 180 Tage, annualisiert mit √252. Bandbreiten zeigen den FX-Kurs bei ± 1 % / ± 5 %. Oberer Chart: FX-Kurs 360 Tage + MA30. Unterer Chart: rollierende annualisierte Volatilität.</p>
+  <div class="subnav-tabs" id="subnavTabs">
+    <button type="button" class="subnav-tab active" data-tab="fxrisk">FX Risks</button>
+    <button type="button" class="subnav-tab" data-tab="returns">Portfolio Returns</button>
+  </div>
 
-  <div class="section-title">Switzerland</div>
-  <div id="marketGroupSectionsCH"></div>
+  <div class="tab-panel active" data-tab="fxrisk" id="tabPanelFxRisk">
+    <div class="section-title">FX Risks</div>
+    <div class="risk-grid" id="riskGrid"><div class="empty">Loading…</div></div>
+    <p class="note">Volatilität = Standardabweichung der täglichen FX-Kursänderungen über die letzten 180 Tage, annualisiert mit √252. Bandbreiten zeigen den FX-Kurs bei ± 1 % / ± 5 %. Oberer Chart: FX-Kurs 360 Tage + MA30. Unterer Chart: rollierende annualisierte Volatilität.</p>
+  </div>
 
-  <div class="section-title">USA</div>
-  <div id="marketGroupSectionsUSA"></div>
+  <div class="tab-panel" data-tab="returns" id="tabPanelReturns">
+    <div class="section-title">Switzerland</div>
+    <div id="marketGroupSectionsCH"></div>
 
-  <div class="section-title">Europe</div>
-  <div id="marketGroupSectionsEU"></div>
-  <p class="note">Gruppierung nach dem dritten Segment von PortfolioGrouping (z.B. "Shares - Switzerland - Core" → Tabelle "Core") - unabhängig von der gehaltenen Quantity. "Yield" = Dividend Yield der letzten 12 Monate. Die Total-Zeile je Gruppe ist der arithmetische Durchschnitt (nicht wertgewichtet).</p>
+    <div class="section-title">USA</div>
+    <div id="marketGroupSectionsUSA"></div>
+
+    <div class="section-title">Europe</div>
+    <div id="marketGroupSectionsEU"></div>
+    <p class="note">Nur aktive Wertschriften und Indizes (Status nicht Inactive/Terminated) mit gesetztem DashboardGrouping. Gruppierung nach dem dritten Segment von PortfolioGrouping (z.B. "Shares - Switzerland - Core" → Tabelle "Core") - unabhängig von der gehaltenen Quantity. "Yield" = Dividend Yield der letzten 12 Monate. Die Total-Zeile je Gruppe ist der arithmetische Durchschnitt (nicht wertgewichtet).</p>
+  </div>
 
   <div class="footer">
     <input type="text" id="improvementInput" class="improvement-input" placeholder="Improvement">
@@ -135,9 +150,11 @@ function computeAnalyserPeriods(rowsForSecurity, today){
 async function load(){
   try{
     const [master, prices, distRows] = await Promise.all([
-      dbQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.PortfolioGrouping, pg.ParameterName AS PortfolioGroupingName
+      dbQuery(`SELECT sm.SecurityID, sm.SecurityName, sm.Currency, sm.PortfolioGrouping, sm.DashboardGrouping, sm.DateTerminated,
+                         pg.ParameterName AS PortfolioGroupingName, st.ParameterName AS StatusName
                   FROM security_master sm
-                  LEFT JOIN security_parameter pg ON pg.ParameterID = sm.PortfolioGrouping`, [], 3600000),
+                  LEFT JOIN security_parameter pg ON pg.ParameterID = sm.PortfolioGrouping
+                  LEFT JOIN security_parameter st ON st.ParameterID = sm.Status`, [], 3600000),
       dbRecentDailyPrices(600),
       dbQuery(`SELECT SecurityID, DistributionAmount, ExDate FROM security_distributions WHERE (distribution_type IS NULL OR distribution_type NOT IN (SELECT ParameterID FROM security_parameter WHERE ParaTable='security_distributions' AND ParaField='distribution_type' AND ParameterName='Swiss Tax Income (CHF)'))`, [], 3600000),
     ]);
@@ -163,8 +180,18 @@ async function load(){
       const periods = periodsBySecId.get(m.SecurityID);
       if(periods && periods.last){ fxByCurrency[match[1].toUpperCase()] = periods; fxSecurityId[match[1].toUpperCase()] = m.SecurityID; }
     }
+    // Portfolio Returns: only active securities/indices that carry a DashboardGrouping.
+    const todayIso = (typeof nowZurichDateString === 'function') ? nowZurichDateString() : new Date().toISOString().slice(0,10);
+    const isActive = m => {
+      const statusName = (m.StatusName || '').trim().toLowerCase();
+      if(statusName === 'inactive' || statusName === 'terminated') return false;
+      const term = (m.DateTerminated || '').trim();
+      return !(term && term.slice(0,10) < todayIso);
+    };
     const swissCandidates = [];
     for(const m of master){
+      if(m.DashboardGrouping === null || m.DashboardGrouping === undefined || m.DashboardGrouping === '') continue;
+      if(!isActive(m)) continue;
       const periods = periodsBySecId.get(m.SecurityID);
       const parts = (m.PortfolioGroupingName || '').split(' - ').map(s=>s.trim());
 
@@ -378,6 +405,17 @@ function renderMarketGroupsFor(containerId, candidates, distBySecId, fxByCurrenc
   }
   document.getElementById(containerId).innerHTML = html || '<div class="empty">No securities with a PortfolioGrouping under this region.</div>';
 }
+
+// ============ Section switcher (FX Risks / Portfolio Returns) ============
+const ANALYSER_TABS = ['fxrisk', 'returns'];
+function activateTab(tab){
+  if(!ANALYSER_TABS.includes(tab)) tab = 'fxrisk';
+  document.querySelectorAll('#subnavTabs .subnav-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.tab === tab));
+  if(location.hash !== '#' + tab) history.replaceState(null, '', '#' + tab);
+}
+document.querySelectorAll('#subnavTabs .subnav-tab').forEach(b => b.addEventListener('click', () => activateTab(b.dataset.tab)));
+activateTab((location.hash || '').slice(1));
 
 document.getElementById('refreshBtn').addEventListener('click', () => { dbClearCache(); load(); });
 
