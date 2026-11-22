@@ -139,6 +139,7 @@
     </div>
     <div class="full">
       <button id="mfSave" type="button">Save</button>
+      <button id="mfSaveNew" type="button" class="toggle-btn" style="display:none;" title="Neue Zeile mit dem gewählten Datum anlegen - der bisherige Wert bleibt in der Historie">➕ Als neuer Stichtag</button>
       <button id="mfCancelEdit" type="button" class="toggle-btn" style="display:none;">Cancel Edit</button>
       <span class="msg" id="mfMsg"></span>
     </div>
@@ -162,6 +163,7 @@
 </div>
 
 <script src="assets/db-data.js"></script>
+<script src="assets/data-history.js"></script>
 <script>
 let masterAll = [];
 function isoToday(){
@@ -239,10 +241,13 @@ function renderPieSvg(entries){
 
 function fmtDdMmYyyy(isoDate){
   if(!isoDate) return '—';
-  const m = String(isoDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const m = String(DataHistory.isoDate(isoDate) || isoDate).match(/^(\d{4})-(\d{2})-(\d{2})/);
   if(!m) return isoDate;
   return `${m[3]}.${m[2]}.${m[1]}`;
 }
+
+// AsOfDate as sortable ISO string (old rows may still be dd.mm.yyyy).
+function sortDate(r){ return DataHistory.isoDate(r.AsOfDate) || String(r.AsOfDate || ''); }
 
 function renderSection(def, rows){
   if(!rows.length) return '';
@@ -253,9 +258,11 @@ function renderSection(def, rows){
   for(const r of rows){
     const key = r.ParameterName || r.FieldName || '—';
     const existing = byKey.get(key);
-    if(!existing || r.AsOfDate > existing.AsOfDate) byKey.set(key, r);
+    if(!existing || sortDate(r) > sortDate(existing)) byKey.set(key, r);
   }
   let latest = [...byKey.values()];
+  // History badges: number of dated numeric values per metric (all rows, not only the latest).
+  const histCounts = DataHistory.countsByKey(rows);
   if(def.sortDesc){
     latest = [...latest].sort((a,b) => (b.NumericValue ?? -Infinity) - (a.NumericValue ?? -Infinity));
   }
@@ -268,6 +275,7 @@ function renderSection(def, rows){
       <td class="desc">${fmtDdMmYyyy(r.AsOfDate)}</td>
       ${hasSource ? `<td class="desc">${r.Source||''}</td>` : ''}
       <td class="num row-actions">
+        ${DataHistory.buttonHtml(DataHistory.keyOf(r), histCounts.get(DataHistory.keyOf(r)) || 0)}
         <a class="edit-link" href="#" data-edit-rowid="${r.RowId}">✏️</a>
         <a class="rm-link" href="#" data-delete-rowid="${r.RowId}">✕</a>
       </td>
@@ -472,6 +480,7 @@ async function populateParameterSelect(dataType, selectFieldNameId){
 function resetManualForm(){
   editingRowId = null;
   document.getElementById('mfSave').textContent = 'Save';
+  document.getElementById('mfSaveNew').style.display = 'none';
   document.getElementById('mfCancelEdit').style.display = 'none';
   document.getElementById('mfValue').value = '';
   document.getElementById('mfUnit').value = '';
@@ -502,9 +511,10 @@ async function openEditForm(rowId){
   }
   document.getElementById('mfValue').value = (row.NumericValue !== null && row.NumericValue !== undefined) ? row.NumericValue : (row.FieldValue || '');
   document.getElementById('mfUnit').value = row.Unit || '';
-  document.getElementById('mfDate').value = row.AsOfDate || '';
+  document.getElementById('mfDate').value = DataHistory.isoDate(row.AsOfDate) || '';
   document.getElementById('mfSource').value = row.Source || '';
-  document.getElementById('mfSave').textContent = 'Update';
+  document.getElementById('mfSave').textContent = 'Update (Korrektur)';
+  document.getElementById('mfSaveNew').style.display = '';
   document.getElementById('mfCancelEdit').style.display = '';
   document.getElementById('mfMsg').textContent = '';
   panel.scrollIntoView({ behavior:'smooth', block:'center' });
@@ -527,7 +537,21 @@ async function deleteRow(rowId){
   }
 }
 
+function openHistory(key){
+  const sample = curData.find(r => DataHistory.keyOf(r) === key);
+  if(!sample) return;
+  const master = masterAll.find(m => String(m.SecurityID) === String(curSecId));
+  DataHistory.open({
+    title: sample.ParameterName || sample.FieldName || '—',
+    subtitle: `${master ? master.SecurityName + ' · ' : ''}${sample.DataType}`,
+    rows: curData, key,
+    actions: { edit: openEditForm, del: deleteRow },
+  });
+}
+
 document.getElementById('sectionsWrap').addEventListener('click', (e) => {
+  const histB = e.target.closest('[data-hist-key]');
+  if(histB){ e.preventDefault(); openHistory(histB.dataset.histKey); return; }
   const editA = e.target.closest('[data-edit-rowid]');
   if(editA){ e.preventDefault(); openEditForm(editA.dataset.editRowid); return; }
   const delA = e.target.closest('[data-delete-rowid]');
@@ -561,57 +585,103 @@ document.getElementById('addDataBtn').addEventListener('click', async () => {
   await populateParameterSelect(document.getElementById('mfSection').value);
 });
 
-document.getElementById('mfSave').addEventListener('click', async () => {
+// Reads and validates the manual form. Returns null (and shows the message) when invalid.
+function readManualForm(){
   const msg = document.getElementById('mfMsg');
   msg.textContent = ''; msg.className = 'msg';
-  if(!curSecId){ msg.textContent = 'Keine Security ausgewählt.'; msg.className = 'msg error'; return; }
+  const fail = (t) => { msg.textContent = t; msg.className = 'msg error'; return null; };
+  if(!curSecId) return fail('Keine Security ausgewählt.');
 
   const sectionSel = document.getElementById('mfSection').value;
   const dataType = sectionSel === '__custom__' ? document.getElementById('mfCustomSection').value.trim() : sectionSel;
-  if(!dataType){ msg.textContent = 'Bitte Section angeben.'; msg.className = 'msg error'; return; }
+  if(!dataType) return fail('Bitte Section angeben.');
 
   const paramSel = document.getElementById('mfParameter').value;
   let fieldNameId = null, fieldName = '';
   if(paramSel === '__custom__' || !paramSel){
     fieldName = document.getElementById('mfCustomParam').value.trim();
-    if(!fieldName){ msg.textContent = 'Bitte Parameter angeben.'; msg.className = 'msg error'; return; }
+    if(!fieldName) return fail('Bitte Parameter angeben.');
   } else {
     fieldNameId = Number(paramSel);
     fieldName = document.getElementById('mfParameter').selectedOptions[0]?.textContent || '';
   }
 
   const rawValue = document.getElementById('mfValue').value.trim();
-  if(!rawValue){ msg.textContent = 'Bitte Value angeben.'; msg.className = 'msg error'; return; }
+  if(!rawValue) return fail('Bitte Value angeben.');
   const isNumeric = /^-?\d+(\.\d+)?$/.test(rawValue);
-  const numericValue = isNumeric ? Number(rawValue) : null;
-  const fieldValue = isNumeric ? null : rawValue;
+  const asOfDate = DataHistory.isoDate(document.getElementById('mfDate').value) || isoToday();
+  return {
+    dataType, fieldNameId, fieldName,
+    numericValue: isNumeric ? Number(rawValue) : null,
+    fieldValue: isNumeric ? null : rawValue,
+    unit: document.getElementById('mfUnit').value.trim() || null,
+    asOfDate,
+    source: document.getElementById('mfSource').value.trim() || 'Manual Entry',
+  };
+}
 
-  const unit = document.getElementById('mfUnit').value.trim() || null;
-  const asOfDate = document.getElementById('mfDate').value || isoToday();
-  const source = document.getElementById('mfSource').value.trim() || 'Manual Entry';
+// Existing row for the same metric + date + source (= one value per day and source,
+// mirrors the unique index ux_security_data_metric_date_source). excludeRowId: the row being edited.
+function findSameDayRow(f, excludeRowId){
+  const key = DataHistory.keyOf({ DataType: f.dataType, FieldNameID: f.fieldNameId, FieldName: f.fieldName });
+  return curData.find(r => String(r.RowId) !== String(excludeRowId ?? '')
+    && DataHistory.keyOf(r) === key
+    && DataHistory.isoDate(r.AsOfDate) === f.asOfDate
+    && (r.Source || '') === f.source) || null;
+}
 
+async function updateRow(rowId, f, oldRow){
+  await dbRun(
+    `UPDATE security_data SET DataType=?, FieldName=?, FieldNameID=?, FieldValue=?, NumericValue=?, Unit=?, AsOfDate=?, Source=?
+     WHERE rowid = ?`,
+    [f.dataType, f.fieldName, f.fieldNameId, f.fieldValue, f.numericValue, f.unit, f.asOfDate, f.source, rowId]
+  );
+  const oldValueStr = oldRow ? `${fmtLogValue(oldRow.FieldValue, oldRow.NumericValue, oldRow.Unit)} (${fmtDdMmYyyy(oldRow.AsOfDate)})` : null;
+  await logChange(curSecId, f.dataType, f.fieldName, 'Update', oldValueStr, `${fmtLogValue(f.fieldValue, f.numericValue, f.unit)} (${fmtDdMmYyyy(f.asOfDate)})`);
+}
+
+async function insertRow(f){
+  await dbRun(
+    `INSERT INTO security_data (SecurityID, DataType, FieldName, FieldNameID, FieldValue, NumericValue, Unit, AsOfDate, Source, created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    [curSecId, f.dataType, f.fieldName, f.fieldNameId, f.fieldValue, f.numericValue, f.unit, f.asOfDate, f.source, nowZurichString ? nowZurichString() : new Date().toISOString()]
+  );
+  await logChange(curSecId, f.dataType, f.fieldName, 'Insert', null, `${fmtLogValue(f.fieldValue, f.numericValue, f.unit)} (${fmtDdMmYyyy(f.asOfDate)})`);
+}
+
+// mode: 'auto' (Save/Update button) or 'new' (➕ Als neuer Stichtag).
+async function saveManual(mode){
+  const f = readManualForm();
+  if(!f) return;
+  const msg = document.getElementById('mfMsg');
   try {
-    
-    const newValueStr = fmtLogValue(fieldValue, numericValue, unit);
-    if(editingRowId){
-      const oldRow = curData.find(r => String(r.RowId) === String(editingRowId));
-      const oldValueStr = oldRow ? fmtLogValue(oldRow.FieldValue, oldRow.NumericValue, oldRow.Unit) : null;
-      await dbRun(
-        `UPDATE security_data SET DataType=?, FieldName=?, FieldNameID=?, FieldValue=?, NumericValue=?, Unit=?, AsOfDate=?, Source=?
-         WHERE rowid = ?`,
-        [dataType, fieldName, fieldNameId, fieldValue, numericValue, unit, asOfDate, source, editingRowId]
-      );
-      await logChange(curSecId, dataType, fieldName, 'Update', oldValueStr, newValueStr);
-      msg.textContent = 'Aktualisiert.'; msg.className = 'msg ok';
-    } else {
-      await dbRun(
-        `INSERT INTO security_data (SecurityID, DataType, FieldName, FieldNameID, FieldValue, NumericValue, Unit, AsOfDate, Source, created_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?)`,
-        [curSecId, dataType, fieldName, fieldNameId, fieldValue, numericValue, unit, asOfDate, source, nowZurichString ? nowZurichString() : new Date().toISOString()]
-      );
-      await logChange(curSecId, dataType, fieldName, 'Insert', null, newValueStr);
-      msg.textContent = 'Gespeichert.'; msg.className = 'msg ok';
+    const editRow = editingRowId ? curData.find(r => String(r.RowId) === String(editingRowId)) : null;
+    let asNew = mode === 'new' || !editRow;
+    if(editRow && mode !== 'new' && DataHistory.isoDate(editRow.AsOfDate) !== f.asOfDate){
+      // Date changed while editing: by default keep the old value as history.
+      asNew = confirm(`Das Datum wurde von ${fmtDdMmYyyy(editRow.AsOfDate)} auf ${fmtDdMmYyyy(f.asOfDate)} geändert.\n\n`
+        + `OK = als neuen Stichtag speichern (der Wert vom ${fmtDdMmYyyy(editRow.AsOfDate)} bleibt in der Historie)\n`
+        + `Abbrechen = bestehenden Eintrag korrigieren (Datum wird überschrieben)`);
     }
+
+    const clash = findSameDayRow(f, asNew ? null : editingRowId);
+    if(clash){
+      if(!asNew){
+        msg.textContent = `Für ${fmtDdMmYyyy(f.asOfDate)} / ${f.source} gibt es bereits einen Wert (${fmtValue(clash)}). Bitte diesen Eintrag bearbeiten oder löschen.`;
+        msg.className = 'msg error';
+        return;
+      }
+      if(!confirm(`Für ${f.fieldName} am ${fmtDdMmYyyy(f.asOfDate)} (Source ${f.source}) existiert bereits ein Wert: ${fmtValue(clash).replace(/<[^>]+>/g,'')}.\n\nÜberschreiben?`)) return;
+      await updateRow(clash.RowId, f, clash);
+      msg.textContent = 'Bestehender Stichtag überschrieben.';
+    } else if(asNew){
+      await insertRow(f);
+      msg.textContent = editRow ? 'Als neuer Stichtag gespeichert.' : 'Gespeichert.';
+    } else {
+      await updateRow(editingRowId, f, editRow);
+      msg.textContent = 'Korrigiert.';
+    }
+    msg.className = 'msg ok';
     dbClearCache();
     resetManualForm();
     notifyHostDataChanged();
@@ -619,7 +689,10 @@ document.getElementById('mfSave').addEventListener('click', async () => {
   } catch (e) {
     msg.textContent = 'Fehler: ' + e.message; msg.className = 'msg error';
   }
-});
+}
+
+document.getElementById('mfSave').addEventListener('click', () => saveManual('auto'));
+document.getElementById('mfSaveNew').addEventListener('click', () => saveManual('new'));
 
 load();
 

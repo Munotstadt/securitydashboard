@@ -198,3 +198,62 @@ test('client db-data.js: coercion, session-expiry handling, chunked IN queries (
   await assert.rejects(api.dbQuery('SELECT 1'), /Sitzung abgelaufen/);
   assert.equal(sandbox.__reloads, 1, 'reload loop protection');
 });
+
+// ---- security_data history (public/assets/data-history.js + migrations/0009) ---------------------
+test('data-history.js: groups one metric across AsOfDates, chronological, tolerates dd.mm.yyyy', () => {
+  const sandbox = { console, Map, Set, Number, String, Array, Object, Math, Date, isNaN };
+  vm.createContext(sandbox);
+  vm.runInContext(fs.readFileSync(new URL('../public/assets/data-history.js', import.meta.url), 'utf8'), sandbox);
+  const DH = sandbox.DataHistory;
+  const rows = [
+    { RowId: 1, DataType: 'FundPortfolio', FieldNameID: 148, FieldName: 'P/E Ratio', NumericValue: 21.4, AsOfDate: '2026-09-29', Source: 'iShares' },
+    { RowId: 2, DataType: 'FundPortfolio', FieldNameID: 148, FieldName: 'P/E Ratio', NumericValue: 19.8, AsOfDate: '2026-08-19', Source: 'iShares' },
+    { RowId: 3, DataType: 'FundPortfolio', FieldNameID: 146, FieldName: 'P/B Ratio', NumericValue: 3.1, AsOfDate: '2026-08-19', Source: 'iShares' },
+    { RowId: 4, DataType: 'FundOperations', FieldNameID: 133, FieldName: 'TER', NumericValue: 0.2, AsOfDate: '14.08.2026', Source: 'TEST' },
+    { RowId: 5, DataType: 'TopHolding', FieldNameID: null, FieldName: 'Nestle', NumericValue: 5, AsOfDate: '2026-08-13' },
+    { RowId: 6, DataType: 'TopHolding', FieldNameID: null, FieldName: 'nestle ', NumericValue: 6, AsOfDate: '2026-09-13' },
+  ];
+  const pe = DH.seriesFor(rows, DH.keyOf(rows[0]));
+  assert.deepEqual(Array.from(pe, (r) => r.RowId), [2, 1]);
+  assert.equal(DH.isoDate('14.08.2026'), '2026-08-14');
+  assert.equal(DH.isoDate('13.08.2026 13:23:05'), '2026-08-13');
+  assert.equal(DH.isoDate('2026-08-13 10:00:00'), '2026-08-13');
+  assert.equal(DH.seriesFor(rows, DH.keyOf(rows[3]))[0]._date, '2026-08-14');
+  const counts = DH.countsByKey(rows);
+  assert.equal(counts.get(DH.keyOf(rows[0])), 2);
+  assert.equal(counts.get(DH.keyOf(rows[2])), 1);
+  assert.equal(counts.get(DH.keyOf(rows[4])), 2, 'holdings without ParameterID group by (normalised) name');
+  assert.equal(DH.fmtCompact(1.5e9).endsWith('Mrd'), true);
+});
+
+test('migration 0009: ISO dates, duplicate cleanup, unique index per metric/date/source', () => {
+  const m = new DatabaseSync(':memory:');
+  m.exec(`CREATE TABLE security_data (id INTEGER PRIMARY KEY, SecurityID INTEGER NOT NULL, DataType TEXT NOT NULL, FieldNameID INTEGER,
+    FieldName TEXT, FieldValue TEXT, NumericValue REAL, Unit TEXT, AsOfDate TEXT NOT NULL, Source TEXT, created_at TEXT);
+  INSERT INTO security_data (id, SecurityID, DataType, FieldNameID, FieldName, FieldValue, NumericValue, Unit, AsOfDate, Source) VALUES
+    (3927, 14969376, 'FundOperations', 133, 'TER', NULL, 0.2, '%', '14.08.2026', 'TEST'),
+    (500, 1, 'UBS Quotes', 143, 'UBS', 'Name', NULL, NULL, '13.08.2026 13:23:05', 'UBS Quotes Import (Uploader)'),
+    (11337, 3614439, 'FundOperations', 134, 'TradingCurrency', 'DE EUR', NULL, NULL, '2026-08-21', 'Manual Entry'),
+    (11338, 3614439, 'FundOperations', 134, 'TradingCurrency', 'DE EUR', NULL, NULL, '2026-08-21', 'Manual Entry'),
+    (61888, 35987944, 'FundOperations', 134, 'TradingCurrency', 'SIX CHF', NULL, NULL, '2026-11-20', 'Manual Entry'),
+    (61889, 35987944, 'FundOperations', 134, 'TradingCurrency', NULL, 0.11, '%', '2026-11-20', 'Manual Entry'),
+    (700, 1, 'Fundamental', 77, 'trailingPE', NULL, 20, NULL, '2026-10-11', 'yfinance'),
+    (701, 1, 'Fundamental', 77, 'trailingPE', NULL, 20, NULL, '2026-10-11', 'yfinance'),
+    (800, 1, 'TopHolding', NULL, 'Nestle', NULL, 5, '%', '2026-10-11', 'yfinance');`);
+  m.exec(fs.readFileSync(new URL('../migrations/0009_security_data_history.sql', import.meta.url), 'utf8'));
+  const get = (id) => m.prepare('SELECT * FROM security_data WHERE id = ?').get(id);
+  assert.equal(get(3927).AsOfDate, '2026-08-14');
+  assert.equal(get(500).AsOfDate, '2026-08-13');
+  assert.equal(get(11338), undefined);
+  assert.equal(get(61889).FieldNameID, 135);
+  // a second manual value for the same metric/date/source is rejected, a new date is fine
+  const ins = m.prepare(`INSERT INTO security_data (SecurityID, DataType, FieldNameID, NumericValue, AsOfDate, Source) VALUES (?,?,?,?,?,?)`);
+  assert.throws(() => ins.run(35987944, 'FundOperations', 135, 0.12, '2026-11-20', 'Manual Entry'), /UNIQUE/);
+  ins.run(35987944, 'FundOperations', 135, 0.12, '2026-11-27', 'Manual Entry');
+  ins.run(35987944, 'FundOperations', 135, 0.12, '2026-11-20', 'SIX');
+  // yfinance and holdings stay outside the index (collector not in this repo)
+  ins.run(1, 'Fundamental', 77, 21, '2026-10-11', 'yfinance');
+  // idempotent: running it again changes nothing and does not fail
+  m.exec(fs.readFileSync(new URL('../migrations/0009_security_data_history.sql', import.meta.url), 'utf8'));
+  assert.equal(get(11337).FieldValue, 'DE EUR');
+});
