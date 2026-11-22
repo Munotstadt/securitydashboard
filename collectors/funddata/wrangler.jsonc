@@ -1,0 +1,24 @@
+{
+  // Monatlicher Yahoo-Collector für security_data (Fund-Daten + Share-Fundamentals), siehe README.md.
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "collector-worker-funddata-monthly",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+
+  // workers.dev nur für den manuellen Start (/?slot=…), geschützt durch das Secret RUN_TOKEN.
+  "workers_dev": true,
+  "preview_urls": false,
+
+  // Am 1. jedes Monats, 02:00–05:50 UTC alle 10 Minuten = 24 Slots à 25 Securities.
+  "triggers": { "crons": ["*/10 2-5 1 * *"] },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "securities",
+      "database_id": "07edce2c-f7e2-48a5-a219-e48005579333"
+    }
+  ],
+
+  "observability": { "enabled": true }
+}
