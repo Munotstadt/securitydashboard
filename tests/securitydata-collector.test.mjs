@@ -133,6 +133,8 @@ test('securitydata: fetch endpoint requires RUN_TOKEN; scheduled run logs to sec
   assert.equal((await worker.fetch(new Request('https://x/?slot=0'), env)).status, 403);
   assert.equal((await worker.fetch(new Request('https://x/?slot=0', { headers: { authorization: 'Bearer nope' } }), { DB: env.DB })).status, 403);
   assert.equal((await worker.fetch(new Request('https://x/', { headers: { authorization: 'Bearer secret' } }), env)).status, 400);
+  assert.equal((await worker.fetch(new Request('https://x/?token=nope'), env)).status, 403);
+  assert.equal((await worker.fetch(new Request('https://x/?token=secret'), env)).status, 400, 'token in URL accepted (browser)');
 
   const realFetch = globalThis.fetch;
   globalThis.fetch = yahooMock().fetchImpl;

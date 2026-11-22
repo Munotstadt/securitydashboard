@@ -10,7 +10,7 @@
 // bleibt unter dem Subrequest-Limit (50 im Free-Plan). Pro Security und Tag ist der Lauf idempotent:
 // vorhandene yfinance-Zeilen desselben Tages werden vor dem Insert gelöscht.
 //
-// Manuell (Secret RUN_TOKEN nötig): GET /?slot=3 | /?ids=123,456 | /?ticker=NESN.SW   Header: Authorization: Bearer <RUN_TOKEN>
+// Manuell (Secret RUN_TOKEN nötig): /?slot=3 | /?ids=123,456 | /?ticker=NESN.SW, Token als &token=<RUN_TOKEN> oder Header Authorization: Bearer
 
 export const SOURCE = "yfinance";
 export const BATCH_SIZE = 25;
@@ -53,12 +53,14 @@ export default {
 		ctx.waitUntil(runSlot(env, slotFromTime(event.scheduledTime), "Scheduled"));
 	},
 	async fetch(request, env) {
+		const url = new URL(request.url);
+		// Token als Header (curl) oder als ?token=... in der Adresse (Browser).
 		const auth = request.headers.get("authorization") || "";
-		if (!env.RUN_TOKEN || auth !== "Bearer " + env.RUN_TOKEN) {
-			return json({ error: "forbidden (Secret RUN_TOKEN setzen und als Bearer-Token mitsenden)" }, 403);
+		const token = auth.startsWith("Bearer ") ? auth.slice(7) : (url.searchParams.get("token") || "");
+		if (!env.RUN_TOKEN || token !== env.RUN_TOKEN) {
+			return json({ error: "forbidden (Secret RUN_TOKEN setzen und als ?token=... oder Bearer-Token mitsenden)" }, 403);
 		}
 		try {
-			const url = new URL(request.url);
 			const ids = (url.searchParams.get("ids") || "").split(",").map((s) => Number(s.trim())).filter((n) => n > 0);
 			const ticker = (url.searchParams.get("ticker") || "").trim();
 			const slot = url.searchParams.has("slot") ? Number(url.searchParams.get("slot")) : null;
