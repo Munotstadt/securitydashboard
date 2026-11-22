@@ -1,10 +1,10 @@
-// collectors/funddata/worker.js: Yahoo quoteSummary -> security_data, gegen node:sqlite (D1-Adapter) und gemockte Yahoo-Antworten.
+// collectors/securitydata/worker.js: Yahoo quoteSummary -> security_data (Fund-Daten + Aktien-Fundamentals), gegen node:sqlite und gemockte Yahoo-Antworten.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync, makeD1 } from './helpers.mjs';
 import worker, {
   collect, factsForFund, factsForShare, slotFromTime, sliceForSlot, loadSecurities, rawValue,
-} from '../collectors/funddata/worker.js';
+} from '../collectors/securitydata/worker.js';
 
 const FUND = {
   topHoldings: {
@@ -27,7 +27,7 @@ const SHARE = {
   financialData: { profitMargins: { raw: 0.0838 }, recommendationMean: { raw: 2.6 }, targetMeanPrice: { raw: 95.5 } },
 };
 
-test('funddata: facts mirror the yfinance/Python collectors', () => {
+test('securitydata: facts mirror the yfinance/Python collectors', () => {
   const f = factsForFund(FUND);
   const by = (dt, name) => f.find((x) => x.dataType === dt && x.fieldName === name);
   assert.equal(by('TopHolding', 'NetEase Inc ADR').fieldValue, 'NTES');
@@ -53,7 +53,7 @@ test('funddata: facts mirror the yfinance/Python collectors', () => {
   assert.equal(rawValue({}), null);
 });
 
-test('funddata: slots cover the 1st of the month 02:00-05:50 UTC in 25er-Portionen', () => {
+test('securitydata: slots cover the 1st of the month 02:00-05:50 UTC in 25er-Portionen', () => {
   assert.equal(slotFromTime(Date.UTC(2026, 11, 1, 2, 0)), 0);
   assert.equal(slotFromTime(Date.UTC(2026, 11, 1, 2, 10)), 1);
   assert.equal(slotFromTime(Date.UTC(2026, 11, 1, 5, 50)), 23);
@@ -98,7 +98,7 @@ function yahooMock({ failCrumbOnce = false } = {}) {
   return { fetchImpl, calls };
 }
 
-test('funddata: collect writes security_data, creates new parameters, is idempotent per day', async () => {
+test('securitydata: collect writes security_data, creates new parameters, is idempotent per day', async () => {
   const db = setupDb();
   const env = { DB: makeD1(db) };
   const secs = await loadSecurities(env);
@@ -127,7 +127,7 @@ test('funddata: collect writes security_data, creates new parameters, is idempot
   assert.equal(q('SELECT COUNT(*) n FROM security_data')[0].n, before, 'second run on the same day replaces, does not duplicate');
 });
 
-test('funddata: fetch endpoint requires RUN_TOKEN; scheduled run logs to security_collector_runs', async () => {
+test('securitydata: fetch endpoint requires RUN_TOKEN; scheduled run logs to security_collector_runs', async () => {
   const db = setupDb();
   const env = { DB: makeD1(db), RUN_TOKEN: 'secret' };
   assert.equal((await worker.fetch(new Request('https://x/?slot=0'), env)).status, 403);

@@ -1,4 +1,4 @@
-// collector-worker-funddata-monthly
+// collector-worker-securitydata-monthly
 // Ersetzt die GitHub Actions collect_fund_data.py / collect_share_data.py (Repo securitydatacollector_turso),
 // die noch nach Turso schrieben. Holt einmal im Monat von Yahoo (quoteSummary) und schreibt nach D1 security_data:
 //   ETF/Funds (Instrument 'ETF/Funds'): TopHolding, AssetClass, SectorWeight, BondRating, FundOverview
