@@ -23,4 +23,5 @@ curl -H "Authorization: Bearer <RUN_TOKEN>" "https://collector-worker-securityda
 Weitere Varianten: `?slot=0` (Securities 1–25, `?slot=1` 26–50, …) oder `?ids=123,456` (max. 25). Die Antwort zeigt `ok`, `skipped` (Yahoo ohne Daten), `failed` und die Fehler.
 
 ## Danach
-Im Repo `securitydatacollector_turso` die Workflows `Collect_funddata_weekly.yml` und `collect_share_data.yml` deaktivieren (GitHub → Actions → Workflow → „Disable workflow“).
+- Turso existiert nicht mehr: Die alten Workflows `Collect_funddata_weekly.yml` und `collect_share_data.yml` im Repo `securitydatacollector_turso` schlagen nur noch fehl. Deaktivieren (GitHub → Actions → Workflow → „Disable workflow“) oder das Repo archivieren.
+- Die Stichtage zwischen 11.10.2026 (letzter Turso-Lauf, nach D1 übernommen) und dem ersten Lauf dieses Workers lassen sich nicht nachholen: Yahoo liefert keine historischen Fundamentals. Für einen sofortigen Stichtag nach dem Einrichten die Slots von Hand starten (`?slot=0` bis `?slot=7` bei rund 190 Securities).
