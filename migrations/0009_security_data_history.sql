@@ -3,6 +3,8 @@
 -- (P/E, P/B, Total Net Assets, Spread, Std. Dev. 3y, ...) zeigt assets/data-history.js. Dafür muss AsOfDate
 -- einheitlich ISO sein (Sortierung per Textvergleich) und es darf pro Kennzahl/Tag/Quelle nur einen Wert geben.
 -- Ausführen in D1 "securities" (Konsole oder `wrangler d1 execute securities --remote --file=...`).
+-- Ausgeführt am 2026-11-22 in D1 "securities": 314 Datumswerte auf ISO, 1 Duplikat gelöscht, 1 Zeile auf TradingSpread
+-- umgehängt, Index angelegt. Kontrolle danach: 0 Nicht-ISO, 0 Duplikate.
 
 -- Vorher-Check (erwartet: 314 Nicht-ISO-Zeilen, 2 Duplikat-Gruppen):
 --   SELECT COUNT(*) FROM security_data WHERE AsOfDate NOT GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*';
