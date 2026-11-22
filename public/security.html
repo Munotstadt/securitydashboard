@@ -594,6 +594,7 @@
 </div>
 
 <script src="assets/db-data.js"></script>
+<script src="assets/data-history.js"></script>
 <script>
 function daysAgo(from, n){ const d = new Date(from); d.setDate(d.getDate()-n); return d; }
 // Shared status classification for a security_master row - same logic used
@@ -1881,9 +1882,39 @@ async function load(){
 }
 
 // ============ Fund / Shares instrument-specific data (security_data table) ============
-function fundStat(label, value){
-  return `<div class="fund-stat"><div class="fund-stat-label">${label}</div><div class="fund-stat-value">${value}</div></div>`;
+// Optional row (security_data): adds a 📈 button that opens the value history of that metric.
+function fundStat(label, value, row){
+  return `<div class="fund-stat"><div class="fund-stat-label">${label}${row ? histButton(row) : ''}</div><div class="fund-stat-value">${value}</div></div>`;
 }
+
+// ============ Value history (assets/data-history.js) ============
+// All security_data rows of the current security (every AsOfDate, not just the latest snapshot).
+let sdAllRows = [];
+let sdHistCounts = new Map();
+let sdSecurityName = '';
+function setHistoryRows(rows, securityName){
+  sdAllRows = rows || [];
+  sdHistCounts = DataHistory.countsByKey(sdAllRows);
+  sdSecurityName = securityName || '';
+}
+function histButton(row){
+  if(!row) return '';
+  const key = DataHistory.keyOf(row);
+  return DataHistory.buttonHtml(key, sdHistCounts.get(key) || 0);
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-hist-key]');
+  if(!b || b.closest('.dh-overlay')) return;
+  e.preventDefault();
+  const key = b.dataset.histKey;
+  const sample = sdAllRows.find(r => DataHistory.keyOf(r) === key);
+  if(!sample) return;
+  DataHistory.open({
+    title: sample.ParameterName || sample.FieldName || '—',
+    subtitle: `${sdSecurityName ? sdSecurityName + ' · ' : ''}${sample.DataType}`,
+    rows: sdAllRows, key,
+  });
+});
 
 const FUND_PIE_PALETTE = ['#5B4B8A','#1F6FA8','#B08D57','#2E9E76','#D98E04','#8A5B4B','#C0293D','#767E8A','#4B4B8A','#A3A9B0','#1F8A6E','#9C4F96'];
 
@@ -1903,7 +1934,7 @@ function latestByParameter(rows){
   for(const r of rows){
     const key = r.ParameterName || r.FieldName || '—';
     const existing = byKey.get(key);
-    if(!existing || r.AsOfDate > existing.AsOfDate) byKey.set(key, r);
+    if(!existing || (DataHistory.isoDate(r.AsOfDate) || r.AsOfDate) > (DataHistory.isoDate(existing.AsOfDate) || existing.AsOfDate)) byKey.set(key, r);
   }
   return [...byKey.values()];
 }
@@ -1928,6 +1959,7 @@ async function loadInstrumentSpecificData(master, last, decimals, high52wRow, lo
     console.error('security_data query failed:', e);
     document.getElementById('fundSection').classList.remove('hidden');
     document.getElementById('assetAllocationChart').innerHTML = `<div class="chart-empty">Fehler beim Laden von security_data: ${e.message}</div>`;
+    setHistoryRows([], master.SecurityName);
     renderMarketCapTile([], isFundInstrument, master);
     return;
   }
@@ -1947,6 +1979,7 @@ async function loadInstrumentSpecificData(master, last, decimals, high52wRow, lo
   const fundOperationsRows = data.filter(r => norm(r.DataType) === 'fundoperations' || norm(r.DataType) === 'fund operations');
   const fundPortfolioRows = data.filter(r => norm(r.DataType) === 'fundportfolio' || norm(r.DataType) === 'fund portfolio');
 
+  setHistoryRows(data, master.SecurityName);
   console.log(`[loadInstrumentSpecificData] SecurityID=${master.SecurityID} · total security_data rows=${data.length} · AssetClass=${assetClassRows.length} · SectorWeight=${sectorRows.length} · TopHolding=${holdingRows.length} · Fundamentals=${fundamentalsRows.length} · FundOverview=${fundOverviewRows.length} · FundOperations=${fundOperationsRows.length} · FundPortfolio=${fundPortfolioRows.length}`, data);
 
   // Visibility is driven purely by whether security_data actually holds rows for
@@ -2033,6 +2066,7 @@ function renderMarketCapTile(dataRows, isFundInstrument, master){
   }
   const bn = toBillions(field.NumericValue, field.Unit);
   valueEl.textContent = bn !== null ? `${fmtDecimal(bn,2)} Mrd ${master.Currency||''}`.trim() : '-';
+  labelEl.insertAdjacentHTML('beforeend', histButton(field));
   valueEl.className = 'return-value neutral-black';
 }
 
@@ -2193,7 +2227,7 @@ function fundDataGridHtml(rows, emptyMsg){
   const latest = latestByParameter(rows);
   if(!latest.length) return `<tr><td colspan="4" class="empty">${emptyMsg}</td></tr>`;
   const sorted = [...latest].sort((a,b) => (a.ParameterName||a.FieldName||'').localeCompare(b.ParameterName||b.FieldName||''));
-  return sorted.map(r => `<tr><td>${r.ParameterName || r.FieldName || '—'}</td><td class="num">${fmtFundValue(r)}</td><td>${fmtIsoDateDDMM(r.AsOfDate)}</td><td>${r.Source||'—'}</td></tr>`).join('');
+  return sorted.map(r => `<tr><td>${r.ParameterName || r.FieldName || '—'}</td><td class="num">${fmtFundValue(r)}${histButton(r)}</td><td>${fmtIsoDateDDMM(r.AsOfDate)}</td><td>${r.Source||'—'}</td></tr>`).join('');
 }
 function renderFundDataView(overviewRows, operationsRows, portfolioRows){
   document.getElementById('fundOverviewGrid').innerHTML = fundDataGridHtml(overviewRows, 'Keine Fund Overview Daten vorhanden.');
@@ -2340,28 +2374,28 @@ function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52
   const recMean = pick('recommendationmean','recommendation mean');
 
   // Rows 1-5: fixed, each its own grid row regardless of available width.
-  row1.innerHTML = priceToBook ? fundStat('Price To Book', fmtFundValue(priceToBook)) : '';
+  row1.innerHTML = priceToBook ? fundStat('Price To Book', fmtFundValue(priceToBook), priceToBook) : '';
 
   row2.innerHTML = [
-    trailingPE ? fundStat('Trailing PE', fmtFundValue(trailingPE)) : '',
-    forwardPE ? fundStat('Forward PE', fmtFundValue(forwardPE)) : '',
+    trailingPE ? fundStat('Trailing PE', fmtFundValue(trailingPE), trailingPE) : '',
+    forwardPE ? fundStat('Forward PE', fmtFundValue(forwardPE), forwardPE) : '',
   ].join('');
 
   row3.innerHTML = [
-    trailingEPS ? fundStat('Trailing EPS', fmtFundValue(trailingEPS)) : '',
-    forwardEPS ? fundStat('Forward EPS', fmtFundValue(forwardEPS)) : '',
+    trailingEPS ? fundStat('Trailing EPS', fmtFundValue(trailingEPS), trailingEPS) : '',
+    forwardEPS ? fundStat('Forward EPS', fmtFundValue(forwardEPS), forwardEPS) : '',
   ].join('');
 
   row4.innerHTML = [
-    dividendRate ? fundStat('Dividend Rate', fmtFundValue(dividendRate)) : '',
-    payoutRatio ? fundStat('Payout Ratio', fmtFundPercent(payoutRatio, 0, true)) : '',
-    dividendYieldF ? fundStat('Dividend Yield', fmtFundPercent(dividendYieldF, 2)) : '',
+    dividendRate ? fundStat('Dividend Rate', fmtFundValue(dividendRate), dividendRate) : '',
+    payoutRatio ? fundStat('Payout Ratio', fmtFundPercent(payoutRatio, 0, true), payoutRatio) : '',
+    dividendYieldF ? fundStat('Dividend Yield', fmtFundPercent(dividendYieldF, 2), dividendYieldF) : '',
   ].join('');
 
   row5.innerHTML = marketCapF
     ? fundStat('Market Cap.', marketCapF.NumericValue!==null && marketCapF.NumericValue!==undefined
         ? `${fmtDecimal(toBillions(marketCapF.NumericValue, marketCapF.Unit),2)} Mrd.`
-        : (marketCapF.FieldValue||'—'))
+        : (marketCapF.FieldValue||'—'), marketCapF)
     : '';
 
   // Row 6ff. - Analysts: Analyst No. (0 decimals) + Recommendation Mean gauge
@@ -2369,7 +2403,7 @@ function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52
   analystGrid.innerHTML = [
     analystCount ? fundStat('Analyst No.', analystCount.NumericValue!==null && analystCount.NumericValue!==undefined
         ? fmtDecimal(analystCount.NumericValue,0)
-        : (analystCount.FieldValue||'—')) : '',
+        : (analystCount.FieldValue||'—'), analystCount) : '',
     (recMean && recMean.NumericValue!==null && recMean.NumericValue!==undefined) ? renderRecommendationGauge(recMean.NumericValue) : '',
   ].join('');
 
@@ -2380,7 +2414,7 @@ function renderSharesSection(fundamentalsRows, last, decimals, high52wRow, low52
   const leftover = rows.filter(r => !used.has(r));
   const sortedLeftover = [...leftover].sort((a,b) => (a.ParameterName||a.FieldName||'').localeCompare(b.ParameterName||b.FieldName||''));
   row8.innerHTML = sortedLeftover.length
-    ? sortedLeftover.map(r => `<tr><td>${r.ParameterName || r.FieldName || '—'}</td><td class="num">${fmtFundValue(r)}</td><td>${fmtIsoDateDDMM(r.AsOfDate)}</td><td>${r.Source||'—'}</td></tr>`).join('')
+    ? sortedLeftover.map(r => `<tr><td>${r.ParameterName || r.FieldName || '—'}</td><td class="num">${fmtFundValue(r)}${histButton(r)}</td><td>${fmtIsoDateDDMM(r.AsOfDate)}</td><td>${r.Source||'—'}</td></tr>`).join('')
     : `<tr><td colspan="4" class="empty">Keine weiteren Fundamentals-Felder.</td></tr>`;
   if(otherFundamentalsTitle) otherFundamentalsTitle.classList.toggle('hidden', sortedLeftover.length === 0);
 
